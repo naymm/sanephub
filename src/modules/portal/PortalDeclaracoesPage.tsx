@@ -52,14 +52,14 @@ export default function PortalDeclaracoesPage() {
     return matchStatus;
   });
 
-  const handleImprimirPdf = (d: Declaracao) => {
+  const handleImprimirPdf = async (d: Declaracao) => {
     const col = colaboradores.find(c => c.id === d.colaboradorId);
     if (!col) {
       toast.error('Dados do colaborador não encontrados.');
       return;
     }
     try {
-      gerarPdfDeclaracaoServico(d, col);
+      await gerarPdfDeclaracaoServico(d, col);
       toast.success('PDF da declaração gerado. Verifique os transferidos.');
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);

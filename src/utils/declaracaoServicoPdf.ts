@@ -130,8 +130,31 @@ function drawJustifiedParagraph(
 }
 
 const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
 
-export function gerarPdfDeclaracaoServico(declaracao: Declaracao, colaborador: Colaborador): void {
+/** Carrega uma imagem do servidor e devolve como data URL (base64) para usar no jsPDF. */
+function loadImageAsDataUrl(url: string): Promise<string> {
+  return fetch(url)
+    .then((res) => res.blob())
+    .then(
+      (blob) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        })
+    );
+}
+
+export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colaborador: Colaborador): Promise<void> {
+  let imgData: string | null = null;
+  try {
+    imgData = await loadImageAsDataUrl('/folha.jpg');
+  } catch {
+    // Se a imagem não carregar (ex.: desenvolvimento sem public), gera o PDF sem fundo
+  }
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = A4_WIDTH_MM;
   const left = 25;
@@ -141,6 +164,12 @@ export function gerarPdfDeclaracaoServico(declaracao: Declaracao, colaborador: C
   const lineHeight = 6;
   let y = 28;
 
+  // ---------- Fundo A4 (folha.jpg) ----------
+  if (imgData) {
+    doc.addImage(imgData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+  }
+
+  y += 30;
   // ---------- Título ----------
   doc.setFont('times', 'bold');
   doc.setFontSize(16);
