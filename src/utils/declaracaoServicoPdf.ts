@@ -6,7 +6,7 @@ import type { Declaracao, Colaborador } from '@/types';
 function dataDeclaracao(dateStr: string): string {
   try {
     const d = parseISO(dateStr);
-    const dia = format(d, 'd', { locale: pt });
+    const dia = format(d, 'dd', { locale: pt });
     const mes = format(d, 'MMMM', { locale: pt });
     const ano = format(d, 'yyyy', { locale: pt });
     const mesCapitalized = mes.charAt(0).toUpperCase() + mes.slice(1);
@@ -110,6 +110,55 @@ function drawJustifiedLine(
   }
 }
 
+/** Indica se o intervalo [start, end) intersecta algum dos intervalos em boldRanges. */
+function isBoldRange(start: number, end: number, boldRanges: [number, number][]): boolean {
+  return boldRanges.some(([s, e]) => start < e && end > s);
+}
+
+/**
+ * Desenha uma linha justificada com partes em negrito (por palavra).
+ * wordBoldFlags[i] = true se a palavra i deve ser negrito.
+ */
+function drawJustifiedLineWithBold(
+  doc: jsPDF,
+  line: string,
+  wordBoldFlags: boolean[],
+  x: number,
+  y: number,
+  lineWidth: number,
+  isLastLine: boolean
+): void {
+  const words = line.trim().split(/\s+/);
+  if (words.length <= 1 || isLastLine) {
+    for (let i = 0; i < words.length; i++) {
+      doc.setFont('times', wordBoldFlags[i] ? 'bold' : 'normal');
+      doc.text(words[i], x, y);
+      x += doc.getTextWidth(words[i] + (i < words.length - 1 ? ' ' : ''));
+    }
+    doc.setFont('times', 'normal');
+    return;
+  }
+  let totalWidth = 0;
+  for (let i = 0; i < words.length; i++) {
+    doc.setFont('times', wordBoldFlags[i] ? 'bold' : 'normal');
+    totalWidth += doc.getTextWidth(words[i]);
+    if (i < words.length - 1) totalWidth += doc.getTextWidth(' ');
+  }
+  doc.setFont('times', 'normal');
+  const totalSpaces = words.length - 1;
+  const extraSpace = (lineWidth - totalWidth) / totalSpaces;
+  let currentX = x;
+  for (let i = 0; i < words.length; i++) {
+    doc.setFont('times', wordBoldFlags[i] ? 'bold' : 'normal');
+    doc.text(words[i], currentX, y);
+    currentX += doc.getTextWidth(words[i]);
+    if (i < words.length - 1) {
+      currentX += doc.getTextWidth(' ') + extraSpace;
+    }
+  }
+  doc.setFont('times', 'normal');
+}
+
 /**
  * Desenha um parágrafo justificado, sem indentação.
  */
@@ -125,6 +174,44 @@ function drawJustifiedParagraph(
   for (let i = 0; i < lines.length; i++) {
     drawJustifiedLine(doc, lines[i], x, y, maxWidth, i === lines.length - 1);
     y += lineHeight;
+  }
+  return y;
+}
+
+/**
+ * Desenha um parágrafo justificado com trechos em negrito (nome, salarioFmt, salarioExtenso).
+ */
+function drawJustifiedParagraphWithBold(
+  doc: jsPDF,
+  fullText: string,
+  boldRanges: [number, number][],
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number
+): number {
+  const lines = doc.splitTextToSize(fullText, maxWidth);
+  let lineStartIdx = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const words = line.trim().split(/\s+/);
+    const wordBoldFlags: boolean[] = [];
+    let charIdx = lineStartIdx;
+    for (const w of words) {
+      const wordStart = fullText.indexOf(w, charIdx);
+      if (wordStart === -1) {
+        wordBoldFlags.push(false);
+        charIdx = lineStartIdx + line.length;
+        continue;
+      }
+      const wordEnd = wordStart + w.length;
+      wordBoldFlags.push(isBoldRange(wordStart, wordEnd, boldRanges));
+      charIdx = wordEnd + (wordEnd < fullText.length && fullText[wordEnd] === ' ' ? 1 : 0);
+    }
+    drawJustifiedLineWithBold(doc, line, wordBoldFlags, x, y, maxWidth, i === lines.length - 1);
+    y += lineHeight;
+    lineStartIdx = fullText.indexOf(lines[i].trim(), lineStartIdx) + lines[i].trim().length;
+    if (lineStartIdx < fullText.length && fullText[lineStartIdx] === ' ') lineStartIdx += 1;
   }
   return y;
 }
@@ -193,7 +280,15 @@ export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colabora
     ', e aufere um salário mensal de ' + salarioFmt +
     ' (' + salarioExtenso + ').';
 
-  y = drawJustifiedParagraph(doc, p1, left, y, maxWidth, lineHeight);
+  const iNome = p1.indexOf(colaborador.nome);
+  const iSalarioFmt = p1.indexOf(salarioFmt);
+  const iSalarioExtenso = p1.indexOf(salarioExtenso);
+  const boldRanges: [number, number][] = [];
+  if (iNome >= 0) boldRanges.push([iNome, iNome + colaborador.nome.length]);
+  if (iSalarioFmt >= 0) boldRanges.push([iSalarioFmt, iSalarioFmt + salarioFmt.length]);
+  if (iSalarioExtenso >= 0) boldRanges.push([iSalarioExtenso, iSalarioExtenso + salarioExtenso.length]);
+
+  y = drawJustifiedParagraphWithBold(doc, p1, boldRanges, left, y, maxWidth, lineHeight);
   y += lineHeight;
 
   // ---------- Segundo parágrafo (justificado) ----------
@@ -206,7 +301,7 @@ export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colabora
   const dataEmissao = declaracao.dataEmissao ?? declaracao.dataPedido;
   doc.setFontSize(12);
   doc.text(dataDeclaracao(dataEmissao), pageW / 2, y, { align: 'center' });
-  y += 30;
+  y += 20;
 
   // ---------- Assinatura ----------
   doc.setDrawColor(0, 0, 0);
