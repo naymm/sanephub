@@ -4,6 +4,7 @@ import { useColaboradorId } from '@/hooks/useColaboradorId';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
+import { gerarPdfDeclaracaoServico } from '@/utils/declaracaoServicoPdf';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -22,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Eye } from 'lucide-react';
+import { Plus, Eye, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Rendimentos', 'Antiguidade', 'Outro'];
@@ -30,7 +31,7 @@ const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
 
 export default function PortalDeclaracoesPage() {
   const colaboradorId = useColaboradorId();
-  const { declaracoes, setDeclaracoes } = useData();
+  const { declaracoes, setDeclaracoes, colaboradores } = useData();
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -50,6 +51,21 @@ export default function PortalDeclaracoesPage() {
     const matchStatus = statusFilter === 'todos' || d.status === statusFilter;
     return matchStatus;
   });
+
+  const handleImprimirPdf = (d: Declaracao) => {
+    const col = colaboradores.find(c => c.id === d.colaboradorId);
+    if (!col) {
+      toast.error('Dados do colaborador não encontrados.');
+      return;
+    }
+    try {
+      gerarPdfDeclaracaoServico(d, col);
+      toast.success('PDF da declaração gerado. Verifique os transferidos.');
+    } catch (e) {
+      console.error('Erro ao gerar PDF:', e);
+      toast.error('Não foi possível gerar o PDF.');
+    }
+  };
 
   const openPedir = () => {
     if (colaboradorId == null) return;
@@ -119,7 +135,10 @@ export default function PortalDeclaracoesPage() {
                 <td className="py-3 px-5 text-muted-foreground">{d.dataEmissao ? formatDate(d.dataEmissao) : '—'}</td>
                 <td className="py-3 px-5"><StatusBadge status={d.status} /></td>
                 <td className="py-3 px-5 text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(d); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalhe" onClick={() => { setViewItem(d); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -169,17 +188,28 @@ export default function PortalDeclaracoesPage() {
             <DialogTitle>Declaração — {viewItem?.tipo}</DialogTitle>
             <DialogDescription>Detalhe da sua declaração</DialogDescription>
           </DialogHeader>
-          {viewItem && (
-            <div className="space-y-3 text-sm">
-              <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
-              {viewItem.descricao && <p><span className="text-muted-foreground">Descrição:</span> {viewItem.descricao}</p>}
-              <p><span className="text-muted-foreground">Data pedido:</span> {formatDate(viewItem.dataPedido)}</p>
-              <p><span className="text-muted-foreground">Data emissão:</span> {viewItem.dataEmissao ? formatDate(viewItem.dataEmissao) : '—'}</p>
-              <p><span className="text-muted-foreground">Data entrega:</span> {viewItem.dataEntrega ? formatDate(viewItem.dataEntrega) : '—'}</p>
-              <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
-              {viewItem.emitidoPor && <p><span className="text-muted-foreground">Emitido por:</span> {viewItem.emitidoPor}</p>}
-            </div>
-          )}
+          {viewItem && (() => {
+            const col = colaboradores.find(c => c.id === viewItem.colaboradorId);
+            return (
+              <div className="space-y-4">
+                <div className="space-y-3 text-sm">
+                  <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
+                  {viewItem.descricao && <p><span className="text-muted-foreground">Descrição:</span> {viewItem.descricao}</p>}
+                  <p><span className="text-muted-foreground">Data pedido:</span> {formatDate(viewItem.dataPedido)}</p>
+                  <p><span className="text-muted-foreground">Data emissão:</span> {viewItem.dataEmissao ? formatDate(viewItem.dataEmissao) : '—'}</p>
+                  <p><span className="text-muted-foreground">Data entrega:</span> {viewItem.dataEntrega ? formatDate(viewItem.dataEntrega) : '—'}</p>
+                  <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
+                  {viewItem.emitidoPor && <p><span className="text-muted-foreground">Emitido por:</span> {viewItem.emitidoPor}</p>}
+                </div>
+                {col && (
+                  <Button onClick={() => { handleImprimirPdf(viewItem); setViewOpen(false); }} className="w-full sm:w-auto">
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Imprimir PDF (Declaração de Serviço)
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
