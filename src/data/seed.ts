@@ -56,6 +56,10 @@ export const RECIBOS_SEED: ReciboSalario[] = [
   { id: 2, colaboradorId: 2, mesAno: "2024-11", vencimentoBase: 850000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 25500, irt: 105000, outrasDeducoes: 0, liquido: 764500, status: "Pago" },
   { id: 3, colaboradorId: 3, mesAno: "2024-11", vencimentoBase: 950000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 28500, irt: 127500, outrasDeducoes: 0, liquido: 839000, status: "Pago" },
   { id: 4, colaboradorId: 7, mesAno: "2024-11", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
+  { id: 5, colaboradorId: 7, mesAno: "2024-12", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
+  { id: 6, colaboradorId: 7, mesAno: "2025-01", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
+  { id: 7, colaboradorId: 8, mesAno: "2024-11", vencimentoBase: 350000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 10500, irt: 26250, outrasDeducoes: 0, liquido: 338250, status: "Pago" },
+  { id: 8, colaboradorId: 8, mesAno: "2024-12", vencimentoBase: 350000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 10500, irt: 26250, outrasDeducoes: 0, liquido: 338250, status: "Pago" },
 ];
 
 export const DECLARACOES_SEED: Declaracao[] = [
