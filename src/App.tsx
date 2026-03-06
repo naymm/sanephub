@@ -36,6 +36,7 @@ import PortalRecibosPage from "@/modules/portal/PortalRecibosPage";
 import PortalDeclaracoesPage from "@/modules/portal/PortalDeclaracoesPage";
 import PortalFeriasPage from "@/modules/portal/PortalFeriasPage";
 import PortalRequisicoesPage from "@/modules/portal/PortalRequisicoesPage";
+import PortalDadosPage from "@/modules/portal/PortalDadosPage";
 import ChatPage from "@/modules/chat/ChatPage";
 
 const queryClient = new QueryClient();
@@ -84,7 +85,7 @@ const App = () => (
                   <Route path="/juridico/riscos" element={<GenericModulePage title="Riscos Jurídicos" module="riscos" />} />
                   <Route path="/juridico/arquivo" element={<GenericModulePage title="Arquivo Documental" module="arquivo-juridico" />} />
                   {/* Portal Colaborador */}
-                  <Route path="/portal/dados" element={<GenericModulePage title="Os Meus Dados" module="portal" />} />
+                  <Route path="/portal/dados" element={<PortalDadosPage />} />
                   <Route path="/portal/ferias" element={<PortalFeriasPage />} />
                   <Route path="/portal/faltas" element={<GenericModulePage title="As Minhas Faltas" module="portal" />} />
                   <Route path="/portal/recibos" element={<PortalRecibosPage />} />
