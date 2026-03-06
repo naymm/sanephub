@@ -1,0 +1,148 @@
+import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
+import type { Departamento } from '@/types';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
+
+export default function DepartamentosPage() {
+  const { user: currentUser } = useAuth();
+  const { departamentos, setDepartamentos } = useData();
+  const [search, setSearch] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Departamento | null>(null);
+  const [form, setForm] = useState({ nome: '' });
+
+  const filtered = departamentos.filter(d =>
+    d.nome.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ nome: '' });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (d: Departamento) => {
+    setEditing(d);
+    setForm({ nome: d.nome });
+    setDialogOpen(true);
+  };
+
+  const save = () => {
+    if (!form.nome.trim()) return;
+    const nome = form.nome.trim();
+    if (editing) {
+      setDepartamentos(prev =>
+        prev.map(d => (d.id === editing.id ? { ...editing, nome } : d))
+      );
+    } else {
+      const newId = Math.max(0, ...departamentos.map(d => d.id)) + 1;
+      setDepartamentos(prev => [...prev, { id: newId, nome }]);
+    }
+    setDialogOpen(false);
+    setEditing(null);
+  };
+
+  const remove = (d: Departamento) => {
+    setDepartamentos(prev => prev.filter(x => x.id !== d.id));
+  };
+
+  if (currentUser?.perfil !== 'Admin') {
+    return (
+      <div className="space-y-6">
+        <h1 className="page-header">Departamentos</h1>
+        <p className="text-muted-foreground">Acesso reservado ao Administrador.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h1 className="page-header">Departamentos</h1>
+        <Button onClick={openCreate} className="bg-primary text-primary-foreground">
+          <Plus className="h-4 w-4 mr-2" /> Novo departamento
+        </Button>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Cadastre os departamentos da organização. Eles serão usados nas requisições à área financeira e noutros módulos.
+      </p>
+
+      <div className="relative max-w-xs">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Pesquisar por nome..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9 h-9"
+        />
+      </div>
+
+      <div className="table-container overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border/80">
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
+              <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(d => (
+              <tr key={d.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                <td className="py-3 px-5 font-medium">{d.nome}</td>
+                <td className="py-3 px-5 text-right">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(d)} title="Remover">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {filtered.length === 0 && (
+        <p className="text-center py-8 text-muted-foreground text-sm">Nenhum departamento encontrado.</p>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{editing ? 'Editar departamento' : 'Novo departamento'}</DialogTitle>
+            <DialogDescription>Indique o nome do departamento.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input
+                value={form.nome}
+                onChange={e => setForm({ nome: e.target.value })}
+                placeholder="ex: Tecnologia"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={save} disabled={!form.nome.trim()}>
+              {editing ? 'Guardar' : 'Criar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
