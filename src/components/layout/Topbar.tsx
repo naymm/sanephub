@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 
 const routeTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
+  '/chat': 'Chat interno',
   '/notificacoes': 'Notificações',
   '/capital-humano/colaboradores': 'Colaboradores',
   '/capital-humano/ferias': 'Gestão de Férias',

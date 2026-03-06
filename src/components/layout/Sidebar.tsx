@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
+import { useChat } from '@/context/ChatContext';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
   Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock, ShieldAlert, FolderArchive,
-  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send
+  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, MessageCircle
 } from 'lucide-react';
 
 interface NavItem {
@@ -19,6 +20,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', module: 'dashboard' },
+  { label: 'Chat', icon: MessageCircle, path: '/chat', module: 'dashboard' },
   { label: 'Notificações', icon: Bell, path: '/notificacoes', module: 'dashboard' },
   {
     label: 'Capital Humano', icon: Users, module: 'capital-humano',
@@ -79,7 +81,9 @@ const COLABORADOR_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   const { user, logout } = useAuth();
+  const { getUnreadCount: getChatUnread } = useChat();
   const location = useLocation();
+  const chatUnread = getChatUnread();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -144,6 +148,7 @@ export function Sidebar() {
       );
     }
 
+    const isChat = item.path === '/chat';
     return (
       <NavLink
         key={item.path}
@@ -153,6 +158,11 @@ export function Sidebar() {
       >
         <item.icon className="h-4 w-4 shrink-0" />
         <span>{item.label}</span>
+        {isChat && chatUnread > 0 && (
+          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground px-1.5">
+            {chatUnread > 99 ? '99+' : chatUnread}
+          </span>
+        )}
       </NavLink>
     );
   };
@@ -185,6 +195,10 @@ export function Sidebar() {
               <Bell className="h-4 w-4 shrink-0" />
               <span>Notificações</span>
             </NavLink>
+            <NavLink to="/chat" onClick={() => setMobileOpen(false)} className={cn("sidebar-item", isActive('/chat') ? "sidebar-item-active" : "sidebar-item-inactive")}>
+              <MessageCircle className="h-4 w-4 shrink-0" />
+              <span>Chat</span>
+            </NavLink>
             {workModules.length > 0 && (
               <>
                 <p className="px-3 mt-6 mb-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/45">Módulo de trabalho</p>
@@ -195,7 +209,7 @@ export function Sidebar() {
         ) : (
           <>
             <p className="px-3 mb-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/45">Geral</p>
-            {NAV_ITEMS.slice(0, 2).map(renderNavItem)}
+            {NAV_ITEMS.slice(0, 3).map(renderNavItem)}
             <p className="px-3 mt-6 mb-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/45">Módulos</p>
             {NAV_ITEMS.slice(2).map(renderNavItem)}
           </>

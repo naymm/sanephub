@@ -64,3 +64,18 @@ export function diasEntre(inicio: string, fim: string): number {
     return 0;
   }
 }
+
+/** Hora para chat: hoje "HH:mm", ontem "Ontem HH:mm", mais antigo "d MMM" */
+export function formatChatTime(dateStr: string): string {
+  try {
+    const d = parseISO(dateStr);
+    const now = new Date();
+    const diff = differenceInDays(now, d);
+    if (diff === 0) return format(d, 'HH:mm', { locale: pt });
+    if (diff === 1) return `Ontem ${format(d, 'HH:mm', { locale: pt })}`;
+    if (diff < 7) return format(d, 'EEEE HH:mm', { locale: pt });
+    return format(d, 'd MMM', { locale: pt });
+  } catch {
+    return dateStr;
+  }
+}

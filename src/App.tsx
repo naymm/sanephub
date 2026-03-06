@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { DataProvider } from "@/context/DataContext";
 import { NotificationProvider } from "@/context/NotificationContext";
+import { ChatProvider } from "@/context/ChatContext";
 import { Layout } from "@/components/layout/Layout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
@@ -35,6 +36,7 @@ import PortalRecibosPage from "@/modules/portal/PortalRecibosPage";
 import PortalDeclaracoesPage from "@/modules/portal/PortalDeclaracoesPage";
 import PortalFeriasPage from "@/modules/portal/PortalFeriasPage";
 import PortalRequisicoesPage from "@/modules/portal/PortalRequisicoesPage";
+import ChatPage from "@/modules/chat/ChatPage";
 
 const queryClient = new QueryClient();
 
@@ -43,15 +45,17 @@ const App = () => (
     <AuthProvider>
       <DataProvider>
         <NotificationProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
+          <ChatProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route element={<Layout />}>
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/chat" element={<ChatPage />} />
                   <Route path="/notificacoes" element={<GenericModulePage title="Centro de Notificações" module="notificacoes" />} />
                   {/* Capital Humano */}
                   <Route path="/capital-humano/colaboradores" element={<ColaboradoresPage />} />
@@ -93,8 +97,9 @@ const App = () => (
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
+              </BrowserRouter>
+            </TooltipProvider>
+          </ChatProvider>
         </NotificationProvider>
       </DataProvider>
     </AuthProvider>
