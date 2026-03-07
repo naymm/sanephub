@@ -96,6 +96,7 @@ export default function Login() {
             <div className="grid grid-cols-2 gap-2 text-xs">
               {[
                 { email: 'antonio@sanep.ao', senha: 'admin123', label: 'Admin' },
+                { email: 'pca@sanep.ao', senha: 'pca123', label: 'PCA' },
                 { email: 'maria@sanep.ao', senha: 'rh123', label: 'RH' },
                 { email: 'joao@sanep.ao', senha: 'fin123', label: 'Finanças' },
                 { email: 'isabel@sanep.ao', senha: 'jur123', label: 'Jurídico' },

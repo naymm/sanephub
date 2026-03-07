@@ -10,6 +10,7 @@ const PATH_TO_MODULE: Record<string, string> = {
   '/contabilidade': 'contabilidade',
   '/secretaria': 'secretaria',
   '/juridico': 'juridico',
+  '/conselho-administracao': 'conselho-administracao',
   '/configuracoes': 'configuracoes',
 };
 

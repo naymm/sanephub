@@ -38,6 +38,11 @@ import PortalFeriasPage from "@/modules/portal/PortalFeriasPage";
 import PortalRequisicoesPage from "@/modules/portal/PortalRequisicoesPage";
 import PortalDadosPage from "@/modules/portal/PortalDadosPage";
 import ChatPage from "@/modules/chat/ChatPage";
+import ConselhoDashboardPage from "@/modules/conselho-administracao/ConselhoDashboardPage";
+import DecisoesInstitucionaisPage from "@/modules/conselho-administracao/DecisoesInstitucionaisPage";
+import AssinaturaActosPage from "@/modules/conselho-administracao/AssinaturaActosPage";
+import SaudeFinanceiraPage from "@/modules/conselho-administracao/SaudeFinanceiraPage";
+import ActividadeOrganizacionalPage from "@/modules/conselho-administracao/ActividadeOrganizacionalPage";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +63,12 @@ const App = () => (
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/chat" element={<ChatPage />} />
                   <Route path="/notificacoes" element={<GenericModulePage title="Centro de Notificações" module="notificacoes" />} />
+                  {/* Conselho de Administração (PCA) */}
+                  <Route path="/conselho-administracao/decisoes" element={<DecisoesInstitucionaisPage />} />
+                  <Route path="/conselho-administracao/assinatura-actos" element={<AssinaturaActosPage />} />
+                  <Route path="/conselho-administracao/saude-financeira" element={<SaudeFinanceiraPage />} />
+                  <Route path="/conselho-administracao/actividade" element={<ActividadeOrganizacionalPage />} />
+                  <Route path="/conselho-administracao" element={<ConselhoDashboardPage />} />
                   {/* Capital Humano */}
                   <Route path="/capital-humano/colaboradores" element={<ColaboradoresPage />} />
                   <Route path="/capital-humano/ferias" element={<FeriasPage />} />

@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
   Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock, ShieldAlert, FolderArchive,
-  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, MessageCircle
+  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, MessageCircle, Crown
 } from 'lucide-react';
 
 interface NavItem {
@@ -66,6 +66,16 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Prazos Legais', path: '/juridico/prazos' },
       { label: 'Riscos Jurídicos', path: '/juridico/riscos' },
       { label: 'Arquivo Documental', path: '/juridico/arquivo' },
+    ]
+  },
+  {
+    label: 'Conselho de Administração', icon: Crown, module: 'conselho-administracao',
+    children: [
+      { label: 'Painel Executivo', path: '/conselho-administracao' },
+      { label: 'Decisões Institucionais', path: '/conselho-administracao/decisoes' },
+      { label: 'Assinatura de Actos', path: '/conselho-administracao/assinatura-actos' },
+      { label: 'Saúde Financeira', path: '/conselho-administracao/saude-financeira' },
+      { label: 'Actividade Organizacional', path: '/conselho-administracao/actividade' },
     ]
   },
 ];

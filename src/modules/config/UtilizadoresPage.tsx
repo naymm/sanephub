@@ -22,7 +22,7 @@ import {
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
-const PERFIS: Perfil[] = ['Admin', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'];
+const PERFIS: Perfil[] = ['Admin', 'PCA', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'];
 
 export const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard e Notificações' },
@@ -31,6 +31,7 @@ export const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'contabilidade', label: 'Contabilidade' },
   { id: 'secretaria', label: 'Secretaria Geral' },
   { id: 'juridico', label: 'Jurídico' },
+  { id: 'conselho-administracao', label: 'Conselho de Administração' },
   { id: 'portal-colaborador', label: 'Portal Colaborador' },
   { id: 'configuracoes', label: 'Configurações' },
 ];

@@ -10,18 +10,27 @@ function loadUsuarios(): Usuario[] {
     if (saved) {
       const parsed = JSON.parse(saved) as Usuario[];
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((u) => {
+        const merged = parsed.map((u) => {
           const fromSeed = USUARIOS_SEED.find((s) => s.id === u.id);
           if (!fromSeed) return u;
-          const merged = { ...fromSeed, ...u };
-          if (merged.perfil === 'Colaborador' && (!merged.modulos || merged.modulos.length === 0) && fromSeed.modulos?.length) {
-            merged.modulos = fromSeed.modulos;
+          const m = { ...fromSeed, ...u };
+          if (m.perfil === 'Colaborador' && (!m.modulos || m.modulos.length === 0) && fromSeed.modulos?.length) {
+            m.modulos = fromSeed.modulos;
           }
-          if (merged.perfil === 'Colaborador' && merged.modulos && !merged.modulos.includes('portal-colaborador')) {
-            merged.modulos = ['portal-colaborador', ...merged.modulos];
+          if (m.perfil === 'Colaborador' && m.modulos && !m.modulos.includes('portal-colaborador')) {
+            m.modulos = ['portal-colaborador', ...m.modulos];
           }
-          return merged;
+          return m;
         });
+        // Incluir utilizadores do seed que ainda não estão na lista (ex.: PCA adicionado depois)
+        const existingIds = new Set(merged.map((u) => u.id));
+        for (const s of USUARIOS_SEED) {
+          if (!existingIds.has(s.id)) {
+            merged.push(s);
+            existingIds.add(s.id);
+          }
+        }
+        return merged;
       }
     }
   } catch {}
@@ -99,12 +108,13 @@ export function useAuth() {
 }
 
 const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
-  'dashboard': ['Admin', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'],
+  'dashboard': ['Admin', 'PCA', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'],
   'capital-humano': ['Admin', 'RH'],
   'financas': ['Admin', 'Financeiro'],
   'contabilidade': ['Admin', 'Contabilidade', 'Financeiro'],
   'secretaria': ['Admin', 'Secretaria'],
   'juridico': ['Admin', 'Juridico'],
+  'conselho-administracao': ['Admin', 'PCA'],
   'portal-colaborador': ['Colaborador'],
   'configuracoes': ['Admin'],
 };

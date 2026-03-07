@@ -19,6 +19,7 @@ export const USUARIOS_SEED: Usuario[] = [
   { id: 4, nome: "Ana Rodrigues", email: "ana@sanep.ao", senha: "cont123", perfil: "Contabilidade", cargo: "Contabilista Sénior", departamento: "Contabilidade", avatar: "AR", permissoes: ["CONTABILIDADE_TOTAL", "FINANCAS_READ", "DASHBOARD_READ"] },
   { id: 5, nome: "Carlos Mendes", email: "carlos@sanep.ao", senha: "sec123", perfil: "Secretaria", cargo: "Secretário Geral", departamento: "Secretaria Geral", avatar: "CM", permissoes: ["SECRETARIA_TOTAL", "DASHBOARD_READ"] },
   { id: 6, nome: "Isabel Lopes", email: "isabel@sanep.ao", senha: "jur123", perfil: "Juridico", cargo: "Directora Jurídica", departamento: "Jurídico", avatar: "IL", permissoes: ["JURIDICO_TOTAL", "DASHBOARD_READ"] },
+  { id: 9, nome: "Nestor Quindai", email: "pca@sanep.ao", senha: "pca123", perfil: "PCA", cargo: "Presidente do Conselho de Administração", departamento: "Conselho de Administração", avatar: "NQ", permissoes: ["CONSELHO_ADMIN_TOTAL", "DASHBOARD_READ"] },
   { id: 7, nome: "Pedro Santos", email: "pedro@sanep.ao", senha: "colab123", perfil: "Colaborador", cargo: "Técnico de TI", departamento: "Tecnologia", avatar: "PS", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 7, modulos: ["portal-colaborador", "financas"] },
   { id: 8, nome: "Rosa Neto", email: "rosa@sanep.ao", senha: "colab456", perfil: "Colaborador", cargo: "Assistente Administrativa", departamento: "Secretaria Geral", avatar: "RN", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 8 },
 ];

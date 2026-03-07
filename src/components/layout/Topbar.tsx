@@ -52,6 +52,11 @@ const routeTitles: Record<string, string> = {
   '/portal/recibos': 'Os Meus Recibos',
   '/portal/declaracoes': 'As Minhas Declarações',
   '/portal/requisicoes': 'Requisição à Área Financeira',
+  '/conselho-administracao': 'Painel do Conselho de Administração',
+  '/conselho-administracao/decisoes': 'Decisões Institucionais',
+  '/conselho-administracao/assinatura-actos': 'Assinatura Digital de Actos',
+  '/conselho-administracao/saude-financeira': 'Saúde Financeira',
+  '/conselho-administracao/actividade': 'Actividade Organizacional',
 };
 
 export function Topbar() {

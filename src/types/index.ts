@@ -1,4 +1,4 @@
-export type Perfil = 'Admin' | 'RH' | 'Financeiro' | 'Contabilidade' | 'Secretaria' | 'Juridico' | 'Colaborador';
+export type Perfil = 'Admin' | 'PCA' | 'RH' | 'Financeiro' | 'Contabilidade' | 'Secretaria' | 'Juridico' | 'Colaborador';
 
 export interface Departamento {
   id: number;
