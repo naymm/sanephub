@@ -73,6 +73,10 @@ export default function PortalDeclaracoesPage() {
   });
 
   const handleImprimirPdf = async (d: Declaracao) => {
+    if (d.status !== 'Emitida' && d.status !== 'Entregue') {
+      toast.error('Só pode imprimir declarações emitidas ou entregues.');
+      return;
+    }
     const col = colaboradores.find(c => c.id === d.colaboradorId);
     if (!col) {
       toast.error('Dados do colaborador não encontrados.');
@@ -173,7 +177,9 @@ export default function PortalDeclaracoesPage() {
                 <td className="py-3 px-5 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalhe" onClick={() => { setViewItem(d); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
+                    {(d.status === 'Emitida' || d.status === 'Entregue') && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -321,7 +327,7 @@ export default function PortalDeclaracoesPage() {
                   <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
                   {viewItem.emitidoPor && <p><span className="text-muted-foreground">Emitido por:</span> {viewItem.emitidoPor}</p>}
                 </div>
-                {col && (
+                {col && (viewItem.status === 'Emitida' || viewItem.status === 'Entregue') && (
                   <Button onClick={() => { handleImprimirPdf(viewItem); setViewOpen(false); }} className="w-full sm:w-auto">
                     <FileDown className="h-4 w-4 mr-2" />
                     Imprimir PDF (Declaração de Serviço)

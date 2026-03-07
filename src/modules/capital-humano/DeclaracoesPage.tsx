@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
+import { gerarPdfDeclaracaoServico } from '@/utils/declaracaoServicoPdf';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -23,7 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Check } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Check, FileDown } from 'lucide-react';
+import { toast } from 'sonner';
 
 const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Rendimentos', 'Antiguidade', 'Outro'];
 const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
@@ -45,6 +47,25 @@ export default function DeclaracoesPage() {
   });
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
+
+  const handleImprimirPdf = async (d: Declaracao) => {
+    if (d.status !== 'Emitida' && d.status !== 'Entregue') {
+      toast.error('Só pode imprimir declarações emitidas ou entregues.');
+      return;
+    }
+    const col = colaboradores.find(c => c.id === d.colaboradorId);
+    if (!col) {
+      toast.error('Dados do colaborador não encontrados.');
+      return;
+    }
+    try {
+      await gerarPdfDeclaracaoServico(d, col);
+      toast.success('PDF da declaração gerado. Verifique os transferidos.');
+    } catch (e) {
+      console.error('Erro ao gerar PDF:', e);
+      toast.error('Não foi possível gerar o PDF.');
+    }
+  };
 
   const filtered = declaracoes.filter(d => {
     const matchSearch = getColabName(d.colaboradorId).toLowerCase().includes(search.toLowerCase()) || d.tipo.toLowerCase().includes(search.toLowerCase());
@@ -69,6 +90,8 @@ export default function DeclaracoesPage() {
       colaboradorId: d.colaboradorId,
       tipo: d.tipo,
       descricao: d.descricao,
+      banco: d.banco,
+      paisEmbaixada: d.paisEmbaixada,
       dataPedido: d.dataPedido,
       dataEmissao: d.dataEmissao,
       dataEntrega: d.dataEntrega,
@@ -92,13 +115,17 @@ export default function DeclaracoesPage() {
   };
 
   const marcarEmitida = (d: Declaracao) => {
+    const dataEmissao = new Date().toISOString().slice(0, 10);
+    const emitidoPor = user?.nome;
     setDeclaracoes(prev =>
       prev.map(x =>
         x.id === d.id
-          ? { ...x, status: 'Emitida' as const, dataEmissao: new Date().toISOString().slice(0, 10), emitidoPor: user?.nome }
+          ? { ...x, status: 'Emitida' as const, dataEmissao, emitidoPor }
           : x
       )
     );
+    const emitida = { ...d, status: 'Emitida' as const, dataEmissao, emitidoPor };
+    handleImprimirPdf(emitida);
   };
 
   const marcarEntregue = (d: Declaracao) => {
@@ -156,7 +183,10 @@ export default function DeclaracoesPage() {
                 <td className="py-3 px-5"><StatusBadge status={d.status} /></td>
                 <td className="py-3 px-5 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(d); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalhe" onClick={() => { setViewItem(d); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                    {(d.status === 'Emitida' || d.status === 'Entregue') && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}><Pencil className="h-4 w-4" /></Button>
                     {d.status === 'Pendente' && (
                       <Button variant="ghost" size="sm" onClick={() => marcarEmitida(d)}>Emitir</Button>
@@ -259,14 +289,24 @@ export default function DeclaracoesPage() {
             <DialogDescription>{viewItem?.tipo}</DialogDescription>
           </DialogHeader>
           {viewItem && (
-            <div className="space-y-3 text-sm">
-              <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
-              {viewItem.descricao && <p><span className="text-muted-foreground">Descrição:</span> {viewItem.descricao}</p>}
-              <p><span className="text-muted-foreground">Data pedido:</span> {formatDate(viewItem.dataPedido)}</p>
-              <p><span className="text-muted-foreground">Data emissão:</span> {viewItem.dataEmissao ? formatDate(viewItem.dataEmissao) : '—'}</p>
-              <p><span className="text-muted-foreground">Data entrega:</span> {viewItem.dataEntrega ? formatDate(viewItem.dataEntrega) : '—'}</p>
-              <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
-              {viewItem.emitidoPor && <p><span className="text-muted-foreground">Emitido por:</span> {viewItem.emitidoPor}</p>}
+            <div className="space-y-4">
+              <div className="space-y-3 text-sm">
+                <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
+                {viewItem.banco && <p><span className="text-muted-foreground">Banco:</span> {viewItem.banco}</p>}
+                {viewItem.paisEmbaixada && <p><span className="text-muted-foreground">País (Embaixada):</span> {viewItem.paisEmbaixada}</p>}
+                {viewItem.descricao && <p><span className="text-muted-foreground">Descrição:</span> {viewItem.descricao}</p>}
+                <p><span className="text-muted-foreground">Data pedido:</span> {formatDate(viewItem.dataPedido)}</p>
+                <p><span className="text-muted-foreground">Data emissão:</span> {viewItem.dataEmissao ? formatDate(viewItem.dataEmissao) : '—'}</p>
+                <p><span className="text-muted-foreground">Data entrega:</span> {viewItem.dataEntrega ? formatDate(viewItem.dataEntrega) : '—'}</p>
+                <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
+                {viewItem.emitidoPor && <p><span className="text-muted-foreground">Emitido por:</span> {viewItem.emitidoPor}</p>}
+              </div>
+              {(viewItem.status === 'Emitida' || viewItem.status === 'Entregue') && (
+                <Button onClick={() => { handleImprimirPdf(viewItem); setViewOpen(false); }} className="w-full sm:w-auto">
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Imprimir PDF (Declaração de Serviço)
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>

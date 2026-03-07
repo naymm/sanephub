@@ -3,6 +3,7 @@ import { useData } from '@/context/DataContext';
 import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
+import { gerarPdfRecibo } from '@/utils/reciboPdf';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -21,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Eye } from 'lucide-react';
+import { Search, Plus, Eye, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 const MESES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
@@ -51,6 +52,21 @@ export default function RecibosPage() {
   });
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
+
+  const handleGerarPdf = (r: ReciboSalario) => {
+    const col = colaboradores.find(c => c.id === r.colaboradorId);
+    if (!col) {
+      toast.error('Dados do colaborador não encontrados.');
+      return;
+    }
+    try {
+      gerarPdfRecibo(r, col);
+      toast.success('Recibo em PDF gerado. Verifique os transferidos.');
+    } catch (e) {
+      console.error('Erro ao gerar PDF:', e);
+      toast.error('Não foi possível gerar o PDF. Tente novamente.');
+    }
+  };
 
   const filtered = recibos.filter(r => {
     const matchSearch = getColabName(r.colaboradorId).toLowerCase().includes(search.toLowerCase());
@@ -164,10 +180,13 @@ export default function RecibosPage() {
                 <td className="py-3 px-5 text-right font-mono font-medium">{formatKz(r.liquido)}</td>
                 <td className="py-3 px-5"><StatusBadge status={r.status} /></td>
                 <td className="py-3 px-5 text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(r); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
-                  {r.status === 'Emitido' && (
-                    <Button variant="ghost" size="sm" onClick={() => marcarPago(r)}>Marcar Pago</Button>
-                  )}
+                  <div className="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalhe" onClick={() => { setViewItem(r); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Gerar PDF" onClick={() => handleGerarPdf(r)}><FileDown className="h-4 w-4" /></Button>
+                    {r.status === 'Emitido' && (
+                      <Button variant="ghost" size="sm" onClick={() => marcarPago(r)}>Marcar Pago</Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -269,16 +288,22 @@ export default function RecibosPage() {
             <DialogDescription>{viewItem?.mesAno}</DialogDescription>
           </DialogHeader>
           {viewItem && (
-            <div className="space-y-3 text-sm">
-              <p><span className="text-muted-foreground">Vencimento base:</span> {formatKz(viewItem.vencimentoBase)}</p>
-              <p><span className="text-muted-foreground">Subs. alimentação:</span> {formatKz(viewItem.subsidioAlimentacao)}</p>
-              <p><span className="text-muted-foreground">Subs. transporte:</span> {formatKz(viewItem.subsidioTransporte)}</p>
-              <p><span className="text-muted-foreground">Outros subsídios:</span> {formatKz(viewItem.outrosSubsidios)}</p>
-              <p><span className="text-muted-foreground">INSS:</span> {formatKz(viewItem.inss)}</p>
-              <p><span className="text-muted-foreground">IRT:</span> {formatKz(viewItem.irt)}</p>
-              <p><span className="text-muted-foreground">Outras deduções:</span> {formatKz(viewItem.outrasDeducoes)}</p>
-              <p className="font-semibold pt-2 border-t"><span className="text-muted-foreground">Líquido:</span> {formatKz(viewItem.liquido)}</p>
-              <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
+            <div className="space-y-4">
+              <div className="space-y-3 text-sm">
+                <p><span className="text-muted-foreground">Vencimento base:</span> {formatKz(viewItem.vencimentoBase)}</p>
+                <p><span className="text-muted-foreground">Subs. alimentação:</span> {formatKz(viewItem.subsidioAlimentacao)}</p>
+                <p><span className="text-muted-foreground">Subs. transporte:</span> {formatKz(viewItem.subsidioTransporte)}</p>
+                <p><span className="text-muted-foreground">Outros subsídios:</span> {formatKz(viewItem.outrosSubsidios)}</p>
+                <p><span className="text-muted-foreground">INSS:</span> {formatKz(viewItem.inss)}</p>
+                <p><span className="text-muted-foreground">IRT:</span> {formatKz(viewItem.irt)}</p>
+                <p><span className="text-muted-foreground">Outras deduções:</span> {formatKz(viewItem.outrasDeducoes)}</p>
+                <p className="font-semibold pt-2 border-t"><span className="text-muted-foreground">Líquido:</span> {formatKz(viewItem.liquido)}</p>
+                <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
+              </div>
+              <Button onClick={() => { handleGerarPdf(viewItem); setViewOpen(false); }} className="w-full sm:w-auto">
+                <FileDown className="h-4 w-4 mr-2" />
+                Gerar PDF do recibo
+              </Button>
             </div>
           )}
         </DialogContent>

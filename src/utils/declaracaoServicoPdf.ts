@@ -237,10 +237,22 @@ function loadImageAsDataUrl(url: string): Promise<string> {
 
 export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colaborador: Colaborador): Promise<void> {
   let imgData: string | null = null;
+  let carimboData: string | null = null;
+  let assinaturaData: string | null = null;
   try {
     imgData = await loadImageAsDataUrl('/folha.jpg');
   } catch {
     // Se a imagem não carregar (ex.: desenvolvimento sem public), gera o PDF sem fundo
+  }
+  try {
+    carimboData = await loadImageAsDataUrl('/carimbo-capital-humano.png');
+  } catch {
+    // Carimbo opcional
+  }
+  try {
+    assinaturaData = await loadImageAsDataUrl('/assinatura-digital.png');
+  } catch {
+    // Assinatura opcional
   }
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -304,17 +316,31 @@ export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colabora
   doc.text(dataDeclaracao(dataEmissao), pageW / 2, y, { align: 'center' });
   y += 20;
 
-  // ---------- Assinatura ----------
+  // ---------- Assinatura e carimbo ----------
+  const lineSigY = y;
+  const lineSigW = 60;
+  const carimboW = 42;
+  const carimboH = 25;
+
+  if (carimboData) {
+    doc.addImage(carimboData, 'PNG', right-carimboW, lineSigY - carimboH + 4, carimboW, carimboH);
+  }
+
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.3);
-  const lineSigW = 60;
-  doc.line(pageW / 2 - lineSigW / 2, y, pageW / 2 + lineSigW / 2, y);
-  
+  doc.line(pageW / 2 - lineSigW / 2, lineSigY, pageW / 2 + lineSigW / 2, lineSigY);
+
+  if (assinaturaData) {
+    const sigW = 50;
+    const sigH = 34;
+    doc.addImage(assinaturaData, 'PNG', pageW / 2 - sigW / 2, lineSigY - sigH, sigW, sigH);
+  }
+
   y += 8;
   doc.setFont('times', 'bold');
   doc.setFontSize(11);
   doc.text(ASSINATURA_NOME, pageW / 2, y, { align: 'center' });
-  
+
   y += 6;
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
