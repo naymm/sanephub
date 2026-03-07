@@ -62,17 +62,18 @@ function numeroParaExtenso(n: number): string {
 }
 
 function efeitosDeclaracao(declaracao: Declaracao): string {
-  if (declaracao.tipo === 'Para Banco' && declaracao.descricao) {
-    return `Para efeitos de ${declaracao.descricao}, junto da entidade bancária, declara-se que `;
-  }
   if (declaracao.tipo === 'Para Banco') {
-    return 'Para efeitos de actualização de conta, junto do Banco, declara-se que ';
+    const banco = declaracao.banco ? ` ${declaracao.banco}` : '';
+    return `Para efeitos de actualização de conta, junto do Banco${banco}, declara-se que `;
+  }
+  if (declaracao.tipo === 'Embaixada' && declaracao.paisEmbaixada) {
+    return `Para efeitos junto da Embaixada (${declaracao.paisEmbaixada}), declara-se que `;
+  }
+  if (declaracao.tipo === 'Embaixada') {
+    return 'Para efeitos junto da Embaixada, declara-se que ';
   }
   if (declaracao.tipo === 'Rendimentos') {
     return 'Para efeitos de declaração de rendimentos, declara-se que ';
-  }
-  if (declaracao.tipo === 'Antiguidade') {
-    return 'Para efeitos de comprovação de antiguidade, declara-se que ';
   }
   return 'Para os devidos efeitos, declara-se que ';
 }

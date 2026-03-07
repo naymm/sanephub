@@ -23,11 +23,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Eye, FileDown } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Plus, Eye, FileDown, Check, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
-const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Rendimentos', 'Antiguidade', 'Outro'];
+const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
 const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
+
+const BANCOS = ['BAI', 'BANC', 'BIC', 'BCA', 'BCI', 'BDA', 'BE', 'BFA', 'BIR', 'BPA', 'BPC', 'BNI', 'KEVE', 'BPR', 'BSOL', 'BCGA', 'BMA', 'VTB', 'ACCESS', 'BMF', 'BKI', 'BCH', 'SBA', 'BPPH', 'BVB'];
+
+const PAISES_EMBAIXADA = ['ESPANHA', 'PORTUGAL', 'CHINA', 'EUA', 'BRASIL'];
 
 export default function PortalDeclaracoesPage() {
   const colaboradorId = useColaboradorId();
@@ -42,6 +60,8 @@ export default function PortalDeclaracoesPage() {
     dataPedido: new Date().toISOString().slice(0, 10),
     status: 'Pendente',
   });
+  const [bancoOpen, setBancoOpen] = useState(false);
+  const [paisOpen, setPaisOpen] = useState(false);
 
   const minhasDeclaracoes = colaboradorId == null
     ? []
@@ -73,14 +93,30 @@ export default function PortalDeclaracoesPage() {
       colaboradorId,
       tipo: 'Para Banco',
       descricao: undefined,
+      banco: undefined,
+      paisEmbaixada: undefined,
       dataPedido: new Date().toISOString().slice(0, 10),
       status: 'Pendente',
     });
+    setBancoOpen(false);
+    setPaisOpen(false);
     setDialogOpen(true);
+  };
+
+  const setTipo = (v: TipoDeclaracao) => {
+    setForm(f => ({ ...f, tipo: v, banco: undefined, paisEmbaixada: undefined }));
   };
 
   const save = () => {
     if (!form.colaboradorId || !form.dataPedido) return;
+    if (form.tipo === 'Para Banco' && !form.banco) {
+      toast.error('Seleccione o banco.');
+      return;
+    }
+    if (form.tipo === 'Embaixada' && !form.paisEmbaixada) {
+      toast.error('Seleccione o país da embaixada.');
+      return;
+    }
     const newId = Math.max(0, ...declaracoes.map(d => d.id)) + 1;
     setDeclaracoes(prev => [...prev, { id: newId, ...form }]);
     setDialogOpen(false);
@@ -157,7 +193,7 @@ export default function PortalDeclaracoesPage() {
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Tipo</Label>
-              <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoDeclaracao }))}>
+              <Select value={form.tipo} onValueChange={v => setTipo(v as TipoDeclaracao)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {TIPO_OPTIONS.map(t => (
@@ -166,6 +202,88 @@ export default function PortalDeclaracoesPage() {
                 </SelectContent>
               </Select>
             </div>
+            {form.tipo === 'Para Banco' && (
+              <div className="space-y-2">
+                <Label>Banco</Label>
+                <Popover open={bancoOpen} onOpenChange={setBancoOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={bancoOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {form.banco ?? 'Seleccionar banco...'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Pesquisar banco..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum banco encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {BANCOS.map((b) => (
+                            <CommandItem
+                              key={b}
+                              value={b}
+                              onSelect={() => {
+                                setForm(f => ({ ...f, banco: b }));
+                                setBancoOpen(false);
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', form.banco === b ? 'opacity-100' : 'opacity-0')} />
+                              {b}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+            {form.tipo === 'Embaixada' && (
+              <div className="space-y-2">
+                <Label>País da Embaixada</Label>
+                <Popover open={paisOpen} onOpenChange={setPaisOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={paisOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {form.paisEmbaixada ?? 'Seleccionar país...'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Pesquisar país..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum país encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {PAISES_EMBAIXADA.map((p) => (
+                            <CommandItem
+                              key={p}
+                              value={p}
+                              onSelect={() => {
+                                setForm(f => ({ ...f, paisEmbaixada: p }));
+                                setPaisOpen(false);
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', form.paisEmbaixada === p ? 'opacity-100' : 'opacity-0')} />
+                              {p}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Descrição (opcional)</Label>
               <Input value={form.descricao ?? ''} onChange={e => setForm(f => ({ ...f, descricao: e.target.value || undefined }))} placeholder="ex: Crédito habitação" />
@@ -194,6 +312,8 @@ export default function PortalDeclaracoesPage() {
               <div className="space-y-4">
                 <div className="space-y-3 text-sm">
                   <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
+                  {viewItem.banco && <p><span className="text-muted-foreground">Banco:</span> {viewItem.banco}</p>}
+                  {viewItem.paisEmbaixada && <p><span className="text-muted-foreground">País (Embaixada):</span> {viewItem.paisEmbaixada}</p>}
                   {viewItem.descricao && <p><span className="text-muted-foreground">Descrição:</span> {viewItem.descricao}</p>}
                   <p><span className="text-muted-foreground">Data pedido:</span> {formatDate(viewItem.dataPedido)}</p>
                   <p><span className="text-muted-foreground">Data emissão:</span> {viewItem.dataEmissao ? formatDate(viewItem.dataEmissao) : '—'}</p>

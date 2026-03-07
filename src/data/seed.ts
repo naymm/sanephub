@@ -63,9 +63,9 @@ export const RECIBOS_SEED: ReciboSalario[] = [
 ];
 
 export const DECLARACOES_SEED: Declaracao[] = [
-  { id: 1, colaboradorId: 7, tipo: "Para Banco", descricao: "Crédito habitação", dataPedido: "2024-11-01", dataEmissao: "2024-11-05", status: "Entregue", emitidoPor: "Maria Silva" },
+  { id: 1, colaboradorId: 7, tipo: "Para Banco", banco: "BFA", descricao: "Crédito habitação", dataPedido: "2024-11-01", dataEmissao: "2024-11-05", status: "Entregue", emitidoPor: "Maria Silva" },
   { id: 2, colaboradorId: 3, tipo: "Rendimentos", dataPedido: "2024-11-10", status: "Emitida", dataEmissao: "2024-11-12", emitidoPor: "Maria Silva" },
-  { id: 3, colaboradorId: 8, tipo: "Antiguidade", dataPedido: "2024-11-20", status: "Pendente" },
+  { id: 3, colaboradorId: 8, tipo: "Embaixada", paisEmbaixada: "PORTUGAL", dataPedido: "2024-11-20", status: "Pendente" },
 ];
 
 export const REQUISICOES_SEED: Requisicao[] = [

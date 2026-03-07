@@ -92,7 +92,7 @@ export interface ReciboSalario {
 }
 
 /** Declarações (para banco, rendimentos, antiguidade, etc.) */
-export type TipoDeclaracao = 'Para Banco' | 'Rendimentos' | 'Antiguidade' | 'Outro';
+export type TipoDeclaracao = 'Para Banco' | 'Embaixada' | 'Rendimentos' | 'Outro';
 export type StatusDeclaracao = 'Pendente' | 'Emitida' | 'Entregue';
 
 export interface Declaracao {
@@ -100,6 +100,10 @@ export interface Declaracao {
   colaboradorId: number;
   tipo: TipoDeclaracao;
   descricao?: string;
+  /** Banco selecionado quando tipo é "Para Banco". */
+  banco?: string;
+  /** País da embaixada quando tipo é "Embaixada". */
+  paisEmbaixada?: string;
   dataPedido: string;
   dataEmissao?: string;
   dataEntrega?: string;
