@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
 import type { Colaborador, StatusColaborador, TipoContrato, Genero } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
@@ -28,6 +29,7 @@ const TIPO_CONTRATO_OPTIONS: TipoContrato[] = ['Efectivo', 'Prazo Certo', 'Prest
 const GENERO_OPTIONS: Genero[] = ['M', 'F', 'Outro'];
 
 const emptyForm: Omit<Colaborador, 'id'> = {
+  empresaId: 1,
   nome: '',
   dataNascimento: '',
   genero: 'M',
@@ -49,7 +51,9 @@ const emptyForm: Omit<Colaborador, 'id'> = {
 };
 
 export default function ColaboradoresPage() {
-  const { colaboradores, setColaboradores } = useData();
+  const { colaboradores, setColaboradores, empresas } = useData();
+  const { currentEmpresaId } = useTenant();
+  const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusColaborador | 'todos'>('todos');
   const [deptFilter, setDeptFilter] = useState<string>('todos');
@@ -75,13 +79,14 @@ export default function ColaboradoresPage() {
   const openCreate = () => {
     setEditing(null);
     const today = new Date().toISOString().slice(0, 10);
-    setForm({ ...emptyForm, dataAdmissao: today });
+    setForm({ ...emptyForm, empresaId: empresaIdForNew, dataAdmissao: today });
     setDialogOpen(true);
   };
 
   const openEdit = (c: Colaborador) => {
     setEditing(c);
     setForm({
+      empresaId: c.empresaId,
       nome: c.nome,
       dataNascimento: c.dataNascimento,
       genero: c.genero,
@@ -114,8 +119,10 @@ export default function ColaboradoresPage() {
     if (editing) {
       setColaboradores(prev => prev.map(c => (c.id === editing.id ? { ...editing, ...form } : c)));
     } else {
-      const newId = Math.max(0, ...colaboradores.map(c => c.id)) + 1;
-      setColaboradores(prev => [...prev, { id: newId, ...form }]);
+      setColaboradores(prev => {
+        const newId = Math.max(0, ...prev.map(c => c.id)) + 1;
+        return [...prev, { id: newId, ...form, empresaId: form.empresaId ?? empresaIdForNew }];
+      });
     }
     setDialogOpen(false);
     setEditing(null);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import type { Requisicao, StatusRequisicao } from '@/types';
@@ -46,7 +47,8 @@ function nextNum(requisicoes: Requisicao[]): string {
 export default function PortalRequisicoesPage() {
   const { user } = useAuth();
   const colaboradorId = useColaboradorId();
-  const { requisicoes, setRequisicoes, centrosCusto, departamentos } = useData();
+  const { requisicoes, setRequisicoes, centrosCusto, departamentos, colaboradores } = useData();
+  const { currentEmpresaId } = useTenant();
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -122,6 +124,7 @@ export default function PortalRequisicoesPage() {
       comprovante: false,
       enviadoContabilidade: false,
       requisitanteColaboradorId: colaboradorId,
+      empresaId: typeof currentEmpresaId === 'number' ? currentEmpresaId : (colaboradores.find(c => c.id === colaboradorId)?.empresaId ?? 1),
     };
     setRequisicoes(prev => [...prev, nova]);
     setDialogOpen(false);

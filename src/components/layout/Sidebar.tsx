@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useChat } from '@/context/ChatContext';
+import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
+import { getModulosAtivosForContext } from '@/utils/empresaModulos';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
@@ -36,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Finanças', icon: DollarSign, module: 'financas',
     children: [
       { label: 'Requisições', path: '/financas/requisicoes' },
+      { label: 'Tesouraria', path: '/financas/tesouraria' },
       { label: 'Centros de Custo', path: '/financas/centros-custo' },
       { label: 'Projectos', path: '/financas/projectos' },
       { label: 'Relatórios', path: '/financas/relatorios' },
@@ -72,6 +76,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Conselho de Administração', icon: Crown, module: 'conselho-administracao',
     children: [
       { label: 'Painel Executivo', path: '/conselho-administracao' },
+      { label: 'Empresas do Grupo', path: '/conselho-administracao/empresas' },
       { label: 'Decisões Institucionais', path: '/conselho-administracao/decisoes' },
       { label: 'Assinatura de Actos', path: '/conselho-administracao/assinatura-actos' },
       { label: 'Saúde Financeira', path: '/conselho-administracao/saude-financeira' },
@@ -91,28 +96,60 @@ const COLABORADOR_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   const { user, logout } = useAuth();
+  const { empresas } = useData();
+  const { currentEmpresaId } = useTenant();
   const { getUnreadCount: getChatUnread } = useChat();
   const location = useLocation();
   const chatUnread = getChatUnread();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [collapsedByUser, setCollapsedByUser] = useState<Set<string>>(() => new Set());
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
+
+  // Ao sair da secção, limpar "colapsado pelo utilizador" para o submenu reabrir quando voltar
+  useEffect(() => {
+    setCollapsedByUser(prev => {
+      const next = new Set(prev);
+      NAV_ITEMS.forEach(item => {
+        if (!item.children) return;
+        const active = item.children.some(c => location.pathname.startsWith(c.path));
+        if (!active) next.delete(item.label);
+      });
+      return next;
+    });
+  }, [location.pathname]);
 
   if (!user) return null;
 
   const isColaborador = user.perfil === 'Colaborador';
   const items = isColaborador ? COLABORADOR_ITEMS : NAV_ITEMS;
+
+  const canShowModule = (moduleId: string | undefined) => {
+    if (!moduleId) return true;
+    if (!hasModuleAccess(user, moduleId)) return false;
+    if (modulosAtivos == null) return true;
+    return modulosAtivos.includes(moduleId);
+  };
+
   /** Módulos de área (Capital Humano, Finanças, etc.) a que o colaborador tem acesso para trabalhar */
   const workModules = isColaborador
     ? NAV_ITEMS.filter(
         (item): item is NavItem & { module: string; children?: { label: string; path: string }[] } =>
-          item.module != null && item.children != null && hasModuleAccess(user, item.module)
+          item.module != null && item.children != null && canShowModule(item.module)
       )
     : [];
 
   const toggleExpand = (label: string) => {
-    setExpandedItems(prev =>
-      prev.includes(label) ? prev.filter(i => i !== label) : [...prev, label]
-    );
+    setExpandedItems(prev => {
+      const isExpanded = prev.includes(label);
+      if (isExpanded) {
+        setCollapsedByUser(c => new Set(c).add(label));
+        return prev.filter(i => i !== label);
+      }
+      setCollapsedByUser(c => { const n = new Set(c); n.delete(label); return n; });
+      return [...prev, label];
+    });
   };
 
   const isActive = (path: string) => location.pathname === path;
@@ -120,11 +157,12 @@ export function Sidebar() {
     item.children?.some(c => location.pathname.startsWith(c.path)) ?? false;
 
   const renderNavItem = (item: NavItem) => {
-    if (item.module && !hasModuleAccess(user, item.module)) return null;
+    if (item.module && !canShowModule(item.module)) return null;
 
     if (item.children) {
       const groupActive = isGroupActive(item);
-      const expanded = expandedItems.includes(item.label) || groupActive;
+      const userCollapsed = collapsedByUser.has(item.label);
+      const expanded = !userCollapsed && (expandedItems.includes(item.label) || groupActive);
       return (
         <div key={item.label}>
           <button

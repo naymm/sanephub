@@ -1,5 +1,8 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
+import { getModulosAtivosForContext } from '@/utils/empresaModulos';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
@@ -16,6 +19,8 @@ const PATH_TO_MODULE: Record<string, string> = {
 
 export function Layout() {
   const { user, isAuthenticated } = useAuth();
+  const { empresas } = useData();
+  const { currentEmpresaId } = useTenant();
   const location = useLocation();
   const pathname = location.pathname;
 
@@ -24,6 +29,10 @@ export function Layout() {
   const pathPrefix = '/' + pathname.split('/')[1];
   const moduleForPath = PATH_TO_MODULE[pathPrefix];
   if (user && moduleForPath && !hasModuleAccess(user, moduleForPath)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
+  if (user && moduleForPath && modulosAtivos != null && !modulosAtivos.includes(moduleForPath)) {
     return <Navigate to="/dashboard" replace />;
   }
 

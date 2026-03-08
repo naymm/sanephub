@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, type LoginEmpresaId } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Lock, Mail, AlertCircle } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Building2 } from 'lucide-react';
 
 export default function Login() {
+  const { empresas } = useData();
+  const empresasAtivas = empresas.filter(e => e.activo);
+  const [empresaId, setEmpresaId] = useState<LoginEmpresaId>('grupo');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
@@ -17,9 +21,16 @@ export default function Login() {
     e.preventDefault();
     setError('');
     if (!email || !senha) { setError('Preencha todos os campos.'); return; }
-    const success = login(email, senha);
+    const success = login(empresaId, email, senha);
     if (success) navigate('/dashboard');
-    else setError('Credenciais inválidas. Verifique o email e a senha.');
+    else setError('Credenciais inválidas. Verifique a empresa, email e senha.');
+  };
+
+  const fillDemo = (eid: LoginEmpresaId, em: string, pw: string) => {
+    setEmpresaId(eid);
+    setEmail(em);
+    setSenha(pw);
+    setError('');
   };
 
   return (
@@ -55,6 +66,24 @@ export default function Login() {
                 {error}
               </div>
             )}
+
+            <div className="space-y-2">
+              <Label htmlFor="empresa" className="text-xs font-medium text-muted-foreground">Empresa / contexto</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <select
+                  id="empresa"
+                  value={empresaId === 'grupo' ? 'grupo' : String(empresaId)}
+                  onChange={e => setEmpresaId(e.target.value === 'grupo' ? 'grupo' : Number(e.target.value))}
+                  className="flex h-10 w-full rounded-lg border border-border/80 bg-background pl-10 pr-4 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="grupo">Grupo (Admin / PCA)</option>
+                  {empresasAtivas.map(e => (
+                    <option key={e.id} value={e.id}>{e.nome}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Email corporativo</Label>
@@ -95,17 +124,18 @@ export default function Login() {
             <p className="text-xs text-muted-foreground text-center mb-2">Contas de demonstração</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {[
-                { email: 'antonio@sanep.ao', senha: 'admin123', label: 'Admin' },
-                { email: 'pca@sanep.ao', senha: 'pca123', label: 'PCA' },
-                { email: 'maria@sanep.ao', senha: 'rh123', label: 'RH' },
-                { email: 'joao@sanep.ao', senha: 'fin123', label: 'Finanças' },
-                { email: 'isabel@sanep.ao', senha: 'jur123', label: 'Jurídico' },
+                { empresaId: 'grupo' as const, email: 'antonio@sanep.ao', senha: 'admin123', label: 'Admin (Grupo)' },
+                { empresaId: 'grupo' as const, email: 'pca@sanep.ao', senha: 'pca123', label: 'PCA (Grupo)' },
+                { empresaId: 1 as const, email: 'maria@sanep.ao', senha: 'rh123', label: 'RH (Holding)' },
+                { empresaId: 1 as const, email: 'joao@sanep.ao', senha: 'fin123', label: 'Finanças (Holding)' },
+                { empresaId: 1 as const, email: 'isabel@sanep.ao', senha: 'jur123', label: 'Jurídico (Holding)' },
+                { empresaId: 2 as const, email: 'ines@sanep.pt', senha: 'pt123', label: 'Finanças (Crediangolar)' },
               ].map(c => (
                 <button
-                  key={c.email}
+                  key={`${c.empresaId}-${c.email}`}
                   type="button"
                   className="p-2.5 rounded-lg border border-border/80 text-left hover:bg-muted/50 transition-colors"
-                  onClick={() => { setEmail(c.email); setSenha(c.senha); }}
+                  onClick={() => fillDemo(c.empresaId, c.email, c.senha)}
                 >
                   <span className="font-medium text-foreground">{c.label}</span>
                   <span className="block text-muted-foreground truncate mt-0.5">{c.email}</span>

@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { TenantProvider } from "@/context/TenantContext";
 import { DataProvider } from "@/context/DataContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { ChatProvider } from "@/context/ChatContext";
@@ -17,6 +18,7 @@ import FaltasPage from "@/modules/capital-humano/FaltasPage";
 import RecibosPage from "@/modules/capital-humano/RecibosPage";
 import DeclaracoesPage from "@/modules/capital-humano/DeclaracoesPage";
 import RequisicoesPage from "@/modules/financas/RequisicoesPage";
+import TesourariaPage from "@/modules/financas/TesourariaPage";
 import CentrosCustoPage from "@/modules/financas/CentrosCustoPage";
 import ProjectosPage from "@/modules/financas/ProjectosPage";
 import RelatoriosPage from "@/modules/financas/RelatoriosPage";
@@ -43,13 +45,15 @@ import DecisoesInstitucionaisPage from "@/modules/conselho-administracao/Decisoe
 import AssinaturaActosPage from "@/modules/conselho-administracao/AssinaturaActosPage";
 import SaudeFinanceiraPage from "@/modules/conselho-administracao/SaudeFinanceiraPage";
 import ActividadeOrganizacionalPage from "@/modules/conselho-administracao/ActividadeOrganizacionalPage";
+import EmpresasPage from "@/modules/conselho-administracao/EmpresasPage";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <DataProvider>
+      <TenantProvider>
+        <DataProvider>
         <NotificationProvider>
           <ChatProvider>
             <TooltipProvider>
@@ -68,6 +72,7 @@ const App = () => (
                   <Route path="/conselho-administracao/assinatura-actos" element={<AssinaturaActosPage />} />
                   <Route path="/conselho-administracao/saude-financeira" element={<SaudeFinanceiraPage />} />
                   <Route path="/conselho-administracao/actividade" element={<ActividadeOrganizacionalPage />} />
+                  <Route path="/conselho-administracao/empresas" element={<EmpresasPage />} />
                   <Route path="/conselho-administracao" element={<ConselhoDashboardPage />} />
                   {/* Capital Humano */}
                   <Route path="/capital-humano/colaboradores" element={<ColaboradoresPage />} />
@@ -77,6 +82,7 @@ const App = () => (
                   <Route path="/capital-humano/declaracoes" element={<DeclaracoesPage />} />
                   {/* Finanças */}
                   <Route path="/financas/requisicoes" element={<RequisicoesPage />} />
+                  <Route path="/financas/tesouraria" element={<TesourariaPage />} />
                   <Route path="/financas/centros-custo" element={<CentrosCustoPage />} />
                   <Route path="/financas/projectos" element={<ProjectosPage />} />
                   <Route path="/financas/relatorios" element={<RelatoriosPage />} />
@@ -113,7 +119,8 @@ const App = () => (
             </TooltipProvider>
           </ChatProvider>
         </NotificationProvider>
-      </DataProvider>
+        </DataProvider>
+      </TenantProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

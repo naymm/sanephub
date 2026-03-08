@@ -54,7 +54,7 @@ export default function SaudeFinanceiraPage() {
           <ul className="space-y-3">
             {pagamentosRecentes.map(p => (
               <li key={p.id} className="flex justify-between items-center text-sm border-b border-border/50 pb-2 last:border-0">
-                <span className="text-muted-foreground">{p.referencia ?? p.descricao ?? 'Pagamento'}</span>
+                <span className="text-muted-foreground">{p.referencia ?? 'Pagamento'}</span>
                 <span className="font-mono font-medium">{formatKz(p.valor)}</span>
               </li>
             ))}

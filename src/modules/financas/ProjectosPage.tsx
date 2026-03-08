@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
 import type { Projecto } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
@@ -26,7 +27,9 @@ import {
 const STATUS_OPTIONS: Projecto['status'][] = ['Activo', 'Concluído', 'Suspenso', 'Cancelado'];
 
 export default function ProjectosPage() {
-  const { projectos, setProjectos } = useData();
+  const { projectos, setProjectos, empresas } = useData();
+  const { currentEmpresaId } = useTenant();
+  const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<Projecto['status'] | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -34,6 +37,7 @@ export default function ProjectosPage() {
   const [editing, setEditing] = useState<Projecto | null>(null);
   const [viewItem, setViewItem] = useState<Projecto | null>(null);
   const [form, setForm] = useState<Omit<Projecto, 'id'>>({
+    empresaId: 1,
     codigo: '',
     nome: '',
     descricao: '',
@@ -58,6 +62,7 @@ export default function ProjectosPage() {
     setEditing(null);
     const today = new Date().toISOString().slice(0, 10);
     setForm({
+      empresaId: empresaIdForNew,
       codigo: '',
       nome: '',
       descricao: '',
@@ -74,6 +79,7 @@ export default function ProjectosPage() {
   const openEdit = (p: Projecto) => {
     setEditing(p);
     setForm({
+      empresaId: p.empresaId,
       codigo: p.codigo,
       nome: p.nome,
       descricao: p.descricao,
@@ -92,8 +98,10 @@ export default function ProjectosPage() {
     if (editing) {
       setProjectos(prev => prev.map(p => (p.id === editing.id ? { ...editing, ...form } : p)));
     } else {
-      const newId = Math.max(0, ...projectos.map(p => p.id)) + 1;
-      setProjectos(prev => [...prev, { id: newId, ...form }]);
+      setProjectos(prev => {
+        const newId = Math.max(0, ...prev.map(p => p.id)) + 1;
+        return [...prev, { id: newId, ...form, empresaId: form.empresaId ?? empresaIdForNew }];
+      });
     }
     setDialogOpen(false);
     setEditing(null);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import type { Requisicao, StatusRequisicao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -37,6 +38,7 @@ const STATUS_OPTIONS: { value: StatusRequisicao | 'todos'; label: string }[] = [
 ];
 
 const emptyRequisicao: Omit<Requisicao, 'id' | 'num'> = {
+  empresaId: 1,
   fornecedor: '',
   descricao: '',
   valor: 0,
@@ -62,7 +64,9 @@ function nextNum(requisicoes: Requisicao[]): string {
 
 export default function RequisicoesPage() {
   const { user } = useAuth();
-  const { requisicoes, setRequisicoes, centrosCusto } = useData();
+  const { requisicoes, setRequisicoes, centrosCusto, empresas } = useData();
+  const { currentEmpresaId } = useTenant();
+  const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [centroFilter, setCentroFilter] = useState<string>('todos');
@@ -209,15 +213,18 @@ export default function RequisicoesPage() {
         prev.map(r => (r.id === editing.id ? { ...editing, ...form } : r))
       );
     } else {
-      const newId = Math.max(0, ...requisicoes.map(r => r.id)) + 1;
-      setRequisicoes(prev => [
-        ...prev,
-        {
-          id: newId,
-          num: nextNum(prev),
-          ...form,
-        } as Requisicao,
-      ]);
+      setRequisicoes(prev => {
+        const newId = Math.max(0, ...prev.map(r => r.id)) + 1;
+        return [
+          ...prev,
+          {
+            id: newId,
+            empresaId: empresaIdForNew,
+            num: nextNum(prev),
+            ...form,
+          } as Requisicao,
+        ];
+      });
     }
     setDialogOpen(false);
     setEditing(null);

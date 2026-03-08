@@ -15,7 +15,7 @@ export default function ActividadeOrganizacionalPage() {
   const reqPendentes = requisicoes.filter(r => r.status === 'Pendente' || r.status === 'Em Análise').length;
   const valorPendente = requisicoes.filter(r => r.status === 'Pendente' || r.status === 'Em Análise').reduce((s, r) => s + r.valor, 0);
   const reunioesAgendadas = reunioes.filter(r => r.status === 'Agendada').length;
-  const contratosVigentes = contratos.filter(c => c.status === 'Vigente' || c.status === 'Em execução').length;
+  const contratosVigentes = contratos.filter(c => c.status === 'Activo').length;
   const declPendentes = declaracoes.filter(d => d.status === 'Pendente').length;
 
   const resumos = [

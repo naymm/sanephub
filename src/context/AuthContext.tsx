@@ -14,6 +14,8 @@ function loadUsuarios(): Usuario[] {
           const fromSeed = USUARIOS_SEED.find((s) => s.id === u.id);
           if (!fromSeed) return u;
           const m = { ...fromSeed, ...u };
+          // Seed é fonte de verdade para empresa (evita login quebrado por empresaId antigo no localStorage)
+          m.empresaId = fromSeed.empresaId ?? undefined;
           if (m.perfil === 'Colaborador' && (!m.modulos || m.modulos.length === 0) && fromSeed.modulos?.length) {
             m.modulos = fromSeed.modulos;
           }
@@ -37,11 +39,14 @@ function loadUsuarios(): Usuario[] {
   return USUARIOS_SEED;
 }
 
+export type LoginEmpresaId = number | 'grupo';
+
 interface AuthContextType {
   user: Usuario | null;
   usuarios: Usuario[];
   setUsuarios: React.Dispatch<React.SetStateAction<Usuario[]>>;
-  login: (email: string, senha: string) => boolean;
+  /** Login por empresa: seleccionar 'grupo' para Admin/PCA, ou id da empresa para utilizadores dessa empresa. */
+  login: (empresaId: LoginEmpresaId, email: string, senha: string) => boolean;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -86,8 +91,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [usuarios]);
 
-  const login = (email: string, senha: string): boolean => {
-    const found = usuarios.find(u => u.email === email && u.senha === senha);
+  const login = (empresaId: LoginEmpresaId, email: string, senha: string): boolean => {
+    const eid = empresaId === 'grupo' ? 'grupo' : Number(empresaId);
+    const found = usuarios.find(u => {
+      if (u.email !== email || u.senha !== senha) return false;
+      if (eid === 'grupo') return u.empresaId == null;
+      return Number(u.empresaId) === eid;
+    });
     if (found) { setUser(found); return true; }
     return false;
   };

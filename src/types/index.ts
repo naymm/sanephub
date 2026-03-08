@@ -1,5 +1,17 @@
 export type Perfil = 'Admin' | 'PCA' | 'RH' | 'Financeiro' | 'Contabilidade' | 'Secretaria' | 'Juridico' | 'Colaborador';
 
+/** Empresa do Grupo (tenant organizacional). Cada empresa tem dados, utilizadores e acessos segregados. */
+export interface Empresa {
+  id: number;
+  codigo: string;
+  nome: string;
+  nif?: string;
+  morada?: string;
+  activo: boolean;
+  /** Módulos activos nesta empresa. Se indefinido, todos os módulos permitidos pelo perfil estão disponíveis. */
+  modulosAtivos?: string[];
+}
+
 export interface Departamento {
   id: number;
   nome: string;
@@ -19,6 +31,8 @@ export interface Usuario {
   modulos?: string[];
   /** ID do colaborador associado (portal do colaborador). Definido para perfil Colaborador. */
   colaboradorId?: number;
+  /** ID da empresa à qual o utilizador pertence. null/undefined = nível Grupo (Admin/PCA), com visão consolidada ou seleção de empresa. */
+  empresaId?: number | null;
 }
 
 export type StatusColaborador = 'Activo' | 'Inactivo' | 'Suspenso' | 'Em férias';
@@ -27,6 +41,8 @@ export type Genero = 'M' | 'F' | 'Outro';
 
 export interface Colaborador {
   id: number;
+  /** ID da empresa a que o colaborador pertence (segregação multi-tenant). */
+  empresaId: number;
   nome: string;
   dataNascimento: string;
   genero: Genero;
@@ -116,6 +132,7 @@ export type StatusRequisicao = 'Pendente' | 'Em Análise' | 'Aprovado' | 'Rejeit
 
 export interface Requisicao {
   id: number;
+  empresaId: number;
   num: string;
   fornecedor: string;
   nifFornecedor?: string;
@@ -129,10 +146,8 @@ export interface Requisicao {
   data: string;
   status: StatusRequisicao;
   proforma: boolean;
-  /** Nomes/referências dos ficheiros de facturas proforma anexadas */
   proformaAnexos?: string[];
   factura: boolean;
-  /** Nomes/referências dos ficheiros da factura final anexada (obrigatório para marcar como pago e enviar à contabilidade) */
   facturaFinalAnexos?: string[];
   comprovante: boolean;
   enviadoContabilidade: boolean;
@@ -140,12 +155,12 @@ export interface Requisicao {
   aprovadoPor?: string;
   dataPagamento?: string;
   observacoes?: string;
-  /** Colaborador que solicitou (requisições submetidas pelo portal do colaborador) */
   requisitanteColaboradorId?: number;
 }
 
 export interface CentroCusto {
   id: number;
+  empresaId: number;
   codigo: string;
   nome: string;
   descricao: string;
@@ -158,6 +173,7 @@ export interface CentroCusto {
 
 export interface Projecto {
   id: number;
+  empresaId: number;
   codigo: string;
   nome: string;
   descricao: string;
@@ -321,5 +337,36 @@ export interface PendenciaDocumental {
   responsavel: string;
   status: 'Pendente' | 'Em tratamento' | 'Regularizado' | 'Vencido';
   resolvidoEm?: string;
+  observacoes?: string;
+}
+
+/** Tesouraria: método de pagamento */
+export type MetodoPagamentoTesouraria = 'Transferência' | 'Cheque' | 'Numerário' | 'MB' | 'Outro';
+
+/** Tesouraria: categoria de saída */
+export type CategoriaSaidaTesouraria = 'fornecedor' | 'servicos' | 'despesas_operacionais' | 'impostos' | 'salarios';
+
+/** Movimento de tesouraria (entrada ou saída de dinheiro) */
+export interface MovimentoTesouraria {
+  id: number;
+  empresaId: number;
+  tipo: 'entrada' | 'saida';
+  referencia: string;
+  valor: number;
+  data: string;
+  metodoPagamento: MetodoPagamentoTesouraria;
+  descricao: string;
+  /** Entrada: cliente ou origem do recebimento */
+  origem?: string;
+  /** Saída: categoria do pagamento */
+  categoriaSaida?: CategoriaSaidaTesouraria;
+  /** Saída: beneficiário (fornecedor, serviço, etc.) */
+  beneficiario?: string;
+  centroCustoId?: number;
+  projectoId?: number;
+  comprovativoAnexos?: string[];
+  requisicaoId?: number;
+  registadoPor?: string;
+  registadoEm: string;
   observacoes?: string;
 }

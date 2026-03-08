@@ -1,7 +1,9 @@
 import { useAuth } from '@/context/AuthContext';
+import { useTenant } from '@/context/TenantContext';
+import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Search, ChevronRight, LogOut, User, Settings } from 'lucide-react';
+import { Bell, ChevronRight, LogOut, User, Settings, Building2, ChevronDown } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -28,6 +30,7 @@ const routeTitles: Record<string, string> = {
   '/capital-humano/recibos': 'Recibos de Salário',
   '/capital-humano/declaracoes': 'Declarações',
   '/financas/requisicoes': 'Requisições',
+  '/financas/tesouraria': 'Tesouraria',
   '/financas/centros-custo': 'Centros de Custo',
   '/financas/projectos': 'Projectos',
   '/financas/relatorios': 'Relatórios Financeiros',
@@ -57,10 +60,13 @@ const routeTitles: Record<string, string> = {
   '/conselho-administracao/assinatura-actos': 'Assinatura Digital de Actos',
   '/conselho-administracao/saude-financeira': 'Saúde Financeira',
   '/conselho-administracao/actividade': 'Actividade Organizacional',
+  '/conselho-administracao/empresas': 'Empresas do Grupo',
 };
 
 export function Topbar() {
   const { user, logout } = useAuth();
+  const { currentEmpresaId, setCurrentEmpresaId, isGroupLevel } = useTenant();
+  const { empresas } = useData();
   const { getForProfile, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const location = useLocation();
   const navigate = useNavigate();
@@ -71,10 +77,11 @@ export function Topbar() {
   const breadcrumb = location.pathname.split('/').filter(Boolean);
   const notifs = getForProfile(user.perfil);
   const unread = unreadCount(user.perfil);
+  const tenantLabel = currentEmpresaId === 'consolidado' ? 'Grupo (consolidado)' : empresas.find(e => e.id === currentEmpresaId)?.codigo ?? 'Empresa';
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/80 bg-background/95 backdrop-blur-sm px-4 lg:px-6">
-      {/* Left: Title + breadcrumb */}
+      {/* Left: Title + breadcrumb + tenant switcher */}
       <div className="flex items-center gap-4 ml-12 lg:ml-0 min-w-0">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-foreground truncate">{title}</h2>
@@ -87,6 +94,27 @@ export function Topbar() {
             ))}
           </div>
         </div>
+        {isGroupLevel && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1.5 rounded-lg border border-border/80 px-2.5 py-1.5 text-xs font-medium hover:bg-muted/60 transition-colors">
+                <Building2 className="h-3.5 w-3.5" />
+                {tenantLabel}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setCurrentEmpresaId('consolidado')}>
+                Visão consolidada (Grupo)
+              </DropdownMenuItem>
+              {empresas.filter(e => e.activo).map(e => (
+                <DropdownMenuItem key={e.id} onClick={() => setCurrentEmpresaId(e.id)}>
+                  {e.codigo} — {e.nome}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Right: Notifications + User */}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
 import type { CentroCusto } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
@@ -24,7 +25,9 @@ import {
 } from '@/components/ui/select';
 
 export default function CentrosCustoPage() {
-  const { centrosCusto, setCentrosCusto } = useData();
+  const { centrosCusto, setCentrosCusto, empresas } = useData();
+  const { currentEmpresaId } = useTenant();
+  const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'Activo' | 'Inactivo'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -32,6 +35,7 @@ export default function CentrosCustoPage() {
   const [editing, setEditing] = useState<CentroCusto | null>(null);
   const [viewItem, setViewItem] = useState<CentroCusto | null>(null);
   const [form, setForm] = useState<Omit<CentroCusto, 'id'>>({
+    empresaId: 1,
     codigo: '',
     nome: '',
     descricao: '',
@@ -54,6 +58,7 @@ export default function CentrosCustoPage() {
   const openCreate = () => {
     setEditing(null);
     setForm({
+      empresaId: empresaIdForNew,
       codigo: '',
       nome: '',
       descricao: '',
@@ -69,6 +74,7 @@ export default function CentrosCustoPage() {
   const openEdit = (cc: CentroCusto) => {
     setEditing(cc);
     setForm({
+      empresaId: cc.empresaId,
       codigo: cc.codigo,
       nome: cc.nome,
       descricao: cc.descricao,
@@ -88,8 +94,10 @@ export default function CentrosCustoPage() {
         prev.map(cc => (cc.id === editing.id ? { ...editing, ...form } : cc))
       );
     } else {
-      const newId = Math.max(0, ...centrosCusto.map(c => c.id)) + 1;
-      setCentrosCusto(prev => [...prev, { id: newId, ...form }]);
+      setCentrosCusto(prev => {
+        const newId = Math.max(0, ...prev.map(c => c.id)) + 1;
+        return [...prev, { id: newId, ...form, empresaId: form.empresaId ?? empresaIdForNew }];
+      });
     }
     setDialogOpen(false);
     setEditing(null);
