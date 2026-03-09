@@ -5,6 +5,7 @@ import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import type { RelatorioMensalPlaneamento, StatusRelatorioPlaneamento } from '@/types';
 import { formatKz } from '@/utils/formatters';
+import { gerarPdfRelatorioMensal } from '@/utils/planeamentoPdf';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,7 +39,9 @@ export default function PlaneamentoRelatoriosPage() {
   const [statusFilter, setStatusFilter] = useState<StatusRelatorioPlaneamento | 'todos'>('todos');
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
-  const canEdit = user?.perfil === 'Admin' || user?.perfil === 'PCA' || user?.perfil === 'Planeamento' || (user?.empresaId != null && user.empresaId === empresaIdForNew);
+  const isGroupLevel = user?.empresaId == null && (user?.perfil === 'Admin' || user?.perfil === 'PCA' || user?.perfil === 'Planeamento');
+  const isDirectorDaEmpresa = user?.perfil === 'Director' && user?.empresaId != null && currentEmpresaId !== 'consolidado' && user.empresaId === currentEmpresaId;
+  const canEdit = isGroupLevel || isDirectorDaEmpresa;
 
   const filtered = relatoriosPlaneamento.filter(r => {
     const matchMes = !mesAnoFilter || r.mesAno === mesAnoFilter;
@@ -132,6 +135,15 @@ export default function PlaneamentoRelatoriosPage() {
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/planeamento/relatorios/${r.id}`)} title="Ver">
                       <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => gerarPdfRelatorioMensal(r, empresaNome(r.empresaId))}
+                      title="Exportar PDF"
+                    >
+                      <FileText className="h-4 w-4" />
                     </Button>
                     {r.status === 'Rascunho' && canEdit && (
                       <>

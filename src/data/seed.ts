@@ -33,6 +33,7 @@ export const USUARIOS_SEED: Usuario[] = [
   { id: 10, nome: "Inês Ferreira", email: "ines@sanep.pt", senha: "pt123", perfil: "Financeiro", cargo: "Gestora Financeira", departamento: "Finanças", avatar: "IF", permissoes: ["FINANCAS_TOTAL", "DASHBOARD_READ"], empresaId: 2 },
   { id: 7, nome: "Pedro Santos", email: "pedro@sanep.ao", senha: "colab123", perfil: "Colaborador", cargo: "Técnico de TI", departamento: "Tecnologia", avatar: "PS", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 7, modulos: ["portal-colaborador", "financas"], empresaId: 1 },
   { id: 8, nome: "Rosa Neto", email: "rosa@sanep.ao", senha: "colab456", perfil: "Colaborador", cargo: "Assistente Administrativa", departamento: "Secretaria Geral", avatar: "RN", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 8, empresaId: 1 },
+  { id: 12, nome: "António Fernandes", email: "antonio@sanep.ao", senha: "dir123", perfil: "Director", cargo: "Director Geral", departamento: "Direcção", avatar: "AF", permissoes: ["PLANEAMENTO_SUBMETER", "DASHBOARD_READ"], colaboradorId: 1, empresaId: 1 },
 ];
 
 export const COLABORADORES_SEED: Colaborador[] = [

@@ -22,7 +22,7 @@ import {
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
-const PERFIS: Perfil[] = ['Admin', 'PCA', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'];
+const PERFIS: Perfil[] = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'];
 
 export const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard e Notificações' },

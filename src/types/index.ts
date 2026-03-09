@@ -1,4 +1,4 @@
-export type Perfil = 'Admin' | 'PCA' | 'Planeamento' | 'RH' | 'Financeiro' | 'Contabilidade' | 'Secretaria' | 'Juridico' | 'Colaborador';
+export type Perfil = 'Admin' | 'PCA' | 'Planeamento' | 'Director' | 'RH' | 'Financeiro' | 'Contabilidade' | 'Secretaria' | 'Juridico' | 'Colaborador';
 
 /** Empresa do Grupo (tenant organizacional). Cada empresa tem dados, utilizadores e acessos segregados. */
 export interface Empresa {

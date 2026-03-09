@@ -83,7 +83,7 @@ export default function Login() {
                   ))}
                 </select>
               </div>
-              <p className="text-[11px] text-muted-foreground">Para Admin, PCA ou técnico de Planeamento use «Grupo»; para outros perfis escolha a empresa.</p>
+              <p className="text-[11px] text-muted-foreground">Para Admin, PCA ou Planeamento use «Grupo»; para Director da empresa ou outros perfis escolha a empresa.</p>
             </div>
 
             <div className="space-y-2">
@@ -128,6 +128,7 @@ export default function Login() {
                 { empresaId: 'grupo' as const, email: 'naym@sanep.ao', senha: '1234', label: 'Admin (Grupo)' },
                 { empresaId: 'grupo' as const, email: 'planeamento@sanep.ao', senha: 'plan123', label: 'Planeamento (Grupo)' },
                 { empresaId: 'grupo' as const, email: 'pca@sanep.ao', senha: 'pca123', label: 'PCA (Grupo)' },
+                { empresaId: 1 as const, email: 'antonio@sanep.ao', senha: 'dir123', label: 'Director (Holding)' },
                 { empresaId: 1 as const, email: 'maria@sanep.ao', senha: 'rh123', label: 'RH (Holding)' },
                 { empresaId: 1 as const, email: 'joao@sanep.ao', senha: 'fin123', label: 'Finanças (Holding)' },
                 { empresaId: 1 as const, email: 'isabel@sanep.ao', senha: 'jur123', label: 'Jurídico (Holding)' },

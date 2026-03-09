@@ -125,18 +125,18 @@ export default function PlaneamentoRelatorioFormPage() {
   const { relatoriosPlaneamento, setRelatoriosPlaneamento, empresas } = useData();
 
   const location = useLocation();
-  const isNew = id === 'novo';
+  const isNew = !id || id === 'novo';
   const editMode = isNew || location.pathname.endsWith('/editar');
   const empresaIdParam = Number(searchParams.get('empresaId')) || empresas.find(e => e.activo)?.id || 1;
   const mesAnoParam = searchParams.get('mesAno') || new Date().toISOString().slice(0, 7);
 
   const existing = id && id !== 'novo' ? relatoriosPlaneamento.find(r => r.id === Number(id)) : null;
-  const [form, setForm] = useState<RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number }) | null>(null);
+  const initialForm: RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number }) | null =
+    existing ? { ...existing } :
+    isNew ? { ...emptyRelatorio(empresaIdParam, mesAnoParam), id: undefined } :
+    null;
 
-  useEffect(() => {
-    if (existing) setForm({ ...existing });
-    else if (isNew) setForm({ ...emptyRelatorio(empresaIdParam, mesAnoParam), id: undefined });
-  }, [id, existing?.id, isNew, empresaIdParam, mesAnoParam]);
+  const [form, setForm] = useState<RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number }) | null>(initialForm);
 
   if (form == null) return <div className="p-6">A carregar...</div>;
 
