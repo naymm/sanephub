@@ -1,4 +1,4 @@
-import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Notificacao, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria } from '@/types';
+import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Notificacao, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento } from '@/types';
 
 /** Holding = principal; demais = unidades de negócio. */
 export const EMPRESAS_SEED: Empresa[] = [
@@ -22,6 +22,7 @@ export const DEPARTAMENTOS_SEED: Departamento[] = [
 ];
 
 export const USUARIOS_SEED: Usuario[] = [
+  { id: 11, nome: "Paulo Oliveira", email: "planeamento@sanep.ao", senha: "plan123", perfil: "Planeamento", cargo: "Técnico de Planeamento", departamento: "Planeamento", avatar: "PO", permissoes: ["PLANEAMENTO_TOTAL", "DASHBOARD_READ"], empresaId: null },
   { id: 1, nome: "Naym Mupoia", email: "naym@sanep.ao", senha: "1234", perfil: "Admin", cargo: "Director de IT", departamento: "Direcção", avatar: "NM", permissoes: ["TODOS_MODULOS", "CRUD_TOTAL"], empresaId: null },
   { id: 2, nome: "Maria Silva", email: "maria@sanep.ao", senha: "rh123", perfil: "RH", cargo: "Gestora de Recursos Humanos", departamento: "Capital Humano", avatar: "MS", permissoes: ["CAPITAL_HUMANO_TOTAL", "DASHBOARD_READ"], empresaId: 1 },
   { id: 3, nome: "João Costa", email: "joao@sanep.ao", senha: "fin123", perfil: "Financeiro", cargo: "Gestor Financeiro", departamento: "Finanças", avatar: "JC", permissoes: ["FINANCAS_TOTAL", "DASHBOARD_READ"], empresaId: 1 },
@@ -205,4 +206,62 @@ export const NOTIFICACOES_SEED: Notificacao[] = [
   { id: "n4", tipo: "sucesso", titulo: "Férias aprovadas", mensagem: "As férias de Maria Silva foram aprovadas (Jul-Ago 2024)", moduloOrigem: "rh", destinatarioPerfil: ["RH", "Admin"], lida: true, createdAt: "2024-06-15T14:00:00", link: "/capital-humano/ferias" },
   { id: "n5", tipo: "info", titulo: "Reunião agendada", mensagem: "Reunião de Direcção Q4 agendada para 15/12", moduloOrigem: "secretaria", destinatarioPerfil: ["Admin", "RH", "Financeiro", "Secretaria", "Juridico"], lida: false, createdAt: "2024-12-01T10:00:00", link: "/secretaria/reunioes" },
   { id: "n6", tipo: "alerta", titulo: "Férias pendentes", mensagem: "2 pedidos de férias aguardam aprovação", moduloOrigem: "rh", destinatarioPerfil: ["RH", "Admin"], lida: false, createdAt: "2024-12-02T08:30:00", link: "/capital-humano/ferias" },
+];
+
+export const RELATORIOS_PLANEAMENTO_SEED: RelatorioMensalPlaneamento[] = [
+  {
+    id: 1,
+    empresaId: 1,
+    mesAno: '2024-11',
+    status: 'Submetido',
+    actividadesComerciais: 'Vendas de equipamento e prestação de serviços de manutenção. Expansão comercial no sul.',
+    principaisConstrangimentos: 'Atrasos na cadeia de aprovisionamento.',
+    estrategiasReceitas: 'Novos contratos de manutenção; parcerias com distribuidores.',
+    estrategiasCustos: 'Negociação com fornecedores; optimização de stocks.',
+    cicloVida: 'Crescimento',
+    necessidadesInvestimento: [
+      { descricao: 'Equipamento informático', quantidade: 5, precoUnitario: 500000, total: 2500000 },
+    ],
+    stockInicial: [
+      { descricao: 'Matéria-prima A', quantidade: 100, precoUnitario: 5000, total: 500000 },
+    ],
+    comprasPeriodo: [
+      { descricao: 'Matéria-prima A', quantidade: 50, precoUnitario: 5200, total: 260000 },
+    ],
+    stockFinal: [
+      { descricao: 'Matéria-prima A', quantidade: 80, precoUnitario: 5100, total: 408000 },
+    ],
+    vendasProdutos: [
+      { descricao: 'Produto X', quantidade: 20, precoUnitario: 150000, total: 3000000 },
+    ],
+    vendasServicos: [
+      { descricao: 'Manutenção', quantidade: 1, precoUnitario: 800000, total: 800000 },
+    ],
+    custoMercadoriasVendidas: [
+      { descricao: 'CMV Produto X', quantidade: 20, precoUnitario: 60000, total: 1200000 },
+    ],
+    fornecimentoServicosExternos: [
+      { descricao: 'Consultoria', quantidade: 1, precoUnitario: 200000, total: 200000 },
+    ],
+    gastosPessoal: [
+      { tipo: 'salarios_base', descricao: 'Salários base', quantidade: 1, precoUnitario: 4500000, total: 4500000 },
+      { tipo: 'subsidios', descricao: 'Subsídios', quantidade: 1, precoUnitario: 350000, total: 350000 },
+      { tipo: 'inss', descricao: 'INSS', quantidade: 1, precoUnitario: 135000, total: 135000 },
+      { tipo: 'irt', descricao: 'IRT', quantidade: 1, precoUnitario: 600000, total: 600000 },
+    ],
+    ebitda: 1715000,
+    margemBruta: 0.553,
+    margemEbitda: 0.452,
+    saldosBancarios: [
+      { banco: 'BFA', numeroConta: '0012345678', saldoActual: 5000000 },
+    ],
+    pendentesPagamento: [
+      { nome: 'TechSupply Lda', valor: 850000 },
+    ],
+    pendentesRecebimento: [
+      { nome: 'Cliente Alpha', valor: 1200000 },
+    ],
+    submetidoEm: '2024-12-01T10:00:00',
+    submetidoPor: 'João Costa',
+  },
 ];

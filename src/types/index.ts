@@ -1,4 +1,4 @@
-export type Perfil = 'Admin' | 'PCA' | 'RH' | 'Financeiro' | 'Contabilidade' | 'Secretaria' | 'Juridico' | 'Colaborador';
+export type Perfil = 'Admin' | 'PCA' | 'Planeamento' | 'RH' | 'Financeiro' | 'Contabilidade' | 'Secretaria' | 'Juridico' | 'Colaborador';
 
 /** Empresa do Grupo (tenant organizacional). Cada empresa tem dados, utilizadores e acessos segregados. */
 export interface Empresa {
@@ -369,4 +369,72 @@ export interface MovimentoTesouraria {
   registadoPor?: string;
   registadoEm: string;
   observacoes?: string;
+}
+
+/** Planeamento Estratégico: linha com descrição, quantidade, preço unitário e total */
+export interface LinhaPlaneamento {
+  descricao: string;
+  quantidade: number;
+  precoUnitario: number;
+  total: number;
+}
+
+/** Gastos com pessoal: tipo e valores */
+export interface GastosPessoalItem extends LinhaPlaneamento {
+  tipo: 'salarios_base' | 'subsidios' | 'inss' | 'irt';
+}
+
+/** Liquidez: saldo bancário */
+export interface SaldoBancario {
+  banco: string;
+  numeroConta: string;
+  saldoActual: number;
+}
+
+/** Liquidez: pendente a pagar ou a receber */
+export interface PendenteValor {
+  nome: string;
+  valor: number;
+}
+
+export type CicloVidaEmpresa = 'Startup' | 'Crescimento' | 'Maturidade' | 'Declínio' | 'Encerramento';
+
+export type StatusRelatorioPlaneamento = 'Rascunho' | 'Submetido' | 'Em análise' | 'Consolidado';
+
+/** Relatório mensal de planeamento estratégico (uma por empresa por mês) */
+export interface RelatorioMensalPlaneamento {
+  id: number;
+  empresaId: number;
+  mesAno: string;
+  status: StatusRelatorioPlaneamento;
+  /** Secção 1: Análise da Empresa e do Negócio */
+  actividadesComerciais: string;
+  principaisConstrangimentos: string;
+  estrategiasReceitas: string;
+  estrategiasCustos: string;
+  cicloVida: CicloVidaEmpresa;
+  /** Secção 2: Necessidades de investimento */
+  necessidadesInvestimento: LinhaPlaneamento[];
+  /** Secção 3: Gestão de stocks */
+  stockInicial: LinhaPlaneamento[];
+  comprasPeriodo: LinhaPlaneamento[];
+  stockFinal: LinhaPlaneamento[];
+  /** Secção 4: Demonstração de resultados */
+  vendasProdutos: LinhaPlaneamento[];
+  vendasServicos: LinhaPlaneamento[];
+  custoMercadoriasVendidas: LinhaPlaneamento[];
+  fornecimentoServicosExternos: LinhaPlaneamento[];
+  gastosPessoal: GastosPessoalItem[];
+  /** Secção 5: Calculados (EBITDA, margens) */
+  ebitda?: number;
+  margemBruta?: number;
+  margemEbitda?: number;
+  /** Secção 6: Liquidez */
+  saldosBancarios: SaldoBancario[];
+  pendentesPagamento: PendenteValor[];
+  pendentesRecebimento: PendenteValor[];
+  submetidoEm?: string;
+  submetidoPor?: string;
+  analisadoPor?: string;
+  analisadoEm?: string;
 }

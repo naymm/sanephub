@@ -23,6 +23,7 @@ const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'capital-humano', label: 'Capital Humano' },
   { id: 'financas', label: 'Finanças' },
   { id: 'contabilidade', label: 'Contabilidade' },
+  { id: 'planeamento', label: 'Planeamento' },
   { id: 'secretaria', label: 'Secretaria Geral' },
   { id: 'juridico', label: 'Jurídico' },
   { id: 'conselho-administracao', label: 'Conselho de Administração' },

@@ -46,6 +46,10 @@ import AssinaturaActosPage from "@/modules/conselho-administracao/AssinaturaActo
 import SaudeFinanceiraPage from "@/modules/conselho-administracao/SaudeFinanceiraPage";
 import ActividadeOrganizacionalPage from "@/modules/conselho-administracao/ActividadeOrganizacionalPage";
 import EmpresasPage from "@/modules/conselho-administracao/EmpresasPage";
+import PlaneamentoRelatoriosPage from "@/modules/planeamento/PlaneamentoRelatoriosPage";
+import PlaneamentoRelatorioFormPage from "@/modules/planeamento/PlaneamentoRelatorioFormPage";
+import PlaneamentoConsolidacaoPage from "@/modules/planeamento/PlaneamentoConsolidacaoPage";
+import PlaneamentoDashboardPage from "@/modules/planeamento/PlaneamentoDashboardPage";
 
 const queryClient = new QueryClient();
 
@@ -74,6 +78,13 @@ const App = () => (
                   <Route path="/conselho-administracao/actividade" element={<ActividadeOrganizacionalPage />} />
                   <Route path="/conselho-administracao/empresas" element={<EmpresasPage />} />
                   <Route path="/conselho-administracao" element={<ConselhoDashboardPage />} />
+                  {/* Planeamento */}
+                  <Route path="/planeamento/relatorios" element={<PlaneamentoRelatoriosPage />} />
+                  <Route path="/planeamento/relatorios/novo" element={<PlaneamentoRelatorioFormPage />} />
+                  <Route path="/planeamento/relatorios/:id/editar" element={<PlaneamentoRelatorioFormPage />} />
+                  <Route path="/planeamento/relatorios/:id" element={<PlaneamentoRelatorioFormPage />} />
+                  <Route path="/planeamento/consolidacao" element={<PlaneamentoConsolidacaoPage />} />
+                  <Route path="/planeamento/dashboard" element={<PlaneamentoDashboardPage />} />
                   {/* Capital Humano */}
                   <Route path="/capital-humano/colaboradores" element={<ColaboradoresPage />} />
                   <Route path="/capital-humano/ferias" element={<FeriasPage />} />

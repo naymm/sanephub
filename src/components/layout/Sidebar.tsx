@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
   Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock, ShieldAlert, FolderArchive,
-  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, MessageCircle, Crown
+  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, MessageCircle, Crown,   Target
 } from 'lucide-react';
 
 interface NavItem {
@@ -70,6 +70,14 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Prazos Legais', path: '/juridico/prazos' },
       { label: 'Riscos Jurídicos', path: '/juridico/riscos' },
       { label: 'Arquivo Documental', path: '/juridico/arquivo' },
+    ]
+  },
+  {
+    label: 'Planeamento', icon: Target, module: 'planeamento',
+    children: [
+      { label: 'Relatórios Mensais', path: '/planeamento/relatorios' },
+      { label: 'Consolidação', path: '/planeamento/consolidacao' },
+      { label: 'Dashboard', path: '/planeamento/dashboard' },
     ]
   },
   {

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useMemo, ReactNode } from 'react';
-import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria } from '@/types';
-import { EMPRESAS_SEED, COLABORADORES_SEED, FERIAS_SEED, FALTAS_SEED, RECIBOS_SEED, DECLARACOES_SEED, REQUISICOES_SEED, CENTROS_CUSTO_SEED, PROJECTOS_SEED, REUNIOES_SEED, ACTAS_SEED, CONTRATOS_SEED, PROCESSOS_SEED, PRAZOS_SEED, CORRESPONDENCIAS_SEED, DOCUMENTOS_OFICIAIS_SEED, RISCOS_SEED, PAGAMENTOS_SEED, PENDENCIAS_SEED, DEPARTAMENTOS_SEED, MOVIMENTOS_TESOURARIA_SEED } from '@/data/seed';
+import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento } from '@/types';
+import { EMPRESAS_SEED, COLABORADORES_SEED, FERIAS_SEED, FALTAS_SEED, RECIBOS_SEED, DECLARACOES_SEED, REQUISICOES_SEED, CENTROS_CUSTO_SEED, PROJECTOS_SEED, REUNIOES_SEED, ACTAS_SEED, CONTRATOS_SEED, PROCESSOS_SEED, PRAZOS_SEED, CORRESPONDENCIAS_SEED, DOCUMENTOS_OFICIAIS_SEED, RISCOS_SEED, PAGAMENTOS_SEED, PENDENCIAS_SEED, DEPARTAMENTOS_SEED, MOVIMENTOS_TESOURARIA_SEED, RELATORIOS_PLANEAMENTO_SEED } from '@/data/seed';
 import { useTenant } from '@/context/TenantContext';
 
 interface DataContextType {
@@ -46,6 +46,8 @@ interface DataContextType {
   setPendencias: React.Dispatch<React.SetStateAction<PendenciaDocumental[]>>;
   movimentosTesouraria: MovimentoTesouraria[];
   setMovimentosTesouraria: React.Dispatch<React.SetStateAction<MovimentoTesouraria[]>>;
+  relatoriosPlaneamento: RelatorioMensalPlaneamento[];
+  setRelatoriosPlaneamento: React.Dispatch<React.SetStateAction<RelatorioMensalPlaneamento[]>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -85,6 +87,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [pagamentos, setPagamentos] = useState<Pagamento[]>(PAGAMENTOS_SEED);
   const [pendencias, setPendencias] = useState<PendenciaDocumental[]>(PENDENCIAS_SEED);
   const [movimentosTesouraria, setMovimentosTesouraria] = useState<MovimentoTesouraria[]>(MOVIMENTOS_TESOURARIA_SEED);
+  const [relatoriosPlaneamento, setRelatoriosPlaneamento] = useState<RelatorioMensalPlaneamento[]>(RELATORIOS_PLANEAMENTO_SEED);
 
   React.useEffect(() => {
     localStorage.setItem(STORAGE_EMPRESAS, JSON.stringify(empresas));
@@ -107,8 +110,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       declaracoes: isConsolidado ? declaracoes : declaracoes.filter(d => colabIds.has(d.colaboradorId)),
       pagamentos: isConsolidado ? pagamentos : pagamentos.filter(p => reqIds.has(p.requisicaoId)),
       movimentosTesouraria: isConsolidado ? movimentosTesouraria : movimentosTesouraria.filter(m => m.empresaId === currentEmpresaId),
+      relatoriosPlaneamento: isConsolidado ? relatoriosPlaneamento : relatoriosPlaneamento.filter(r => r.empresaId === currentEmpresaId),
     };
-  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria]);
+  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, relatoriosPlaneamento]);
 
   return (
     <DataContext.Provider value={{
@@ -143,6 +147,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       pendencias, setPendencias,
       movimentosTesouraria: filtered.movimentosTesouraria,
       setMovimentosTesouraria,
+      relatoriosPlaneamento: filtered.relatoriosPlaneamento,
+      setRelatoriosPlaneamento,
     }}>
       {children}
     </DataContext.Provider>

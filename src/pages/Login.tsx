@@ -77,12 +77,13 @@ export default function Login() {
                   onChange={e => setEmpresaId(e.target.value === 'grupo' ? 'grupo' : Number(e.target.value))}
                   className="flex h-10 w-full rounded-lg border border-border/80 bg-background pl-10 pr-4 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <option value="grupo">Grupo (Admin / PCA)</option>
+                  <option value="grupo">Grupo (Admin / PCA / Planeamento)</option>
                   {empresasAtivas.map(e => (
                     <option key={e.id} value={e.id}>{e.nome}</option>
                   ))}
                 </select>
               </div>
+              <p className="text-[11px] text-muted-foreground">Para Admin, PCA ou técnico de Planeamento use «Grupo»; para outros perfis escolha a empresa.</p>
             </div>
 
             <div className="space-y-2">
@@ -124,7 +125,8 @@ export default function Login() {
             <p className="text-xs text-muted-foreground text-center mb-2">Contas de demonstração</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {[
-                { empresaId: 'grupo' as const, email: 'antonio@sanep.ao', senha: 'admin123', label: 'Admin (Grupo)' },
+                { empresaId: 'grupo' as const, email: 'naym@sanep.ao', senha: '1234', label: 'Admin (Grupo)' },
+                { empresaId: 'grupo' as const, email: 'planeamento@sanep.ao', senha: 'plan123', label: 'Planeamento (Grupo)' },
                 { empresaId: 'grupo' as const, email: 'pca@sanep.ao', senha: 'pca123', label: 'PCA (Grupo)' },
                 { empresaId: 1 as const, email: 'maria@sanep.ao', senha: 'rh123', label: 'RH (Holding)' },
                 { empresaId: 1 as const, email: 'joao@sanep.ao', senha: 'fin123', label: 'Finanças (Holding)' },

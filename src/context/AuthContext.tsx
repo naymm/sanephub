@@ -118,12 +118,13 @@ export function useAuth() {
 }
 
 const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
-  'dashboard': ['Admin', 'PCA', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'],
+  'dashboard': ['Admin', 'PCA', 'Planeamento', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'],
   'capital-humano': ['Admin', 'RH'],
   'financas': ['Admin', 'Financeiro'],
   'contabilidade': ['Admin', 'Contabilidade', 'Financeiro'],
   'secretaria': ['Admin', 'Secretaria'],
   'juridico': ['Admin', 'Juridico'],
+  'planeamento': ['Admin', 'PCA', 'Planeamento'],
   'conselho-administracao': ['Admin', 'PCA'],
   'portal-colaborador': ['Colaborador'],
   'configuracoes': ['Admin'],
