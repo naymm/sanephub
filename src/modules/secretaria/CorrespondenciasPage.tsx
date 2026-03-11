@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { Correspondencia } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -28,7 +29,7 @@ const PRIORIDADE_OPTIONS: Correspondencia['prioridade'][] = ['Normal', 'Urgente'
 const ESTADO_OPTIONS: Correspondencia['estadoResposta'][] = ['Pendente', 'Respondida', 'Não requer', 'Arquivada'];
 
 export default function CorrespondenciasPage() {
-  const { correspondencias, setCorrespondencias } = useData();
+  const { correspondencias, addCorrespondencia, updateCorrespondencia, deleteCorrespondencia } = useData();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<Correspondencia['tipo'] | 'todos'>('todos');
   const [prioridadeFilter, setPrioridadeFilter] = useState<Correspondencia['prioridade'] | 'todos'>('todos');
@@ -90,20 +91,25 @@ export default function CorrespondenciasPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.remetente.trim() || !form.destinatario.trim() || !form.assunto.trim() || !form.data) return;
-    if (editing) {
-      setCorrespondencias(prev => prev.map(c => (c.id === editing.id ? { ...editing, ...form } : c)));
-    } else {
-      const newId = Math.max(0, ...correspondencias.map(c => c.id)) + 1;
-      setCorrespondencias(prev => [...prev, { id: newId, ...form }]);
+    try {
+      if (editing) await updateCorrespondencia(editing.id, form);
+      else await addCorrespondencia(form);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (c: Correspondencia) => {
-    setCorrespondencias(prev => prev.filter(x => x.id !== c.id));
+  const remove = async (c: Correspondencia) => {
+    if (!window.confirm('Remover esta correspondência?')) return;
+    try {
+      await deleteCorrespondencia(c.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

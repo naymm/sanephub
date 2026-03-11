@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, type LoginEmpresaId } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -14,14 +14,18 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { login, isAuthenticated, isAuthReady } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (isAuthReady && isAuthenticated) navigate('/dashboard');
+  }, [isAuthReady, isAuthenticated, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!email || !senha) { setError('Preencha todos os campos.'); return; }
-    const success = login(empresaId, email, senha);
+    const success = await login(empresaId, email, senha);
     if (success) navigate('/dashboard');
     else setError('Credenciais inválidas. Verifique a empresa, email e senha.');
   };
@@ -32,6 +36,14 @@ export default function Login() {
     setSenha(pw);
     setError('');
   };
+
+  if (!isAuthReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm">A carregar...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-background">

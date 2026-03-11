@@ -19,12 +19,19 @@ const PATH_TO_MODULE: Record<string, string> = {
 };
 
 export function Layout() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isAuthReady } = useAuth();
   const { empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const location = useLocation();
   const pathname = location.pathname;
 
+  if (!isAuthReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm">A carregar...</div>
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   const pathPrefix = '/' + pathname.split('/')[1];

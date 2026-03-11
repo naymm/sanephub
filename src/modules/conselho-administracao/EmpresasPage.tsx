@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -32,7 +33,7 @@ const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
 
 export default function EmpresasPage() {
   const { user } = useAuth();
-  const { empresas, setEmpresas, colaboradores, requisicoes } = useData();
+  const { empresas, addEmpresa, updateEmpresa, colaboradores, requisicoes } = useData();
   const { currentEmpresaId, setCurrentEmpresaId, isGroupLevel } = useTenant();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -88,31 +89,24 @@ export default function EmpresasPage() {
     });
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.codigo.trim() || !form.nome.trim()) return;
-    if (editing) {
-      setEmpresas(prev =>
-        prev.map(e => (e.id === editing.id ? { ...e, ...form, id: e.id, nif: form.nif || undefined, morada: form.morada || undefined } : e))
-      );
-    } else {
-      setEmpresas(prev => {
-        const newId = Math.max(0, ...prev.map(e => e.id)) + 1;
-        return [
-          ...prev,
-          {
-            id: newId,
-            codigo: form.codigo.trim(),
-            nome: form.nome.trim(),
-            nif: form.nif?.trim() || undefined,
-            morada: form.morada?.trim() || undefined,
-            activo: form.activo,
-            modulosAtivos: form.modulosAtivos?.length ? form.modulosAtivos : undefined,
-          },
-        ];
-      });
+    const payload = {
+      codigo: form.codigo.trim(),
+      nome: form.nome.trim(),
+      nif: form.nif?.trim() || undefined,
+      morada: form.morada?.trim() || undefined,
+      activo: form.activo,
+      modulosAtivos: form.modulosAtivos?.length ? form.modulosAtivos : undefined,
+    };
+    try {
+      if (editing) await updateEmpresa(editing.id, payload);
+      else await addEmpresa(payload);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
   return (

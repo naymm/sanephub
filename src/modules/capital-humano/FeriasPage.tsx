@@ -36,7 +36,7 @@ const STATUS_OPTIONS: { value: StatusFerias | 'todos'; label: string }[] = [
 
 export default function FeriasPage() {
   const { user } = useAuth();
-  const { ferias, setFerias, colaboradores } = useData();
+  const { ferias, addFerias, updateFerias, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFerias | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -98,41 +98,48 @@ export default function FeriasPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0) return;
-    if (editing) {
-      setFerias(prev => prev.map(f => (f.id === editing.id ? { ...editing, ...form } : f)));
-      toast.success('Pedido de férias actualizado.');
-    } else {
-      const newId = Math.max(0, ...ferias.map(f => f.id)) + 1;
-      setFerias(prev => [...prev, { id: newId, ...form }]);
-      toast.success('Pedido de férias registado.');
+    try {
+      if (editing) await updateFerias(editing.id, form);
+      else await addFerias(form);
+      setDialogOpen(false);
+      setEditing(null);
+      toast.success(editing ? 'Pedido de férias actualizado.' : 'Pedido de férias registado.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const handleApprove = (f: Ferias) => {
-    setFerias(prev => prev.map(x => (x.id === f.id ? { ...x, status: 'Aprovado' as const } : x)));
-    toast.success('Férias aprovadas.');
+  const handleApprove = async (f: Ferias) => {
+    try {
+      await updateFerias(f.id, { status: 'Aprovado' });
+      toast.success('Férias aprovadas.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao aprovar');
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!rejectItem) return;
-    setFerias(prev =>
-      prev.map(x =>
-        x.id === rejectItem.id ? { ...x, status: 'Rejeitado' as const, motivo: motivoRejeicao.trim() || undefined } : x
-      )
-    );
-    setRejectOpen(false);
-    setRejectItem(null);
-    setMotivoRejeicao('');
-    toast.error('Férias rejeitadas.');
+    try {
+      await updateFerias(rejectItem.id, { status: 'Rejeitado', motivo: motivoRejeicao.trim() || undefined });
+      setRejectOpen(false);
+      setRejectItem(null);
+      setMotivoRejeicao('');
+      toast.error('Férias rejeitadas.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao rejeitar');
+    }
   };
 
-  const handleCancel = (f: Ferias) => {
-    setFerias(prev => prev.map(x => (x.id === f.id ? { ...x, status: 'Cancelado' as const } : x)));
-    toast.info('Pedido cancelado.');
+  const handleCancel = async (f: Ferias) => {
+    try {
+      await updateFerias(f.id, { status: 'Cancelado' });
+      toast.info('Pedido cancelado.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao cancelar');
+    }
   };
 
   return (

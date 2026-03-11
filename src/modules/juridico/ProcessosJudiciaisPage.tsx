@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -29,7 +30,7 @@ import { Plus, Pencil, Trash2, Eye, Scale } from 'lucide-react';
 const STATUS_OPCOES: ProcessoJudicial['status'][] = ['Em curso', 'Suspenso', 'Encerrado', 'Ganho', 'Perdido', 'Acordo'];
 
 export default function ProcessosJudiciaisPage() {
-  const { processos, setProcessos, empresas } = useData();
+  const { processos, addProcesso, updateProcesso, deleteProcesso, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -99,10 +100,9 @@ export default function ProcessosJudiciaisPage() {
     setDetailOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.numero?.trim() || !form.tribunal?.trim() || !form.dataEntrada) return;
-    const payload: ProcessoJudicial = {
-      id: editing?.id ?? Math.max(0, ...processos.map(p => p.id)) + 1,
+    const payload: Partial<ProcessoJudicial> = {
       empresaId: form.empresaId,
       numero: form.numero.trim(),
       tribunal: form.tribunal.trim(),
@@ -117,19 +117,24 @@ export default function ProcessosJudiciaisPage() {
       descricao: form.descricao?.trim() ?? '',
       observacoes: form.observacoes,
     };
-    if (editing) {
-      setProcessos(prev => prev.map(p => (p.id === editing.id ? payload : p)));
-    } else {
-      setProcessos(prev => [...prev, payload]);
+    try {
+      if (editing) await updateProcesso(editing.id, payload);
+      else await addProcesso(payload);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (p: ProcessoJudicial) => {
+  const remove = async (p: ProcessoJudicial) => {
     if (!window.confirm(`Remover processo ${p.numero}?`)) return;
-    setProcessos(prev => prev.filter(x => x.id !== p.id));
-    setDetailOpen(false);
+    try {
+      await deleteProcesso(p.id);
+      setDetailOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

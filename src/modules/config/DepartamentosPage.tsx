@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import type { Departamento } from '@/types';
@@ -17,7 +18,7 @@ import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 
 export default function DepartamentosPage() {
   const { user: currentUser } = useAuth();
-  const { departamentos, setDepartamentos } = useData();
+  const { departamentos, addDepartamento, updateDepartamento, deleteDepartamento } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Departamento | null>(null);
@@ -39,23 +40,26 @@ export default function DepartamentosPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.nome.trim()) return;
     const nome = form.nome.trim();
-    if (editing) {
-      setDepartamentos(prev =>
-        prev.map(d => (d.id === editing.id ? { ...editing, nome } : d))
-      );
-    } else {
-      const newId = Math.max(0, ...departamentos.map(d => d.id)) + 1;
-      setDepartamentos(prev => [...prev, { id: newId, nome }]);
+    try {
+      if (editing) await updateDepartamento(editing.id, { nome });
+      else await addDepartamento({ nome });
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (d: Departamento) => {
-    setDepartamentos(prev => prev.filter(x => x.id !== d.id));
+  const remove = async (d: Departamento) => {
+    if (!window.confirm(`Remover departamento "${d.nome}"?`)) return;
+    try {
+      await deleteDepartamento(d.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   if (currentUser?.perfil !== 'Admin') {

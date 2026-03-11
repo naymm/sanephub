@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { PendenciaDocumental, TipoPendencia, PrioridadePendencia } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -29,7 +30,7 @@ const PRIORIDADE_OPTIONS: PrioridadePendencia[] = ['Baixa', 'Média', 'Alta', 'U
 const STATUS_OPTIONS: PendenciaDocumental['status'][] = ['Pendente', 'Em tratamento', 'Regularizado', 'Vencido'];
 
 export default function PendenciasPage() {
-  const { pendencias, setPendencias } = useData();
+  const { pendencias, addPendencia, updatePendencia } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PendenciaDocumental['status'] | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -91,26 +92,24 @@ export default function PendenciasPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.titulo.trim()) return;
-    if (editing) {
-      setPendencias(prev => prev.map(p => (p.id === editing.id ? { ...editing, ...form } : p)));
-    } else {
-      const newId = Math.max(0, ...pendencias.map(x => x.id)) + 1;
-      setPendencias(prev => [...prev, { id: newId, ...form }]);
+    try {
+      if (editing) await updatePendencia(editing.id, form);
+      else await addPendencia(form);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const marcarRegularizado = (p: PendenciaDocumental) => {
-    setPendencias(prev =>
-      prev.map(x =>
-        x.id === p.id
-          ? { ...x, status: 'Regularizado' as const, resolvidoEm: new Date().toISOString().slice(0, 10) }
-          : x
-      )
-    );
+  const marcarRegularizado = async (p: PendenciaDocumental) => {
+    try {
+      await updatePendencia(p.id, { status: 'Regularizado', resolvidoEm: new Date().toISOString().slice(0, 10) });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao actualizar');
+    }
   };
 
   return (

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import type { RescisaoContrato, TipoRescisao } from '@/types';
@@ -27,7 +28,7 @@ import { Plus, FileText } from 'lucide-react';
 const TIPOS_RESCISAO: TipoRescisao[] = ['Resolução', 'Revogação', 'Caducidade'];
 
 export default function RescisoesContratuaisPage() {
-  const { rescissoesContrato, setRescissoesContrato, contratos, empresas } = useData();
+  const { rescissoesContrato, addRescisaoContrato, contratos, empresas } = useData();
   const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<Partial<RescisaoContrato> & { contratoId?: number }>({
@@ -64,11 +65,9 @@ export default function RescisoesContratuaisPage() {
     setForm(f => ({ ...f, contratoId: cid, empresaId: c?.empresaId ?? f.empresaId }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.contratoId || !form.motivoDetalhado?.trim() || !form.dataRescisao || !form.empresaId) return;
-    const contrato = getContrato(form.contratoId);
-    const payload: RescisaoContrato = {
-      id: Math.max(0, ...rescissoesContrato.map(r => r.id)) + 1,
+    const payload: Partial<RescisaoContrato> = {
       contratoId: form.contratoId,
       empresaId: form.empresaId,
       tipo: form.tipo ?? 'Resolução',
@@ -78,8 +77,12 @@ export default function RescisoesContratuaisPage() {
       criadoPor: user?.nome ?? 'Sistema',
       criadoEm: new Date().toISOString(),
     };
-    setRescissoesContrato(prev => [...prev, payload]);
-    setDialogOpen(false);
+    try {
+      await addRescisaoContrato(payload);
+      setDialogOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
+    }
   };
 
   return (

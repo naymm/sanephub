@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -32,7 +33,7 @@ const NIVEL: RiscoJuridico['nivelRisco'][] = ['Baixo', 'Médio', 'Alto', 'Críti
 const STATUS_OPCOES: RiscoJuridico['status'][] = ['Identificado', 'Em monitorização', 'Mitigado', 'Materializado', 'Encerrado'];
 
 export default function RiscosJuridicosPage() {
-  const { riscos, setRiscos, empresas } = useData();
+  const { riscos, addRisco, updateRisco, deleteRisco, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -91,10 +92,9 @@ export default function RiscosJuridicosPage() {
     setDetailOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.codigo?.trim() || !form.titulo?.trim()) return;
-    const payload: RiscoJuridico = {
-      id: editing?.id ?? Math.max(0, ...riscos.map(r => r.id)) + 1,
+    const payload: Partial<RiscoJuridico> = {
       empresaId: form.empresaId,
       codigo: form.codigo.trim(),
       titulo: form.titulo.trim(),
@@ -109,19 +109,24 @@ export default function RiscosJuridicosPage() {
       dataIdentificacao: form.dataIdentificacao,
       observacoes: form.observacoes,
     };
-    if (editing) {
-      setRiscos(prev => prev.map(r => (r.id === editing.id ? payload : r)));
-    } else {
-      setRiscos(prev => [...prev, payload]);
+    try {
+      if (editing) await updateRisco(editing.id, payload);
+      else await addRisco(payload);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (r: RiscoJuridico) => {
+  const remove = async (r: RiscoJuridico) => {
     if (!window.confirm(`Remover risco ${r.codigo}?`)) return;
-    setRiscos(prev => prev.filter(x => x.id !== r.id));
-    setDetailOpen(false);
+    try {
+      await deleteRisco(r.id);
+      setDetailOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

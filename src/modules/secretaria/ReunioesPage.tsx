@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { Reuniao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -40,7 +41,7 @@ const emptyForm: Omit<Reuniao, 'id'> = {
 };
 
 export default function ReunioesPage() {
-  const { reunioes, setReunioes, colaboradores } = useData();
+  const { reunioes, addReuniao, updateReuniao, deleteReuniao, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<Reuniao['tipo'] | 'todos'>('todos');
   const [statusFilter, setStatusFilter] = useState<Reuniao['status'] | 'todos'>('todos');
@@ -97,20 +98,25 @@ export default function ReunioesPage() {
     }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.titulo.trim() || !form.data || !form.local.trim()) return;
-    if (editing) {
-      setReunioes(prev => prev.map(r => (r.id === editing.id ? { ...editing, ...form } : r)));
-    } else {
-      const newId = Math.max(0, ...reunioes.map(r => r.id)) + 1;
-      setReunioes(prev => [...prev, { id: newId, ...form }]);
+    try {
+      if (editing) await updateReuniao(editing.id, form);
+      else await addReuniao(form);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (r: Reuniao) => {
-    setReunioes(prev => prev.filter(x => x.id !== r.id));
+  const remove = async (r: Reuniao) => {
+    if (!window.confirm(`Remover reunião "${r.titulo}"?`)) return;
+    try {
+      await deleteReuniao(r.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

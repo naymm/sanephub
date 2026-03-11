@@ -30,7 +30,7 @@ const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set
 const ANO_ACTUAL = new Date().getFullYear();
 
 export default function RecibosPage() {
-  const { recibos, setRecibos, colaboradores } = useData();
+  const { recibos, addRecibo, updateRecibo, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [mesFilter, setMesFilter] = useState<string>('todos');
   const [anoFilter, setAnoFilter] = useState<string>(String(ANO_ACTUAL));
@@ -101,25 +101,30 @@ export default function RecibosPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.colaboradorId || !form.mesAno || form.vencimentoBase <= 0) return;
     const existente = recibos.find(r => r.colaboradorId === form.colaboradorId && r.mesAno === form.mesAno);
     if (existente) {
       toast.error('Já existe um recibo para este colaborador no mês/ano seleccionado.');
       return;
     }
-    const newId = Math.max(0, ...recibos.map(r => r.id)) + 1;
-    const bruto = form.vencimentoBase + form.subsidioAlimentacao + form.subsidioTransporte + form.outrosSubsidios;
-    const deducoes = form.inss + form.irt + form.outrasDeducoes;
-    const liquido = Math.max(0, bruto - deducoes);
-    setRecibos(prev => [...prev, { id: newId, ...form, liquido }]);
-    setDialogOpen(false);
-    toast.success('Recibo emitido com sucesso.');
+    const liquido = calcLiquido(form);
+    try {
+      await addRecibo({ ...form, liquido });
+      setDialogOpen(false);
+      toast.success('Recibo emitido com sucesso.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao emitir');
+    }
   };
 
-  const marcarPago = (r: ReciboSalario) => {
-    setRecibos(prev => prev.map(x => (x.id === r.id ? { ...x, status: 'Pago' as const } : x)));
-    toast.success('Recibo marcado como pago.');
+  const marcarPago = async (r: ReciboSalario) => {
+    try {
+      await updateRecibo(r.id, { status: 'Pago' });
+      toast.success('Recibo marcado como pago.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao actualizar');
+    }
   };
 
   return (

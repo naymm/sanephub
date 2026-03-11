@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { Acta } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -35,7 +36,7 @@ function nextNumero(actas: Acta[]): string {
 }
 
 export default function ActasPage() {
-  const { actas, setActas, reunioes } = useData();
+  const { actas, addActa, updateActa, deleteActa, reunioes } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<Acta['status'] | 'todos'>('todos');
   const [reuniaoFilter, setReuniaoFilter] = useState<string>('todos');
@@ -92,20 +93,25 @@ export default function ActasPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.reuniaoId || !form.numero.trim() || !form.data || !form.titulo.trim()) return;
-    if (editing) {
-      setActas(prev => prev.map(a => (a.id === editing.id ? { ...editing, ...form } : a)));
-    } else {
-      const newId = Math.max(0, ...actas.map(a => a.id)) + 1;
-      setActas(prev => [...prev, { id: newId, ...form }]);
+    try {
+      if (editing) await updateActa(editing.id, form);
+      else await addActa(form);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (a: Acta) => {
-    setActas(prev => prev.filter(x => x.id !== a.id));
+  const remove = async (a: Acta) => {
+    if (!window.confirm(`Remover acta ${a.numero}?`)) return;
+    try {
+      await deleteActa(a.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

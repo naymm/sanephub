@@ -49,7 +49,7 @@ const PAISES_EMBAIXADA = ['ESPANHA', 'PORTUGAL', 'CHINA', 'EUA', 'BRASIL'];
 
 export default function PortalDeclaracoesPage() {
   const colaboradorId = useColaboradorId();
-  const { declaracoes, setDeclaracoes, colaboradores } = useData();
+  const { declaracoes, addDeclaracao, colaboradores } = useData();
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -111,7 +111,7 @@ export default function PortalDeclaracoesPage() {
     setForm(f => ({ ...f, tipo: v, banco: undefined, paisEmbaixada: undefined }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.colaboradorId || !form.dataPedido) return;
     if (form.tipo === 'Para Banco' && !form.banco) {
       toast.error('Seleccione o banco.');
@@ -121,10 +121,13 @@ export default function PortalDeclaracoesPage() {
       toast.error('Seleccione o país da embaixada.');
       return;
     }
-    const newId = Math.max(0, ...declaracoes.map(d => d.id)) + 1;
-    setDeclaracoes(prev => [...prev, { id: newId, ...form }]);
-    setDialogOpen(false);
-    toast.success('Pedido de declaração registado. Será processado pelos Recursos Humanos.');
+    try {
+      await addDeclaracao(form);
+      setDialogOpen(false);
+      toast.success('Pedido de declaração registado. Será processado pelos Recursos Humanos.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao registar');
+    }
   };
 
   if (colaboradorId == null) {

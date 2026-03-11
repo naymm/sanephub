@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import type { Falta, TipoFalta } from '@/types';
@@ -27,7 +28,7 @@ const TIPO_OPTIONS: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Mé
 
 export default function FaltasPage() {
   const { user } = useAuth();
-  const { faltas, setFaltas, colaboradores } = useData();
+  const { faltas, addFalta, updateFalta, deleteFalta, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoFalta | 'todos'>('todos');
   const [dataInicio, setDataInicio] = useState('');
@@ -79,20 +80,25 @@ export default function FaltasPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.colaboradorId || !form.data) return;
-    if (editing) {
-      setFaltas(prev => prev.map(f => (f.id === editing.id ? { ...editing, ...form } : f)));
-    } else {
-      const newId = Math.max(0, ...faltas.map(f => f.id)) + 1;
-      setFaltas(prev => [...prev, { id: newId, ...form }]);
+    try {
+      if (editing) await updateFalta(editing.id, form);
+      else await addFalta(form);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (f: Falta) => {
-    setFaltas(prev => prev.filter(x => x.id !== f.id));
+  const remove = async (f: Falta) => {
+    if (!window.confirm('Remover este registo de falta?')) return;
+    try {
+      await deleteFalta(f.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

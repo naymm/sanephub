@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { DocumentoOficial } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -35,7 +36,7 @@ function nextNumero(tipo: DocumentoOficial['tipo'], docs: DocumentoOficial[]): s
 }
 
 export default function DocumentosOficiaisPage() {
-  const { documentosOficiais, setDocumentosOficiais } = useData();
+  const { documentosOficiais, addDocumentoOficial, updateDocumentoOficial, deleteDocumentoOficial } = useData();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<DocumentoOficial['tipo'] | 'todos'>('todos');
   const [statusFilter, setStatusFilter] = useState<DocumentoOficial['status'] | 'todos'>('todos');
@@ -92,20 +93,25 @@ export default function DocumentosOficiaisPage() {
     setForm(f => ({ ...f, tipo, numero: nextNumero(tipo, documentosOficiais) }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.numero.trim() || !form.titulo.trim() || !form.data || !form.autor.trim()) return;
-    if (editing) {
-      setDocumentosOficiais(prev => prev.map(d => (d.id === editing.id ? { ...editing, ...form } : d)));
-    } else {
-      const newId = Math.max(0, ...documentosOficiais.map(d => d.id)) + 1;
-      setDocumentosOficiais(prev => [...prev, { id: newId, ...form }]);
+    try {
+      if (editing) await updateDocumentoOficial(editing.id, form);
+      else await addDocumentoOficial(form);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (d: DocumentoOficial) => {
-    setDocumentosOficiais(prev => prev.filter(x => x.id !== d.id));
+  const remove = async (d: DocumentoOficial) => {
+    if (!window.confirm(`Remover documento ${d.numero}?`)) return;
+    try {
+      await deleteDocumentoOficial(d.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

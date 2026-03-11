@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -42,7 +43,7 @@ const TIPOS_CONTRATO = [
 const STATUS_OPCOES: StatusContrato[] = ['Activo', 'A Renovar', 'Em Negociação', 'Suspenso', 'Rescindido', 'Expirado'];
 
 export default function ContratosPage() {
-  const { contratos, setContratos, empresas } = useData();
+  const { contratos, addContrato, updateContrato, deleteContrato, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -131,10 +132,12 @@ export default function ContratosPage() {
     setDetailOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.numero?.trim() || !form.parteB?.trim() || !form.dataInicio || !form.dataFim) return;
-    const payload: Contrato = {
-      id: editing?.id ?? Math.max(0, ...contratos.map(c => c.id)) + 1,
+    const historico = editing
+      ? [...(form.historico ?? []), { data: new Date().toISOString().slice(0, 10), acao: 'Contrato actualizado', utilizador: user?.nome ?? 'Sistema' }]
+      : [{ data: new Date().toISOString().slice(0, 10), acao: 'Contrato criado', utilizador: user?.nome ?? 'Sistema' }];
+    const payload: Partial<Contrato> = {
       empresaId: form.empresaId,
       numero: form.numero.trim(),
       tipo: form.tipo ?? 'Outro',
@@ -151,25 +154,29 @@ export default function ContratosPage() {
       ficheiroPdf: form.ficheiroPdf,
       alertarAntesDias: form.alertarAntesDias,
       status: form.status ?? 'Activo',
-      historico: form.historico ?? [],
+      historico,
     };
-    if (editing) {
-      const novoHistorico = [...(payload.historico ?? [])];
-      novoHistorico.push({ data: new Date().toISOString().slice(0, 10), acao: 'Contrato actualizado', utilizador: user?.nome ?? 'Sistema' });
-      payload.historico = novoHistorico;
-      setContratos(prev => prev.map(c => (c.id === editing.id ? payload : c)));
-    } else {
-      payload.historico = [{ data: new Date().toISOString().slice(0, 10), acao: 'Contrato criado', utilizador: user?.nome ?? 'Sistema' }];
-      setContratos(prev => [...prev, payload]);
+    try {
+      if (editing) {
+        await updateContrato(editing.id, payload);
+      } else {
+        await addContrato(payload);
+      }
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (c: Contrato) => {
+  const remove = async (c: Contrato) => {
     if (!window.confirm(`Remover contrato ${c.numero}?`)) return;
-    setContratos(prev => prev.filter(x => x.id !== c.id));
-    setDetailOpen(false);
+    try {
+      await deleteContrato(c.id);
+      setDetailOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import type { RelatorioMensalPlaneamento, LinhaPlaneamento, GastosPessoalItem, SaldoBancario, PendenteValor, CicloVidaEmpresa } from '@/types';
@@ -122,7 +123,7 @@ export default function PlaneamentoRelatorioFormPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { relatoriosPlaneamento, setRelatoriosPlaneamento, empresas } = useData();
+  const { relatoriosPlaneamento, addRelatorioPlaneamento, updateRelatorioPlaneamento, empresas } = useData();
 
   const location = useLocation();
   const isNew = !id || id === 'novo';
@@ -145,7 +146,7 @@ export default function PlaneamentoRelatorioFormPage() {
   const margemBruta = vendasTotal > 0 ? (vendasTotal - form.custoMercadoriasVendidas.reduce((s, l) => s + l.quantidade * l.precoUnitario, 0)) / vendasTotal : 0;
   const margemEbitda = vendasTotal > 0 ? ebitda / vendasTotal : 0;
 
-  const save = () => {
+  const save = async () => {
     const payload = {
       ...form,
       ebitda,
@@ -153,15 +154,16 @@ export default function PlaneamentoRelatorioFormPage() {
       margemEbitda,
       gastosPessoal: form.gastosPessoal.map(l => ({ ...l, total: l.quantidade * l.precoUnitario })),
     };
-    if (form.id != null) {
-      setRelatoriosPlaneamento(prev => prev.map(r => r.id === form.id ? { ...payload, id: r.id } as RelatorioMensalPlaneamento : r));
-    } else {
-      setRelatoriosPlaneamento(prev => {
-        const newId = Math.max(0, ...prev.map(r => r.id)) + 1;
-        return [...prev, { ...payload, id: newId } as RelatorioMensalPlaneamento];
-      });
+    try {
+      if (form.id != null) {
+        await updateRelatorioPlaneamento(form.id, payload);
+      } else {
+        await addRelatorioPlaneamento(payload);
+      }
+      navigate('/planeamento/relatorios');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    navigate('/planeamento/relatorios');
   };
 
   const empresaNome = empresas.find(e => e.id === form.empresaId)?.nome ?? String(form.empresaId);

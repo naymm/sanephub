@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -31,7 +32,7 @@ const PRIORIDADE_OPCOES: PrazoLegal['prioridade'][] = ['Baixa', 'Média', 'Alta'
 const STATUS_OPCOES: PrazoLegal['status'][] = ['Pendente', 'Em Tratamento', 'Concluído', 'Vencido'];
 
 export default function PrazosPage() {
-  const { prazos, setPrazos, empresas } = useData();
+  const { prazos, addPrazo, updatePrazo, deletePrazo, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -96,10 +97,9 @@ export default function PrazosPage() {
     setDetailOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.titulo?.trim() || !form.dataLimite) return;
-    const payload: PrazoLegal = {
-      id: editing?.id ?? Math.max(0, ...prazos.map(p => p.id)) + 1,
+    const payload: Partial<PrazoLegal> = {
       empresaId: form.empresaId,
       titulo: form.titulo.trim(),
       tipo: form.tipo?.trim() ?? '',
@@ -112,19 +112,24 @@ export default function PrazosPage() {
       vinculoContrato: form.vinculoContrato?.trim() || undefined,
       observacoes: form.observacoes,
     };
-    if (editing) {
-      setPrazos(prev => prev.map(p => (p.id === editing.id ? payload : p)));
-    } else {
-      setPrazos(prev => [...prev, payload]);
+    try {
+      if (editing) await updatePrazo(editing.id, payload);
+      else await addPrazo(payload);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const remove = (p: PrazoLegal) => {
+  const remove = async (p: PrazoLegal) => {
     if (!window.confirm(`Remover prazo "${p.titulo}"?`)) return;
-    setPrazos(prev => prev.filter(x => x.id !== p.id));
-    setDetailOpen(false);
+    try {
+      await deletePrazo(p.id);
+      setDetailOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
   };
 
   return (

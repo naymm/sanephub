@@ -1,8 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { Usuario, Perfil } from '@/types';
 import { USUARIOS_SEED } from '@/data/seed';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import type { Database } from '@/types/supabase';
+
+type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
 const STORAGE_USUARIOS = 'sanep_usuarios';
+
+function profileToUsuario(p: ProfileRow): Usuario {
+  return {
+    id: p.id,
+    nome: p.nome,
+    email: p.email,
+    senha: '',
+    perfil: p.perfil as Perfil,
+    cargo: p.cargo ?? '',
+    departamento: p.departamento ?? '',
+    avatar: p.avatar ?? '?',
+    permissoes: p.permissoes ?? [],
+    modulos: p.modulos ?? undefined,
+    colaboradorId: p.colaborador_id ?? undefined,
+    empresaId: p.empresa_id ?? undefined,
+  };
+}
 
 function loadUsuarios(): Usuario[] {
   try {
@@ -46,9 +67,11 @@ interface AuthContextType {
   usuarios: Usuario[];
   setUsuarios: React.Dispatch<React.SetStateAction<Usuario[]>>;
   /** Login por empresa: seleccionar 'grupo' para Admin/PCA, ou id da empresa para utilizadores dessa empresa. */
-  login: (empresaId: LoginEmpresaId, email: string, senha: string) => boolean;
+  login: (empresaId: LoginEmpresaId, email: string, senha: string) => boolean | Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
+  /** False enquanto Supabase restaura a sessão (evita flash da página de login). */
+  isAuthReady: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,6 +79,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuarios, setUsuarios] = useState<Usuario[]>(loadUsuarios);
   const [user, setUser] = useState<Usuario | null>(() => {
+    if (isSupabaseConfigured()) return null;
     const saved = localStorage.getItem('sanep_user');
     if (saved) {
       try {
@@ -71,41 +95,109 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return null;
   });
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured());
+
+  const fetchProfileAndSetUser = useCallback(async (authUserId: string) => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+    if (!error && data) setUser(profileToUsuario(data as ProfileRow));
+    else setUser(null);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_USUARIOS, JSON.stringify(usuarios));
+    if (!isSupabaseConfigured() || !supabase) {
+      setAuthReady(true);
+      return;
+    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) fetchProfileAndSetUser(session.user.id);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) fetchProfileAndSetUser(session.user.id);
+      else setUser(null);
+    });
+    return () => subscription.unsubscribe();
+  }, [fetchProfileAndSetUser]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      localStorage.setItem(STORAGE_USUARIOS, JSON.stringify(usuarios));
+    }
   }, [usuarios]);
 
   useEffect(() => {
-    if (user) {
+    if (!isSupabaseConfigured() && user) {
       const updated = usuarios.find(u => u.id === user.id);
       const toSave = updated ? { ...updated, ...user } : user;
       localStorage.setItem('sanep_user', JSON.stringify(toSave));
-    } else localStorage.removeItem('sanep_user');
+    } else if (!isSupabaseConfigured()) {
+      localStorage.removeItem('sanep_user');
+    }
   }, [user, usuarios]);
 
   useEffect(() => {
-    if (user) {
+    if (!isSupabaseConfigured() && user) {
       const fromList = usuarios.find(u => u.id === user.id);
       if (fromList) setUser(fromList);
     }
   }, [usuarios]);
 
-  const login = (empresaId: LoginEmpresaId, email: string, senha: string): boolean => {
-    const eid = empresaId === 'grupo' ? 'grupo' : Number(empresaId);
-    const found = usuarios.find(u => {
-      if (u.email !== email || u.senha !== senha) return false;
-      if (eid === 'grupo') return u.empresaId == null;
-      return Number(u.empresaId) === eid;
-    });
-    if (found) { setUser(found); return true; }
-    return false;
-  };
+  const login = useCallback(
+    async (empresaId: LoginEmpresaId, email: string, senha: string): Promise<boolean> => {
+      if (isSupabaseConfigured() && supabase) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+        if (error) return false;
+        const authUserId = data.user?.id;
+        if (!authUserId) return false;
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('auth_user_id', authUserId)
+          .maybeSingle();
+        if (profileError || !profile) {
+          await supabase.auth.signOut();
+          return false;
+        }
+        const eid = empresaId === 'grupo' ? 'grupo' : Number(empresaId);
+        const profileEmpresaId = (profile as ProfileRow).empresa_id ?? null;
+        if (eid === 'grupo' && profileEmpresaId != null) {
+          await supabase.auth.signOut();
+          return false;
+        }
+        if (eid !== 'grupo' && profileEmpresaId !== eid) {
+          await supabase.auth.signOut();
+          return false;
+        }
+        setUser(profileToUsuario(profile as ProfileRow));
+        return true;
+      }
+      const eid = empresaId === 'grupo' ? 'grupo' : Number(empresaId);
+      const found = usuarios.find(u => {
+        if (u.email !== email || u.senha !== senha) return false;
+        if (eid === 'grupo') return u.empresaId == null;
+        return Number(u.empresaId) === eid;
+      });
+      if (found) {
+        setUser(found);
+        return true;
+      }
+      return false;
+    },
+    [usuarios]
+  );
 
-  const logout = () => setUser(null);
+  const logout = useCallback(() => {
+    if (isSupabaseConfigured() && supabase) supabase.auth.signOut();
+    setUser(null);
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, usuarios, setUsuarios, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, usuarios, setUsuarios, login, logout, isAuthenticated: !!user, isAuthReady: authReady }}>
       {children}
     </AuthContext.Provider>
   );

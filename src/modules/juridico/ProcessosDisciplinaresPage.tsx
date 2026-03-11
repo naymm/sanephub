@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -50,7 +51,7 @@ const WIZARD_STEPS = [
 export default function ProcessosDisciplinaresPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { processosDisciplinares, setProcessosDisciplinares, colaboradores, empresas } = useData();
+  const { processosDisciplinares, addProcessoDisciplinar, colaboradores, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
 
@@ -182,18 +183,13 @@ export default function ProcessosDisciplinaresPage() {
     return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`;
   };
 
-  const saveProcesso = () => {
-    // Permite gravar o processo como rascunho, mas exige colaborador e descrição do auto
-    if (!form.colaboradorId || !form.autoOcorrenciaDescricao?.trim()) {
-      return;
-    }
-    const newId = Math.max(0, ...processosDisciplinares.map(p => p.id)) + 1;
+  const saveProcesso = async () => {
+    if (!form.colaboradorId || !form.autoOcorrenciaDescricao?.trim()) return;
     const historico = [
       { data: new Date().toISOString(), passo: 'Processo disciplinar criado', utilizador: user?.nome ?? 'Sistema' },
       ...(form.autoOcorrenciaDescricao ? [{ data: new Date().toISOString(), passo: 'Auto de ocorrência registado', utilizador: user?.nome ?? 'Sistema' }] : []),
     ].slice(0, 2);
-    const payload: ProcessoDisciplinar = {
-      id: newId,
+    const payload: Partial<ProcessoDisciplinar> = {
       empresaId: form.empresaId ?? 1,
       colaboradorId: form.colaboradorId ?? 0,
       numero: form.numero ?? `PD-${new Date().getFullYear()}-0001`,
@@ -228,9 +224,13 @@ export default function ProcessosDisciplinaresPage() {
       encerradoEm: form.encerradoEm,
       historico: historico as { data: string; passo: string; utilizador: string }[],
     };
-    setProcessosDisciplinares(prev => [...prev, payload]);
-    setWizardOpen(false);
-    navigate(`/juridico/processos-disciplinares/${newId}`);
+    try {
+      const row = await addProcessoDisciplinar(payload);
+      setWizardOpen(false);
+      navigate(`/juridico/processos-disciplinares/${row.id}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
+    }
   };
 
   return (

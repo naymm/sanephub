@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import type { Projecto } from '@/types';
@@ -27,7 +28,7 @@ import {
 const STATUS_OPTIONS: Projecto['status'][] = ['Activo', 'Concluído', 'Suspenso', 'Cancelado'];
 
 export default function ProjectosPage() {
-  const { projectos, setProjectos, empresas } = useData();
+  const { projectos, addProjecto, updateProjecto, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -93,18 +94,16 @@ export default function ProjectosPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.codigo.trim() || !form.nome.trim()) return;
-    if (editing) {
-      setProjectos(prev => prev.map(p => (p.id === editing.id ? { ...editing, ...form } : p)));
-    } else {
-      setProjectos(prev => {
-        const newId = Math.max(0, ...prev.map(p => p.id)) + 1;
-        return [...prev, { id: newId, ...form, empresaId: form.empresaId ?? empresaIdForNew }];
-      });
+    try {
+      if (editing) await updateProjecto(editing.id, form);
+      else await addProjecto({ ...form, empresaId: form.empresaId ?? empresaIdForNew });
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
   const percentGasto = (p: Projecto) => (p.orcamentoTotal > 0 ? Math.round((p.gasto / p.orcamentoTotal) * 100) : 0);

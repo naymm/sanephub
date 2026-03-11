@@ -35,7 +35,7 @@ const STATUS_OPTIONS: { value: Ferias['status'] | 'todos'; label: string }[] = [
 
 export default function PortalFeriasPage() {
   const colaboradorId = useColaboradorId();
-  const { ferias, setFerias } = useData();
+  const { ferias, addFerias } = useData();
   const [statusFilter, setStatusFilter] = useState<Ferias['status'] | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -77,12 +77,15 @@ export default function PortalFeriasPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0) return;
-    const newId = Math.max(0, ...ferias.map(f => f.id)) + 1;
-    setFerias(prev => [...prev, { id: newId, ...form }]);
-    setDialogOpen(false);
-    toast.success('Pedido de férias enviado. Aguarde aprovação dos Recursos Humanos.');
+    try {
+      await addFerias(form);
+      setDialogOpen(false);
+      toast.success('Pedido de férias enviado. Aguarde aprovação dos Recursos Humanos.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar');
+    }
   };
 
   if (colaboradorId == null) {

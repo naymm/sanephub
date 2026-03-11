@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import type { CentroCusto } from '@/types';
@@ -25,7 +26,7 @@ import {
 } from '@/components/ui/select';
 
 export default function CentrosCustoPage() {
-  const { centrosCusto, setCentrosCusto, empresas } = useData();
+  const { centrosCusto, addCentroCusto, updateCentroCusto, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -87,20 +88,16 @@ export default function CentrosCustoPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.codigo.trim() || !form.nome.trim()) return;
-    if (editing) {
-      setCentrosCusto(prev =>
-        prev.map(cc => (cc.id === editing.id ? { ...editing, ...form } : cc))
-      );
-    } else {
-      setCentrosCusto(prev => {
-        const newId = Math.max(0, ...prev.map(c => c.id)) + 1;
-        return [...prev, { id: newId, ...form, empresaId: form.empresaId ?? empresaIdForNew }];
-      });
+    try {
+      if (editing) await updateCentroCusto(editing.id, form);
+      else await addCentroCusto({ ...form, empresaId: form.empresaId ?? empresaIdForNew });
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
   const percentUtil = (cc: CentroCusto) =>

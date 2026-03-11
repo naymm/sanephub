@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import type { Colaborador, StatusColaborador, TipoContrato, Genero } from '@/types';
@@ -51,7 +52,7 @@ const emptyForm: Omit<Colaborador, 'id'> = {
 };
 
 export default function ColaboradoresPage() {
-  const { colaboradores, setColaboradores, empresas } = useData();
+  const { colaboradores, addColaborador, updateColaborador, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -114,18 +115,17 @@ export default function ColaboradoresPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.nome.trim() || !form.emailCorporativo.trim()) return;
-    if (editing) {
-      setColaboradores(prev => prev.map(c => (c.id === editing.id ? { ...editing, ...form } : c)));
-    } else {
-      setColaboradores(prev => {
-        const newId = Math.max(0, ...prev.map(c => c.id)) + 1;
-        return [...prev, { id: newId, ...form, empresaId: form.empresaId ?? empresaIdForNew }];
-      });
+    const payload = { ...form, empresaId: form.empresaId ?? empresaIdForNew };
+    try {
+      if (editing) await updateColaborador(editing.id, payload);
+      else await addColaborador(payload);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
   return (

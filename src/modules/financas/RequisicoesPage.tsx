@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -64,7 +65,7 @@ function nextNum(requisicoes: Requisicao[]): string {
 
 export default function RequisicoesPage() {
   const { user } = useAuth();
-  const { requisicoes, setRequisicoes, centrosCusto, empresas } = useData();
+  const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -181,24 +182,21 @@ export default function RequisicoesPage() {
     }));
   };
 
-  const confirmarPago = () => {
+  const confirmarPago = async () => {
     if (!reqParaPago || facturaFinalAnexos.length === 0) return;
-    setRequisicoes(prev =>
-      prev.map(r =>
-        r.id === reqParaPago.id
-          ? {
-              ...r,
-              status: 'Pago' as const,
-              factura: true,
-              facturaFinalAnexos,
-              dataPagamento: new Date().toISOString().slice(0, 10),
-            }
-          : r
-      )
-    );
-    setPagoDialogOpen(false);
-    setReqParaPago(null);
-    setFacturaFinalAnexos([]);
+    try {
+      await updateRequisicao(reqParaPago.id, {
+        status: 'Pago',
+        factura: true,
+        facturaFinalAnexos,
+        dataPagamento: new Date().toISOString().slice(0, 10),
+      });
+      setPagoDialogOpen(false);
+      setReqParaPago(null);
+      setFacturaFinalAnexos([]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao registar pagamento');
+    }
   };
 
   const openView = (r: Requisicao) => {
@@ -206,62 +204,47 @@ export default function RequisicoesPage() {
     setViewOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0) return;
-    if (editing) {
-      setRequisicoes(prev =>
-        prev.map(r => (r.id === editing.id ? { ...editing, ...form } : r))
-      );
-    } else {
-      setRequisicoes(prev => {
-        const newId = Math.max(0, ...prev.map(r => r.id)) + 1;
-        return [
-          ...prev,
-          {
-            id: newId,
-            empresaId: empresaIdForNew,
-            num: nextNum(prev),
-            ...form,
-          } as Requisicao,
-        ];
-      });
+    try {
+      if (editing) {
+        await updateRequisicao(editing.id, form);
+      } else {
+        await addRequisicao({ ...form, empresaId: empresaIdForNew, num: nextNum(requisicoes) });
+      }
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const aprovar = (r: Requisicao) => {
-    setRequisicoes(prev =>
-      prev.map(x =>
-        x.id === r.id
-          ? { ...x, status: 'Aprovado' as const, aprovadoPor: user?.nome }
-          : x
-      )
-    );
+  const aprovar = async (r: Requisicao) => {
+    try {
+      await updateRequisicao(r.id, { status: 'Aprovado', aprovadoPor: user?.nome });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao aprovar');
+    }
   };
 
-  const rejeitar = () => {
+  const rejeitar = async () => {
     if (!rejectReq) return;
-    setRequisicoes(prev =>
-      prev.map(x =>
-        x.id === rejectReq.id
-          ? { ...x, status: 'Rejeitado' as const, motivoRejeicao: motivoRejeicao.trim() || undefined }
-          : x
-      )
-    );
-    setRejectOpen(false);
-    setRejectReq(null);
-    setMotivoRejeicao('');
+    try {
+      await updateRequisicao(rejectReq.id, { status: 'Rejeitado', motivoRejeicao: motivoRejeicao.trim() || undefined });
+      setRejectOpen(false);
+      setRejectReq(null);
+      setMotivoRejeicao('');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao rejeitar');
+    }
   };
 
-  const enviarContabilidade = (r: Requisicao) => {
-    setRequisicoes(prev =>
-      prev.map(x =>
-        x.id === r.id
-          ? { ...x, status: 'Enviado à Contabilidade' as const, enviadoContabilidade: true }
-          : x
-      )
-    );
+  const enviarContabilidade = async (r: Requisicao) => {
+    try {
+      await updateRequisicao(r.id, { status: 'Enviado à Contabilidade', enviadoContabilidade: true });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar');
+    }
   };
 
   const temFacturaFinal = (r: Requisicao) => (r.facturaFinalAnexos?.length ?? 0) >= 1;

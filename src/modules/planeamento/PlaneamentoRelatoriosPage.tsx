@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -52,15 +53,17 @@ export default function PlaneamentoRelatoriosPage() {
   const mesesDisponiveis = Array.from(new Set(relatoriosPlaneamento.map(r => r.mesAno))).sort().reverse();
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
 
-  const submeter = (r: RelatorioMensalPlaneamento) => {
+  const submeter = async (r: RelatorioMensalPlaneamento) => {
     if (r.status !== 'Rascunho') return;
-    setRelatoriosPlaneamento(prev =>
-      prev.map(x =>
-        x.id === r.id
-          ? { ...x, status: 'Submetido' as const, submetidoEm: new Date().toISOString().slice(0, 19).replace('T', ' '), submetidoPor: user?.nome }
-          : x
-      )
-    );
+    try {
+      await updateRelatorioPlaneamento(r.id, {
+        status: 'Submetido',
+        submetidoEm: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        submetidoPor: user?.nome,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao submeter');
+    }
   };
 
   return (

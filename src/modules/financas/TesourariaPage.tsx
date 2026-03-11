@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -61,7 +62,7 @@ function nextReferencia(prev: MovimentoTesouraria[], empresaId: number, tipo: 'e
 
 export default function TesourariaPage() {
   const { user } = useAuth();
-  const { movimentosTesouraria, setMovimentosTesouraria, empresas, centrosCusto, projectos } = useData();
+  const { movimentosTesouraria, addMovimentoTesouraria, updateMovimentoTesouraria, empresas, centrosCusto, projectos } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
 
@@ -130,31 +131,38 @@ export default function TesourariaPage() {
     }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.descricao.trim() || form.valor <= 0) return;
-    if (editing) {
-      setMovimentosTesouraria(prev =>
-        prev.map(m => (m.id === editing.id ? { ...m, ...form, id: m.id, referencia: m.referencia, registadoEm: m.registadoEm } as MovimentoTesouraria : m))
-      );
-    } else {
-      setMovimentosTesouraria(prev => {
-        const newId = Math.max(0, ...prev.map(x => x.id)) + 1;
-        const referencia = nextReferencia(prev, form.empresaId, form.tipo);
+    try {
+      if (editing) {
+        await updateMovimentoTesouraria(editing.id, {
+          tipo: form.tipo,
+          valor: form.valor,
+          data: form.data,
+          metodoPagamento: form.metodoPagamento,
+          descricao: form.descricao,
+          comprovativoAnexos: form.comprovativoAnexos,
+          origem: form.origem,
+          beneficiario: form.beneficiario,
+          categoriaSaida: form.categoriaSaida,
+          centroCustoId: form.centroCustoId,
+          projectoId: form.projectoId,
+        });
+      } else {
+        const referencia = nextReferencia(movimentosTesouraria, form.empresaId, form.tipo);
         const registadoEm = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        return [
-          ...prev,
-          {
-            ...form,
-            id: newId,
-            referencia,
-            registadoPor: user?.nome,
-            registadoEm,
-          } as MovimentoTesouraria,
-        ];
-      });
+        await addMovimentoTesouraria({
+          ...form,
+          referencia,
+          registadoPor: user?.nome,
+          registadoEm,
+        });
+      }
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
   const totalEntradas = filtered.filter(m => m.tipo === 'entrada').reduce((s, m) => s + m.valor, 0);

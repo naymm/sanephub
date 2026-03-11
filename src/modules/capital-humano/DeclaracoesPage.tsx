@@ -32,7 +32,7 @@ const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
 
 export default function DeclaracoesPage() {
   const { user } = useAuth();
-  const { declaracoes, setDeclaracoes, colaboradores } = useData();
+  const { declaracoes, addDeclaracao, updateDeclaracao, deleteDeclaracao, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -102,38 +102,36 @@ export default function DeclaracoesPage() {
     setDialogOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.colaboradorId || !form.dataPedido) return;
-    if (editing) {
-      setDeclaracoes(prev => prev.map(d => (d.id === editing.id ? { ...editing, ...form } : d)));
-    } else {
-      const newId = Math.max(0, ...declaracoes.map(d => d.id)) + 1;
-      setDeclaracoes(prev => [...prev, { id: newId, ...form }]);
+    try {
+      if (editing) await updateDeclaracao(editing.id, form);
+      else await addDeclaracao(form);
+      setDialogOpen(false);
+      setEditing(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
-    setDialogOpen(false);
-    setEditing(null);
   };
 
-  const marcarEmitida = (d: Declaracao) => {
+  const marcarEmitida = async (d: Declaracao) => {
     const dataEmissao = new Date().toISOString().slice(0, 10);
     const emitidoPor = user?.nome;
-    setDeclaracoes(prev =>
-      prev.map(x =>
-        x.id === d.id
-          ? { ...x, status: 'Emitida' as const, dataEmissao, emitidoPor }
-          : x
-      )
-    );
-    const emitida = { ...d, status: 'Emitida' as const, dataEmissao, emitidoPor };
-    handleImprimirPdf(emitida);
+    try {
+      await updateDeclaracao(d.id, { status: 'Emitida', dataEmissao, emitidoPor });
+      const emitida = { ...d, status: 'Emitida' as const, dataEmissao, emitidoPor };
+      handleImprimirPdf(emitida);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao actualizar');
+    }
   };
 
-  const marcarEntregue = (d: Declaracao) => {
-    setDeclaracoes(prev =>
-      prev.map(x =>
-        x.id === d.id ? { ...x, status: 'Entregue' as const, dataEntrega: new Date().toISOString().slice(0, 10) } : x
-      )
-    );
+  const marcarEntregue = async (d: Declaracao) => {
+    try {
+      await updateDeclaracao(d.id, { status: 'Entregue', dataEntrega: new Date().toISOString().slice(0, 10) });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao actualizar');
+    }
   };
 
   return (

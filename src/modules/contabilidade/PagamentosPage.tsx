@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import type { Pagamento, StatusPagamento } from '@/types';
@@ -36,7 +37,7 @@ const STATUS_OPTIONS: { value: StatusPagamento | 'todos'; label: string }[] = [
 
 export default function PagamentosPage() {
   const { user } = useAuth();
-  const { pagamentos, setPagamentos, requisicoes } = useData();
+  const { pagamentos, addPagamento, requisicoes } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusPagamento | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -86,11 +87,14 @@ export default function PagamentosPage() {
     setDialogOpen(true);
   };
 
-  const savePagamento = () => {
+  const savePagamento = async () => {
     if (!form.requisicaoId || !form.beneficiario.trim() || form.valor <= 0) return;
-    const newId = Math.max(0, ...pagamentos.map(p => p.id)) + 1;
-    setPagamentos(prev => [...prev, { id: newId, ...form }]);
-    setDialogOpen(false);
+    try {
+      await addPagamento(form);
+      setDialogOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao registar');
+    }
   };
 
   return (

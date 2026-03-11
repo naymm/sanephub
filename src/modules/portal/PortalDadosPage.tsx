@@ -28,7 +28,7 @@ const emptyContact: EditableContactFields = {
 
 export default function PortalDadosPage() {
   const colaboradorId = useColaboradorId();
-  const { colaboradores, setColaboradores } = useData();
+  const { colaboradores, updateColaborador } = useData();
   const [form, setForm] = useState<EditableContactFields>(emptyContact);
 
   const colaborador = colaboradorId != null
@@ -47,16 +47,14 @@ export default function PortalDadosPage() {
     });
   }, [colaborador]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!colaborador) return;
-    setColaboradores(prev =>
-      prev.map(c =>
-        c.id === colaborador.id
-          ? { ...c, ...form }
-          : c
-      )
-    );
-    toast.success('Dados actualizados com sucesso.');
+    try {
+      await updateColaborador(colaborador.id, form);
+      toast.success('Dados actualizados com sucesso.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
+    }
   };
 
   if (colaboradorId == null) {

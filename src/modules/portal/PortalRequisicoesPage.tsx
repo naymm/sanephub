@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
@@ -47,7 +48,7 @@ function nextNum(requisicoes: Requisicao[]): string {
 export default function PortalRequisicoesPage() {
   const { user } = useAuth();
   const colaboradorId = useColaboradorId();
-  const { requisicoes, setRequisicoes, centrosCusto, departamentos, colaboradores } = useData();
+  const { requisicoes, addRequisicao, centrosCusto, departamentos, colaboradores } = useData();
   const { currentEmpresaId } = useTenant();
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -104,30 +105,32 @@ export default function PortalRequisicoesPage() {
     }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (colaboradorId == null || !form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0 || !form.departamento.trim()) return;
     if (form.proformaAnexos.length === 0) return;
-    const newId = Math.max(0, ...requisicoes.map(r => r.id)) + 1;
-    const nova: Requisicao = {
-      id: newId,
-      num: nextNum(requisicoes),
-      fornecedor: form.fornecedor.trim(),
-      descricao: form.descricao.trim(),
-      valor: form.valor,
-      departamento: form.departamento,
-      centroCusto: form.centroCusto,
-      data: form.data,
-      status: 'Pendente',
-      proforma: true,
-      proformaAnexos: form.proformaAnexos,
-      factura: false,
-      comprovante: false,
-      enviadoContabilidade: false,
-      requisitanteColaboradorId: colaboradorId,
-      empresaId: typeof currentEmpresaId === 'number' ? currentEmpresaId : (colaboradores.find(c => c.id === colaboradorId)?.empresaId ?? 1),
-    };
-    setRequisicoes(prev => [...prev, nova]);
-    setDialogOpen(false);
+    const empresaId = typeof currentEmpresaId === 'number' ? currentEmpresaId : (colaboradores.find(c => c.id === colaboradorId)?.empresaId ?? 1);
+    try {
+      await addRequisicao({
+        num: nextNum(requisicoes),
+        fornecedor: form.fornecedor.trim(),
+        descricao: form.descricao.trim(),
+        valor: form.valor,
+        departamento: form.departamento,
+        centroCusto: form.centroCusto,
+        data: form.data,
+        status: 'Pendente',
+        proforma: true,
+        proformaAnexos: form.proformaAnexos,
+        factura: false,
+        comprovante: false,
+        enviadoContabilidade: false,
+        requisitanteColaboradorId: colaboradorId,
+        empresaId,
+      });
+      setDialogOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao submeter');
+    }
   };
 
   if (colaboradorId == null) {
