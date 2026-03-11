@@ -1,0 +1,8 @@
+# Configuração do projeto Supabase (local e deploy).
+# Ver: https://supabase.com/docs/guides/functions/function-configuration
+
+# A função create-user é chamada pelo frontend com o JWT do utilizador.
+# Com verify_jwt = true, o Kong pode devolver 401 em alguns ambientes locais.
+# Definir false aqui e validar Admin dentro da função.
+[functions.create-user]
+verify_jwt = false

@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import type { Usuario, Perfil } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -49,7 +51,7 @@ function avatarFromNome(nome: string): string {
 type UsuarioFormState = Omit<Usuario, 'id'> & { empresaId?: number | null };
 
 export default function UtilizadoresPage() {
-  const { user: currentUser, usuarios, setUsuarios } = useAuth();
+  const { user: currentUser, usuarios, setUsuarios, createUserInSupabase } = useAuth();
   const { empresas } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -117,7 +119,7 @@ export default function UtilizadoresPage() {
     }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.nome.trim() || !form.email.trim()) return;
     if (!editing && !form.senha.trim()) return;
     const avatar = form.avatar.trim() || avatarFromNome(form.nome);
@@ -128,14 +130,42 @@ export default function UtilizadoresPage() {
         ? [...new Set(['portal-colaborador', ...form.modulos])]
         : form.modulos;
     const payload = { ...form, avatar, senha, modulos };
+
     if (editing) {
       setUsuarios(prev =>
         prev.map(u => (u.id === editing.id ? { ...editing, ...payload } : u))
       );
-    } else {
-      const newId = Math.max(0, ...usuarios.map(u => u.id)) + 1;
-      setUsuarios(prev => [...prev, { id: newId, ...payload }]);
+      setDialogOpen(false);
+      setEditing(null);
+      return;
     }
+
+    if (isSupabaseConfigured() && createUserInSupabase) {
+      try {
+        await createUserInSupabase({
+          email: form.email.trim(),
+          password: senha,
+          nome: form.nome.trim(),
+          perfil: form.perfil,
+          cargo: form.cargo?.trim() ?? '',
+          departamento: form.departamento?.trim() ?? '',
+          avatar,
+          permissoes: form.permissoes ?? [],
+          modulos: modulos ?? null,
+          empresa_id: form.empresaId ?? null,
+          colaborador_id: form.colaboradorId ?? null,
+        });
+        setDialogOpen(false);
+        setEditing(null);
+        toast.success('Utilizador criado. Pode fazer login com o email e a password definidos.');
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Erro ao criar utilizador');
+      }
+      return;
+    }
+
+    const newId = Math.max(0, ...usuarios.map(u => u.id)) + 1;
+    setUsuarios(prev => [...prev, { id: newId, ...payload }]);
     setDialogOpen(false);
     setEditing(null);
   };

@@ -83,6 +83,33 @@ Para poder fazer login com Supabase, crie o primeiro utilizador Admin com o scri
    ADMIN_NOME=Seu Nome
    ```
 
+### Edge Function: criar utilizador (Auth + profiles)
+
+Quando o Admin adiciona um novo utilizador na app (Configuração → Utilizadores), o sistema chama a Edge Function **create-user**, que cria o utilizador no Supabase Auth e insere o perfil em **profiles**.
+
+**Em desenvolvimento local (Supabase no localhost):**
+
+1. **Arranque primeiro o Supabase local** (se ainda não estiver a correr):
+   ```bash
+   supabase start
+   ```
+   Só depois pode servir as Edge Functions.
+
+2. Noutro terminal, execute:
+   ```bash
+   npm run functions:serve
+   ```
+   (ou `supabase functions serve --env-file .env`). O endpoint `http://localhost:54321/functions/v1/create-user` deixa de devolver 404.
+
+3. A função precisa da variável **SUPABASE_SERVICE_ROLE_KEY** no `.env`. O comando `--env-file .env` passa-a às funções.
+
+4. Se obtiver **401 Unauthorized** ao criar utilizador, o Kong está a exigir JWT antes de chegar à função. O projeto tem `supabase/config.toml` com `verify_jwt = false` para `create-user`; a função valida internamente que o caller é Admin. Reinicie o servidor de funções (`npm run functions:serve`) após alterar o config.
+
+**Em produção (Supabase na cloud):**
+
+1. Faça deploy da função: `supabase functions deploy create-user`.
+2. Defina o secret no projeto: Supabase Dashboard → **Edge Functions** → **create-user** → Settings → Secrets, ou via CLI: `supabase secrets set SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key`.
+
 ### Criar outros utilizadores (manual)
 
 1. **Auth → Users → Add user** (ou signup pela aplicação, se implementar registo).

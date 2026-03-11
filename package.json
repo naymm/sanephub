@@ -9,6 +9,7 @@
     "seed": "tsx scripts/seed-db.ts",
     "seed:clear": "tsx scripts/seed-db.ts --clear",
     "create-admin": "tsx scripts/create-admin.ts",
+    "functions:serve": "supabase functions serve --env-file .env",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

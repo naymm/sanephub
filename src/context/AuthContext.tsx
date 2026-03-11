@@ -62,6 +62,21 @@ function loadUsuarios(): Usuario[] {
 
 export type LoginEmpresaId = number | 'grupo';
 
+/** Payload para criar utilizador no Supabase (Auth + profiles) via Edge Function. */
+export interface CreateUserSupabasePayload {
+  email: string;
+  password: string;
+  nome: string;
+  perfil: string;
+  cargo?: string;
+  departamento?: string;
+  avatar?: string;
+  permissoes?: string[];
+  modulos?: string[] | null;
+  empresa_id?: number | null;
+  colaborador_id?: number | null;
+}
+
 interface AuthContextType {
   user: Usuario | null;
   usuarios: Usuario[];
@@ -72,12 +87,18 @@ interface AuthContextType {
   isAuthenticated: boolean;
   /** False enquanto Supabase restaura a sessão (evita flash da página de login). */
   isAuthReady: boolean;
+  /** Cria utilizador no Supabase Auth + profiles (Edge Function). Só disponível com Supabase configurado. */
+  createUserInSupabase: (payload: CreateUserSupabasePayload) => Promise<Usuario>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getInitialUsuarios(): Usuario[] {
+  return isSupabaseConfigured() ? [] : loadUsuarios();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [usuarios, setUsuarios] = useState<Usuario[]>(loadUsuarios);
+  const [usuarios, setUsuarios] = useState<Usuario[]>(getInitialUsuarios);
   const [user, setUser] = useState<Usuario | null>(() => {
     if (isSupabaseConfigured()) return null;
     const saved = localStorage.getItem('sanep_user');
@@ -123,6 +144,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => subscription.unsubscribe();
   }, [fetchProfileAndSetUser]);
+
+  // Com Supabase: carregar lista de utilizadores a partir de profiles (não usar seed/localStorage).
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    supabase
+      .from('profiles')
+      .select('*')
+      .order('id', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data) setUsuarios(data.map((row) => profileToUsuario(row as ProfileRow)));
+      });
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -196,8 +229,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const createUserInSupabase = useCallback(
+    async (payload: CreateUserSupabasePayload): Promise<Usuario> => {
+      if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase não configurado');
+      const { data, error } = await supabase.functions.invoke('create-user', { body: payload });
+      if (error) {
+        // Com respostas non-2xx o cliente devolve data=null; a mensagem vem no body em error.context (Response).
+        let msg = (error as Error).message || 'Erro ao criar utilizador';
+        const ctx = (error as { context?: Response }).context;
+        if (ctx && typeof (ctx as Response).json === 'function') {
+          try {
+            const body = (await (ctx as Response).json()) as { error?: string };
+            if (body?.error && typeof body.error === 'string') msg = body.error;
+          } catch {
+            /* ignorar falha ao fazer parse */
+          }
+        }
+        throw new Error(msg);
+      }
+      const raw = data as unknown;
+      if (raw && typeof raw === 'object' && 'error' in raw && typeof (raw as { error: string }).error === 'string') {
+        throw new Error((raw as { error: string }).error);
+      }
+      const profile = raw as ProfileRow;
+      if (!profile?.id) throw new Error('Resposta inválida da função');
+      const newUsuario = profileToUsuario(profile);
+      setUsuarios(prev => [...prev, newUsuario]);
+      return newUsuario;
+    },
+    []
+  );
+
   return (
-    <AuthContext.Provider value={{ user, usuarios, setUsuarios, login, logout, isAuthenticated: !!user, isAuthReady: authReady }}>
+    <AuthContext.Provider value={{ user, usuarios, setUsuarios, login, logout, isAuthenticated: !!user, isAuthReady: authReady, createUserInSupabase }}>
       {children}
     </AuthContext.Provider>
   );
