@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useMemo, ReactNode } from 'react';
-import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento } from '@/types';
-import { EMPRESAS_SEED, COLABORADORES_SEED, FERIAS_SEED, FALTAS_SEED, RECIBOS_SEED, DECLARACOES_SEED, REQUISICOES_SEED, CENTROS_CUSTO_SEED, PROJECTOS_SEED, REUNIOES_SEED, ACTAS_SEED, CONTRATOS_SEED, PROCESSOS_SEED, PRAZOS_SEED, CORRESPONDENCIAS_SEED, DOCUMENTOS_OFICIAIS_SEED, RISCOS_SEED, PAGAMENTOS_SEED, PENDENCIAS_SEED, DEPARTAMENTOS_SEED, MOVIMENTOS_TESOURARIA_SEED, RELATORIOS_PLANEAMENTO_SEED } from '@/data/seed';
+import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato } from '@/types';
+import { EMPRESAS_SEED, COLABORADORES_SEED, FERIAS_SEED, FALTAS_SEED, RECIBOS_SEED, DECLARACOES_SEED, REQUISICOES_SEED, CENTROS_CUSTO_SEED, PROJECTOS_SEED, REUNIOES_SEED, ACTAS_SEED, CONTRATOS_SEED, PROCESSOS_SEED, PRAZOS_SEED, CORRESPONDENCIAS_SEED, DOCUMENTOS_OFICIAIS_SEED, RISCOS_SEED, PAGAMENTOS_SEED, PENDENCIAS_SEED, DEPARTAMENTOS_SEED, MOVIMENTOS_TESOURARIA_SEED, RELATORIOS_PLANEAMENTO_SEED, PROCESSOS_DISCIPLINARES_SEED, RESCISOES_CONTRATO_SEED } from '@/data/seed';
 import { useTenant } from '@/context/TenantContext';
 
 interface DataContextType {
@@ -48,6 +48,10 @@ interface DataContextType {
   setMovimentosTesouraria: React.Dispatch<React.SetStateAction<MovimentoTesouraria[]>>;
   relatoriosPlaneamento: RelatorioMensalPlaneamento[];
   setRelatoriosPlaneamento: React.Dispatch<React.SetStateAction<RelatorioMensalPlaneamento[]>>;
+  processosDisciplinares: ProcessoDisciplinar[];
+  setProcessosDisciplinares: React.Dispatch<React.SetStateAction<ProcessoDisciplinar[]>>;
+  rescissoesContrato: RescisaoContrato[];
+  setRescissoesContrato: React.Dispatch<React.SetStateAction<RescisaoContrato[]>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -88,6 +92,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [pendencias, setPendencias] = useState<PendenciaDocumental[]>(PENDENCIAS_SEED);
   const [movimentosTesouraria, setMovimentosTesouraria] = useState<MovimentoTesouraria[]>(MOVIMENTOS_TESOURARIA_SEED);
   const [relatoriosPlaneamento, setRelatoriosPlaneamento] = useState<RelatorioMensalPlaneamento[]>(RELATORIOS_PLANEAMENTO_SEED);
+  const [processosDisciplinares, setProcessosDisciplinares] = useState<ProcessoDisciplinar[]>(PROCESSOS_DISCIPLINARES_SEED);
+  const [rescissoesContrato, setRescissoesContrato] = useState<RescisaoContrato[]>(RESCISOES_CONTRATO_SEED);
 
   React.useEffect(() => {
     localStorage.setItem(STORAGE_EMPRESAS, JSON.stringify(empresas));
@@ -111,8 +117,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       pagamentos: isConsolidado ? pagamentos : pagamentos.filter(p => reqIds.has(p.requisicaoId)),
       movimentosTesouraria: isConsolidado ? movimentosTesouraria : movimentosTesouraria.filter(m => m.empresaId === currentEmpresaId),
       relatoriosPlaneamento: isConsolidado ? relatoriosPlaneamento : relatoriosPlaneamento.filter(r => r.empresaId === currentEmpresaId),
+      processosDisciplinares: isConsolidado ? processosDisciplinares : processosDisciplinares.filter(p => p.empresaId === currentEmpresaId),
+      rescissoesContrato: isConsolidado ? rescissoesContrato : rescissoesContrato.filter(r => r.empresaId === currentEmpresaId),
+      contratos: isConsolidado ? contratos : contratos.filter(c => c.empresaId == null || c.empresaId === currentEmpresaId),
+      processos: isConsolidado ? processos : processos.filter(p => p.empresaId == null || p.empresaId === currentEmpresaId),
+      prazos: isConsolidado ? prazos : prazos.filter(pr => pr.empresaId == null || pr.empresaId === currentEmpresaId),
+      riscos: isConsolidado ? riscos : riscos.filter(r => r.empresaId == null || r.empresaId === currentEmpresaId),
     };
-  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, relatoriosPlaneamento]);
+  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, relatoriosPlaneamento, processosDisciplinares, rescissoesContrato, contratos, processos, prazos, riscos]);
 
   return (
     <DataContext.Provider value={{
@@ -136,12 +148,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setProjectos,
       reunioes, setReunioes,
       actas, setActas,
-      contratos, setContratos,
-      processos, setProcessos,
-      prazos, setPrazos,
+      contratos: filtered.contratos,
+      setContratos,
+      processos: filtered.processos,
+      setProcessos,
+      prazos: filtered.prazos,
+      setPrazos,
       correspondencias, setCorrespondencias,
       documentosOficiais, setDocumentosOficiais,
-      riscos, setRiscos,
+      riscos: filtered.riscos,
+      setRiscos,
       pagamentos: filtered.pagamentos,
       setPagamentos,
       pendencias, setPendencias,
@@ -149,6 +165,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setMovimentosTesouraria,
       relatoriosPlaneamento: filtered.relatoriosPlaneamento,
       setRelatoriosPlaneamento,
+      processosDisciplinares: filtered.processosDisciplinares,
+      setProcessosDisciplinares,
+      rescissoesContrato: filtered.rescissoesContrato,
+      setRescissoesContrato,
     }}>
       {children}
     </DataContext.Provider>

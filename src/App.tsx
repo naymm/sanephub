@@ -26,6 +26,11 @@ import PagamentosPage from "@/modules/contabilidade/PagamentosPage";
 import PendenciasPage from "@/modules/contabilidade/PendenciasPage";
 import ContratosPage from "@/modules/juridico/ContratosPage";
 import PrazosPage from "@/modules/juridico/PrazosPage";
+import ProcessosJudiciaisPage from "@/modules/juridico/ProcessosJudiciaisPage";
+import ProcessosDisciplinaresPage from "@/modules/juridico/ProcessosDisciplinaresPage";
+import RescisoesContratuaisPage from "@/modules/juridico/RescisoesContratuaisPage";
+import RiscosJuridicosPage from "@/modules/juridico/RiscosJuridicosPage";
+import ArquivoJuridicoPage from "@/modules/juridico/ArquivoJuridicoPage";
 import ReunioesPage from "@/modules/secretaria/ReunioesPage";
 import ActasPage from "@/modules/secretaria/ActasPage";
 import DocumentosOficiaisPage from "@/modules/secretaria/DocumentosOficiaisPage";
@@ -108,10 +113,13 @@ const App = () => (
                   <Route path="/secretaria/arquivo" element={<ArquivoPage />} />
                   {/* Jurídico */}
                   <Route path="/juridico/contratos" element={<ContratosPage />} />
-                  <Route path="/juridico/processos" element={<GenericModulePage title="Processos Judiciais" module="processos" />} />
+                  <Route path="/juridico/processos" element={<ProcessosJudiciaisPage />} />
+                  <Route path="/juridico/processos-disciplinares" element={<ProcessosDisciplinaresPage />} />
+                  <Route path="/juridico/processos-disciplinares/:id" element={<ProcessosDisciplinaresPage />} />
                   <Route path="/juridico/prazos" element={<PrazosPage />} />
-                  <Route path="/juridico/riscos" element={<GenericModulePage title="Riscos Jurídicos" module="riscos" />} />
-                  <Route path="/juridico/arquivo" element={<GenericModulePage title="Arquivo Documental" module="arquivo-juridico" />} />
+                  <Route path="/juridico/riscos" element={<RiscosJuridicosPage />} />
+                  <Route path="/juridico/rescisoes" element={<RescisoesContratuaisPage />} />
+                  <Route path="/juridico/arquivo" element={<ArquivoJuridicoPage />} />
                   {/* Portal Colaborador */}
                   <Route path="/portal/dados" element={<PortalDadosPage />} />
                   <Route path="/portal/ferias" element={<PortalFeriasPage />} />

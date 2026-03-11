@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
 import type { Usuario, Perfil } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -45,12 +46,15 @@ function avatarFromNome(nome: string): string {
     .toUpperCase();
 }
 
+type UsuarioFormState = Omit<Usuario, 'id'> & { empresaId?: number | null };
+
 export default function UtilizadoresPage() {
   const { user: currentUser, usuarios, setUsuarios } = useAuth();
+  const { empresas } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
-  const [form, setForm] = useState<Omit<Usuario, 'id'>>({
+  const [form, setForm] = useState<UsuarioFormState>({
     nome: '',
     email: '',
     senha: '',
@@ -60,6 +64,7 @@ export default function UtilizadoresPage() {
     avatar: '',
     permissoes: [],
     modulos: [],
+    empresaId: null,
   });
 
   const filtered = usuarios.filter(
@@ -81,6 +86,7 @@ export default function UtilizadoresPage() {
       avatar: '',
       permissoes: [],
       modulos: [],
+      empresaId: null,
     });
     setDialogOpen(true);
   };
@@ -97,6 +103,7 @@ export default function UtilizadoresPage() {
       avatar: u.avatar,
       permissoes: u.permissoes ?? [],
       modulos: u.modulos ?? [],
+      empresaId: u.empresaId ?? null,
     });
     setDialogOpen(true);
   };
@@ -294,6 +301,30 @@ export default function UtilizadoresPage() {
                 <Label>Cargo</Label>
                 <Input value={form.cargo} onChange={e => setForm(f => ({ ...f, cargo: e.target.value }))} placeholder="Cargo" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Empresa</Label>
+              <Select
+                value={form.empresaId != null ? String(form.empresaId) : 'grupo'}
+                onValueChange={v =>
+                  setForm(f => ({
+                    ...f,
+                    empresaId: v === 'grupo' ? null : Number(v),
+                  }))
+                }
+              >
+                <SelectTrigger><SelectValue placeholder="Seleccione a empresa" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="grupo">Grupo (nível Grupo)</SelectItem>
+                  {empresas.map(e => (
+                    <SelectItem key={e.id} value={String(e.id)}>{e.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Para Admin, PCA e Planeamento use normalmente «Grupo». Para utilizadores de empresa (ex.: RH, Finanças, Director),
+                seleccione a empresa onde este colaborador fará parte.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Departamento</Label>

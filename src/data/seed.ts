@@ -1,4 +1,4 @@
-import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Notificacao, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento } from '@/types';
+import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Notificacao, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato } from '@/types';
 
 /** Holding = principal; demais = unidades de negócio. */
 export const EMPRESAS_SEED: Empresa[] = [
@@ -136,30 +136,108 @@ export const ACTAS_SEED: Acta[] = [
 ];
 
 export const CONTRATOS_SEED: Contrato[] = [
-  { id: 1, numero: "CONT-2023-0001", tipo: "Fornecimento", parteA: "Grupo SANEP", parteB: "TechSupply Lda", objecto: "Fornecimento de equipamento informático", valor: 12000000, moeda: "Kz", dataAssinatura: "2023-01-15", dataInicio: "2023-02-01", dataFim: "2026-01-31", advogado: "Isabel Lopes", status: "Activo" },
-  { id: 2, numero: "CONT-2023-0002", tipo: "Prestação de Serviços", parteA: "Grupo SANEP", parteB: "CleanPro Lda", objecto: "Serviços de limpeza das instalações", valor: 2400000, moeda: "Kz", dataAssinatura: "2023-03-01", dataInicio: "2023-04-01", dataFim: "2025-03-31", advogado: "Isabel Lopes", status: "A Renovar" },
-  { id: 3, numero: "CONT-2024-0003", tipo: "Arrendamento", parteA: "Grupo SANEP", parteB: "Imobiliária Luanda SA", objecto: "Arrendamento do escritório central", valor: 36000000, moeda: "Kz", dataAssinatura: "2024-01-01", dataInicio: "2024-01-01", dataFim: "2028-12-31", advogado: "Isabel Lopes", status: "Activo" },
-  { id: 4, numero: "CONT-2024-0004", tipo: "Parceria", parteA: "Grupo SANEP", parteB: "Consultoria RH Plus", objecto: "Programa de formação e desenvolvimento", valor: 5000000, moeda: "Kz", dataAssinatura: "2024-06-01", dataInicio: "2024-07-01", dataFim: "2025-06-30", advogado: "Isabel Lopes", status: "Activo" },
-  { id: 5, numero: "CONT-2022-0005", tipo: "Fornecimento", parteA: "Grupo SANEP", parteB: "SegurNet Lda", objecto: "Segurança informática e antivírus", valor: 3600000, moeda: "Kz", dataAssinatura: "2022-06-01", dataInicio: "2022-07-01", dataFim: "2025-06-30", advogado: "Isabel Lopes", status: "A Renovar" },
-  { id: 6, numero: "CONT-2021-0006", tipo: "Prestação de Serviços", parteA: "Grupo SANEP", parteB: "Advocacia Global", objecto: "Assessoria jurídica externa", valor: 8000000, moeda: "Kz", dataAssinatura: "2021-01-01", dataInicio: "2021-01-01", dataFim: "2024-12-31", advogado: "Isabel Lopes", status: "Expirado" },
+  { id: 1, empresaId: 1, numero: "CONT-2023-0001", tipo: "Fornecimento", parteA: "Grupo SANEP", parteB: "TechSupply Lda", objecto: "Fornecimento de equipamento informático", valor: 12000000, moeda: "Kz", dataAssinatura: "2023-01-15", dataInicio: "2023-02-01", dataFim: "2026-01-31", advogado: "Isabel Lopes", responsavelJuridico: "Isabel Lopes", alertarAntesDias: 90, status: "Activo", historico: [{ data: "2023-01-15", acao: "Contrato assinado", utilizador: "Isabel Lopes" }] },
+  { id: 2, empresaId: 1, numero: "CONT-2023-0002", tipo: "Prestação de Serviços", parteA: "Grupo SANEP", parteB: "CleanPro Lda", objecto: "Serviços de limpeza das instalações", valor: 2400000, moeda: "Kz", dataAssinatura: "2023-03-01", dataInicio: "2023-04-01", dataFim: "2025-03-31", advogado: "Isabel Lopes", responsavelJuridico: "Isabel Lopes", alertarAntesDias: 90, status: "A Renovar" },
+  { id: 3, empresaId: 1, numero: "CONT-2024-0003", tipo: "Arrendamento", parteA: "Grupo SANEP", parteB: "Imobiliária Luanda SA", objecto: "Arrendamento do escritório central", valor: 36000000, moeda: "Kz", dataAssinatura: "2024-01-01", dataInicio: "2024-01-01", dataFim: "2028-12-31", advogado: "Isabel Lopes", responsavelJuridico: "Isabel Lopes", status: "Activo" },
+  { id: 4, empresaId: 1, numero: "CONT-2024-0004", tipo: "Parceria", parteA: "Grupo SANEP", parteB: "Consultoria RH Plus", objecto: "Programa de formação e desenvolvimento", valor: 5000000, moeda: "Kz", dataAssinatura: "2024-06-01", dataInicio: "2024-07-01", dataFim: "2025-06-30", advogado: "Isabel Lopes", status: "Activo" },
+  { id: 5, empresaId: 1, numero: "CONT-2022-0005", tipo: "Fornecimento", parteA: "Grupo SANEP", parteB: "SegurNet Lda", objecto: "Segurança informática e antivírus", valor: 3600000, moeda: "Kz", dataAssinatura: "2022-06-01", dataInicio: "2022-07-01", dataFim: "2025-06-30", advogado: "Isabel Lopes", status: "A Renovar" },
+  { id: 6, empresaId: 1, numero: "CONT-2021-0006", tipo: "Prestação de Serviços", parteA: "Grupo SANEP", parteB: "Advocacia Global", objecto: "Assessoria jurídica externa", valor: 8000000, moeda: "Kz", dataAssinatura: "2021-01-01", dataInicio: "2021-01-01", dataFim: "2024-12-31", advogado: "Isabel Lopes", status: "Expirado" },
 ];
 
 export const PROCESSOS_SEED: ProcessoJudicial[] = [
-  { id: 1, numero: "PROC-2023-0456", tribunal: "Tribunal Provincial de Luanda", tipoAccao: "Laboral", autor: "Ex-Colaborador Silva", reu: "Grupo SANEP", valorEmCausa: 5000000, dataEntrada: "2023-06-15", proximaAudiencia: "2025-02-20", status: "Em curso", advogado: "Isabel Lopes", descricao: "Reclamação de indemnização por despedimento" },
-  { id: 2, numero: "PROC-2024-0123", tribunal: "Tribunal Comercial de Luanda", tipoAccao: "Comercial", autor: "Grupo SANEP", reu: "Fornecedor XYZ", valorEmCausa: 8500000, dataEntrada: "2024-02-10", proximaAudiencia: "2025-03-15", status: "Em curso", advogado: "Isabel Lopes", descricao: "Incumprimento contratual de fornecimento" },
-  { id: 3, numero: "PROC-2024-0789", tribunal: "Tribunal Fiscal", tipoAccao: "Fiscal", autor: "AGT", reu: "Grupo SANEP", valorEmCausa: 15000000, dataEntrada: "2024-08-01", status: "Suspenso", advogado: "Isabel Lopes", descricao: "Contestação de liquidação adicional de IRT" },
-  { id: 4, numero: "PROC-2022-0234", tribunal: "Tribunal Provincial de Luanda", tipoAccao: "Cível", autor: "Grupo SANEP", reu: "Construtora ABC", valorEmCausa: 25000000, dataEntrada: "2022-11-05", status: "Acordo", advogado: "Isabel Lopes", descricao: "Danos em obras de construção do armazém" },
+  { id: 1, empresaId: 1, numero: "PROC-2023-0456", tribunal: "Tribunal Provincial de Luanda", tipoAccao: "Laboral", autor: "Ex-Colaborador Silva", reu: "Grupo SANEP", valorEmCausa: 5000000, dataEntrada: "2023-06-15", proximaAudiencia: "2025-02-20", status: "Em curso", advogado: "Isabel Lopes", descricao: "Reclamação de indemnização por despedimento" },
+  { id: 2, empresaId: 1, numero: "PROC-2024-0123", tribunal: "Tribunal Comercial de Luanda", tipoAccao: "Comercial", autor: "Grupo SANEP", reu: "Fornecedor XYZ", valorEmCausa: 8500000, dataEntrada: "2024-02-10", proximaAudiencia: "2025-03-15", status: "Em curso", advogado: "Isabel Lopes", descricao: "Incumprimento contratual de fornecimento" },
+  { id: 3, empresaId: 1, numero: "PROC-2024-0789", tribunal: "Tribunal Fiscal", tipoAccao: "Fiscal", autor: "AGT", reu: "Grupo SANEP", valorEmCausa: 15000000, dataEntrada: "2024-08-01", status: "Suspenso", advogado: "Isabel Lopes", descricao: "Contestação de liquidação adicional de IRT" },
+  { id: 4, empresaId: 1, numero: "PROC-2022-0234", tribunal: "Tribunal Provincial de Luanda", tipoAccao: "Cível", autor: "Grupo SANEP", reu: "Construtora ABC", valorEmCausa: 25000000, dataEntrada: "2022-11-05", status: "Acordo", advogado: "Isabel Lopes", descricao: "Danos em obras de construção do armazém" },
+];
+
+/** Processos disciplinares internos — exemplo de pipeline jurídico interno */
+export const PROCESSOS_DISCIPLINARES_SEED: ProcessoDisciplinar[] = [
+  {
+    id: 1,
+    empresaId: 1,
+    colaboradorId: 7,
+    numero: "PD-2024-0001",
+    criadoEm: "2024-11-10T09:00:00",
+    criadoPor: "Maria Silva",
+    autoOcorrenciaPdf: "auto_ocorrencia_PD-2024-0001.pdf",
+    autoOcorrenciaDescricao: "Ausência injustificada repetida e utilização indevida de recursos informáticos.",
+    despachoDelegacaoPdf: "despacho_delegacao_PD-2024-0001.pdf",
+    despachoDelegacaoData: "2024-11-11",
+    avaliacaoGravidade: "Grave",
+    parecerJuridico: "Recomenda-se instauração de processo disciplinar com possibilidade de suspensão.",
+    suspensaoPreventivaPdf: "suspensao_preventiva_PD-2024-0001.pdf",
+    suspensaoInicio: "2024-11-15",
+    suspensaoFim: "2024-11-30",
+    convocatoriaPdf: "convocatoria_audiencia_PD-2024-0001.pdf",
+    convocatoriaData: "2024-11-20",
+    convocatoriaLocal: "Sala de Reuniões B",
+    convocatoriaMotivo: "Audiência disciplinar para apresentação de defesa.",
+    audienciaData: "2024-11-20",
+    audienciaActaPdf: "acta_audiencia_PD-2024-0001.pdf",
+    relatorioFinalPdf: "relatorio_final_PD-2024-0001.pdf",
+    relatorioDescricao: "Análise detalhada da conduta do colaborador e antecedentes disciplinares.",
+    relatorioConclusao: "Confirma-se infração disciplinar grave, recomendando suspensão de 10 dias sem vencimento.",
+    medidasPropostas: [
+      { tipo: "Suspensão", descricao: "Suspensão de 10 dias sem vencimento." },
+    ],
+    decisaoPca: "Aprova medida",
+    decisaoDescricao: "Acompanha parecer jurídico e mantém suspensão proposta.",
+    decisaoPdf: "decisao_pca_PD-2024-0001.pdf",
+    decisaoData: "2024-11-25",
+    comunicadoPdf: "comunicado_colaborador_PD-2024-0001.pdf",
+    comunicadoData: "2024-11-26",
+    status: "Concluído",
+    encerradoEm: "2024-11-30",
+    historico: [
+      { data: "2024-11-10T09:00:00", passo: "Auto de ocorrência submetido", utilizador: "Maria Silva" },
+      { data: "2024-11-11T10:30:00", passo: "Despacho de delegação de poder emitido", utilizador: "Carlos Mendes" },
+      { data: "2024-11-13T15:00:00", passo: "Parecer jurídico emitido", utilizador: "Isabel Lopes" },
+      { data: "2024-11-15T08:30:00", passo: "Suspensão preventiva aplicada", utilizador: "Isabel Lopes" },
+      { data: "2024-11-20T09:00:00", passo: "Audiência disciplinar realizada", utilizador: "Isabel Lopes" },
+      { data: "2024-11-23T16:00:00", passo: "Relatório final elaborado", utilizador: "Isabel Lopes" },
+      { data: "2024-11-25T11:00:00", passo: "Decisão do PCA registada", utilizador: "Luís Troso" },
+      { data: "2024-11-26T10:00:00", passo: "Comunicado ao colaborador emitido", utilizador: "Isabel Lopes" },
+      { data: "2024-11-30T18:00:00", passo: "Processo disciplinar encerrado", utilizador: "Isabel Lopes" },
+    ],
+  },
+];
+
+/** Rescisões contratuais — ligadas a contratos existentes */
+export const RESCISOES_CONTRATO_SEED: RescisaoContrato[] = [
+  {
+    id: 1,
+    contratoId: 6,
+    empresaId: 1,
+    tipo: "Caducidade",
+    motivoDetalhado: "Contrato de prestação de serviços de assessoria jurídica com prazo certo, não renovado após termo final.",
+    dataRescisao: "2024-12-31",
+    documentoPdf: "rescisao_CONT-2021-0006.pdf",
+    criadoPor: "Isabel Lopes",
+    criadoEm: "2024-12-20T10:00:00",
+  },
+  {
+    id: 2,
+    contratoId: 2,
+    empresaId: 1,
+    tipo: "Revogação",
+    motivoDetalhado: "Acordo entre as partes para terminar o contrato de prestação de serviços de limpeza, com substituição por novo fornecedor.",
+    dataRescisao: "2025-03-31",
+    documentoPdf: "revogacao_CONT-2023-0002.pdf",
+    criadoPor: "Isabel Lopes",
+    criadoEm: "2025-02-15T15:30:00",
+  },
 ];
 
 export const PRAZOS_SEED: PrazoLegal[] = [
-  { id: 1, titulo: "Resposta à contestação — Proc. Laboral", tipo: "Judicial", descricao: "Apresentar tréplica ao tribunal", dataLimite: "2025-01-15", prioridade: "Crítica", responsavel: "Isabel Lopes", status: "Vencido", vinculoProcesso: "PROC-2023-0456" },
-  { id: 2, titulo: "Recurso — Proc. Fiscal AGT", tipo: "Fiscal", descricao: "Interpor recurso da decisão de liquidação", dataLimite: "2025-03-01", prioridade: "Alta", responsavel: "Isabel Lopes", status: "Pendente", vinculoProcesso: "PROC-2024-0789" },
-  { id: 3, titulo: "Renovação contrato CleanPro", tipo: "Contratual", descricao: "Negociar e assinar renovação", dataLimite: "2025-03-15", prioridade: "Média", responsavel: "Isabel Lopes", status: "Em Tratamento", vinculoContrato: "CONT-2023-0002" },
-  { id: 4, titulo: "Entrega de relatório anual AGT", tipo: "Fiscal", descricao: "Entrega da declaração anual de rendimentos", dataLimite: "2025-03-31", prioridade: "Alta", responsavel: "Ana Rodrigues", status: "Pendente" },
-  { id: 5, titulo: "Audiência — Proc. Comercial", tipo: "Judicial", descricao: "Preparar alegações para audiência", dataLimite: "2025-03-15", prioridade: "Crítica", responsavel: "Isabel Lopes", status: "Em Tratamento", vinculoProcesso: "PROC-2024-0123" },
-  { id: 6, titulo: "Renovação licenças software", tipo: "Contratual", descricao: "Renovar contratos de licenciamento", dataLimite: "2025-06-30", prioridade: "Média", responsavel: "Pedro Santos", status: "Pendente", vinculoContrato: "CONT-2022-0005" },
-  { id: 7, titulo: "Vencimento prazo — recurso laboral", tipo: "Judicial", descricao: "Prazo para resposta ao recurso", dataLimite: "2025-02-10", prioridade: "Crítica", responsavel: "Isabel Lopes", status: "Vencido", vinculoProcesso: "PROC-2023-0456" },
-  { id: 8, titulo: "Registo de marca comercial", tipo: "Administrativo", descricao: "Conclusão do processo de registo", dataLimite: "2025-05-01", prioridade: "Baixa", responsavel: "Isabel Lopes", status: "Pendente" },
+  { id: 1, empresaId: 1, titulo: "Resposta à contestação — Proc. Laboral", tipo: "Judicial", descricao: "Apresentar tréplica ao tribunal", dataLimite: "2025-01-15", prioridade: "Crítica", responsavel: "Isabel Lopes", status: "Vencido", vinculoProcesso: "PROC-2023-0456" },
+  { id: 2, empresaId: 1, titulo: "Recurso — Proc. Fiscal AGT", tipo: "Fiscal", descricao: "Interpor recurso da decisão de liquidação", dataLimite: "2025-03-01", prioridade: "Alta", responsavel: "Isabel Lopes", status: "Pendente", vinculoProcesso: "PROC-2024-0789" },
+  { id: 3, empresaId: 1, titulo: "Renovação contrato CleanPro", tipo: "Contratual", descricao: "Negociar e assinar renovação", dataLimite: "2025-03-15", prioridade: "Média", responsavel: "Isabel Lopes", status: "Em Tratamento", vinculoContrato: "CONT-2023-0002" },
+  { id: 4, empresaId: 1, titulo: "Entrega de relatório anual AGT", tipo: "Fiscal", descricao: "Entrega da declaração anual de rendimentos", dataLimite: "2025-03-31", prioridade: "Alta", responsavel: "Ana Rodrigues", status: "Pendente" },
+  { id: 5, empresaId: 1, titulo: "Audiência — Proc. Comercial", tipo: "Judicial", descricao: "Preparar alegações para audiência", dataLimite: "2025-03-15", prioridade: "Crítica", responsavel: "Isabel Lopes", status: "Em Tratamento", vinculoProcesso: "PROC-2024-0123" },
+  { id: 6, empresaId: 1, titulo: "Renovação licenças software", tipo: "Contratual", descricao: "Renovar contratos de licenciamento", dataLimite: "2025-06-30", prioridade: "Média", responsavel: "Pedro Santos", status: "Pendente", vinculoContrato: "CONT-2022-0005" },
+  { id: 7, empresaId: 1, titulo: "Vencimento prazo — recurso laboral", tipo: "Judicial", descricao: "Prazo para resposta ao recurso", dataLimite: "2025-02-10", prioridade: "Crítica", responsavel: "Isabel Lopes", status: "Vencido", vinculoProcesso: "PROC-2023-0456" },
+  { id: 8, empresaId: 1, titulo: "Registo de marca comercial", tipo: "Administrativo", descricao: "Conclusão do processo de registo", dataLimite: "2025-05-01", prioridade: "Baixa", responsavel: "Isabel Lopes", status: "Pendente" },
 ];
 
 export const CORRESPONDENCIAS_SEED: Correspondencia[] = [
@@ -179,11 +257,11 @@ export const DOCUMENTOS_OFICIAIS_SEED: DocumentoOficial[] = [
 ];
 
 export const RISCOS_SEED: RiscoJuridico[] = [
-  { id: 1, codigo: "RISC-2024-0001", titulo: "Processo laboral — risco de condenação", descricao: "Possibilidade de condenação no processo laboral por despedimento ilícito", categoria: "Laboral", probabilidade: "Média", impacto: "Alto", nivelRisco: "Alto", planoAccao: "Reforçar defesa jurídica; considerar acordo extrajudicial", responsavel: "Isabel Lopes", status: "Em monitorização" },
-  { id: 2, codigo: "RISC-2024-0002", titulo: "Liquidação fiscal adicional", descricao: "AGT poderá impor liquidação adicional sobre exercícios anteriores", categoria: "Fiscal", probabilidade: "Alta", impacto: "Alto", nivelRisco: "Crítico", planoAccao: "Preparar recurso; reunir documentação comprovativa", responsavel: "Isabel Lopes", status: "Em monitorização" },
-  { id: 3, codigo: "RISC-2024-0003", titulo: "Incumprimento contratual — fornecedor TI", descricao: "Fornecedor pode não cumprir prazos de entrega", categoria: "Contratual", probabilidade: "Baixa", impacto: "Médio", nivelRisco: "Baixo", planoAccao: "Monitorizar prazos; identificar fornecedor alternativo", responsavel: "Isabel Lopes", status: "Identificado" },
-  { id: 4, codigo: "RISC-2024-0004", titulo: "Alteração regulamentar laboral", descricao: "Nova legislação pode alterar custos com pessoal", categoria: "Regulatório", probabilidade: "Média", impacto: "Médio", nivelRisco: "Médio", planoAccao: "Acompanhar desenvolvimentos legislativos", responsavel: "Isabel Lopes", status: "Identificado" },
-  { id: 5, codigo: "RISC-2024-0005", titulo: "Exposição reputacional — processo comercial", descricao: "Publicidade negativa relacionada com litígio comercial", categoria: "Reputacional", probabilidade: "Baixa", impacto: "Alto", nivelRisco: "Médio", planoAccao: "Preparar comunicação de crise; manter confidencialidade", responsavel: "Isabel Lopes", status: "Identificado" },
+  { id: 1, empresaId: 1, codigo: "RISC-2024-0001", titulo: "Processo laboral — risco de condenação", descricao: "Possibilidade de condenação no processo laboral por despedimento ilícito", categoria: "Laboral", probabilidade: "Média", impacto: "Alto", nivelRisco: "Alto", planoAccao: "Reforçar defesa jurídica; considerar acordo extrajudicial", responsavel: "Isabel Lopes", status: "Em monitorização", dataIdentificacao: "2024-06-01" },
+  { id: 2, empresaId: 1, codigo: "RISC-2024-0002", titulo: "Liquidação fiscal adicional", descricao: "AGT poderá impor liquidação adicional sobre exercícios anteriores", categoria: "Fiscal", probabilidade: "Alta", impacto: "Alto", nivelRisco: "Crítico", planoAccao: "Preparar recurso; reunir documentação comprovativa", responsavel: "Isabel Lopes", status: "Em monitorização", dataIdentificacao: "2024-08-01" },
+  { id: 3, empresaId: 1, codigo: "RISC-2024-0003", titulo: "Incumprimento contratual — fornecedor TI", descricao: "Fornecedor pode não cumprir prazos de entrega", categoria: "Contratual", probabilidade: "Baixa", impacto: "Médio", nivelRisco: "Baixo", planoAccao: "Monitorizar prazos; identificar fornecedor alternativo", responsavel: "Isabel Lopes", status: "Identificado" },
+  { id: 4, empresaId: 1, codigo: "RISC-2024-0004", titulo: "Alteração regulamentar laboral", descricao: "Nova legislação pode alterar custos com pessoal", categoria: "Regulatório", probabilidade: "Média", impacto: "Médio", nivelRisco: "Médio", planoAccao: "Acompanhar desenvolvimentos legislativos", responsavel: "Isabel Lopes", status: "Identificado" },
+  { id: 5, empresaId: 1, codigo: "RISC-2024-0005", titulo: "Exposição reputacional — processo comercial", descricao: "Publicidade negativa relacionada com litígio comercial", categoria: "Reputacional", probabilidade: "Baixa", impacto: "Alto", nivelRisco: "Médio", planoAccao: "Preparar comunicação de crise; manter confidencialidade", responsavel: "Isabel Lopes", status: "Identificado" },
 ];
 
 export const PAGAMENTOS_SEED: Pagamento[] = [

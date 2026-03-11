@@ -67,8 +67,10 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Contratos', path: '/juridico/contratos' },
       { label: 'Processos Judiciais', path: '/juridico/processos' },
+      { label: 'Processos Disciplinares', path: '/juridico/processos-disciplinares' },
       { label: 'Prazos Legais', path: '/juridico/prazos' },
       { label: 'Riscos Jurídicos', path: '/juridico/riscos' },
+      { label: 'Rescisões Contratuais', path: '/juridico/rescisoes' },
       { label: 'Arquivo Documental', path: '/juridico/arquivo' },
     ]
   },

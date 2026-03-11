@@ -123,7 +123,7 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
   'financas': ['Admin', 'Financeiro'],
   'contabilidade': ['Admin', 'Contabilidade', 'Financeiro'],
   'secretaria': ['Admin', 'Secretaria'],
-  'juridico': ['Admin', 'Juridico'],
+  'juridico': ['Admin', 'Juridico', 'Director', 'PCA'],
   'planeamento': ['Admin', 'PCA', 'Planeamento', 'Director'],
   'conselho-administracao': ['Admin', 'PCA'],
   'portal-colaborador': ['Colaborador'],

@@ -197,8 +197,102 @@ export interface Reuniao {
   status: 'Agendada' | 'Realizada' | 'Cancelada' | 'Adiada';
 }
 
+/** Jurídico: processo disciplinar interno */
+export type StatusProcessoDisciplinar =
+  | 'Em análise jurídica'
+  | 'Suspensão preventiva'
+  | 'Em audiência'
+  | 'Relatório elaborado'
+  | 'Em decisão PCA'
+  | 'Comunicado emitido'
+  | 'Concluído';
+
+export interface MedidaDisciplinarProposta {
+  tipo: 'Advertência' | 'Suspensão' | 'Demissão' | 'Outra';
+  descricao?: string;
+}
+
+export interface ProcessoDisciplinar {
+  id: number;
+  empresaId: number;
+  colaboradorId: number;
+  numero: string;
+  criadoEm: string;
+  criadoPor: string;
+  /** 2.1 Auto de ocorrência */
+  autoOcorrenciaPdf?: string;
+  autoOcorrenciaDescricao: string;
+  /** 2.2 Despacho de delegação de poder */
+  despachoDelegacaoPdf?: string;
+  despachoDelegacaoData?: string;
+  /** 2.3 Avaliação jurídica */
+  avaliacaoGravidade?: 'Leve' | 'Média' | 'Grave' | 'Muito Grave';
+  parecerJuridico?: string;
+  /** 2.4 Suspensão preventiva */
+  suspensaoPreventivaPdf?: string;
+  suspensaoInicio?: string;
+  suspensaoFim?: string;
+  /** 2.5 Convocatória para audiência disciplinar */
+  convocatoriaPdf?: string;
+  convocatoriaData?: string;
+  convocatoriaLocal?: string;
+  convocatoriaMotivo?: string;
+  /** 2.6 Audiência disciplinar */
+  audienciaData?: string;
+  audienciaActaPdf?: string;
+  /** 2.7 Relatório final */
+  relatorioFinalPdf?: string;
+  relatorioDescricao?: string;
+  relatorioConclusao?: string;
+  /** 2.8 Medidas disciplinares propostas */
+  medidasPropostas: MedidaDisciplinarProposta[];
+  /** 2.9/2.10 Decisão do PCA */
+  decisaoPca?: 'Aprova medida' | 'Altera medida' | 'Rejeita' | 'Outra';
+  decisaoDescricao?: string;
+  decisaoPdf?: string;
+  decisaoData?: string;
+  /** 2.11 Comunicado ao colaborador */
+  comunicadoPdf?: string;
+  comunicadoData?: string;
+  /** 2.12 Encerramento */
+  status: StatusProcessoDisciplinar;
+  encerradoEm?: string;
+  historico: { data: string; passo: string; utilizador: string }[];
+}
+
+/** Jurídico: rescisão de contrato */
+export type TipoRescisao = 'Resolução' | 'Revogação' | 'Caducidade';
+
+export interface RescisaoContrato {
+  id: number;
+  contratoId: number;
+  empresaId: number;
+  tipo: TipoRescisao;
+  motivoDetalhado: string;
+  dataRescisao: string;
+  documentoPdf?: string;
+  criadoPor: string;
+  criadoEm: string;
+}
+
+/** Tipos de contrato configuráveis no módulo Jurídico */
+export type TipoContratoJuridico =
+  | 'Empréstimo'
+  | 'Trabalho Tempo Indeterminado'
+  | 'Trabalho Tempo Determinado'
+  | 'Prestação de Serviços'
+  | 'Fornecimento'
+  | 'Compra e Venda'
+  | 'Arrendamento'
+  | 'Parceria'
+  | 'Outro';
+
+export type StatusContrato = 'Activo' | 'A Renovar' | 'Em Negociação' | 'Suspenso' | 'Rescindido' | 'Expirado';
+
 export interface Contrato {
   id: number;
+  /** Empresa/unidade de negócio à qual o contrato está associado */
+  empresaId?: number;
   numero: string;
   tipo: string;
   parteA: string;
@@ -210,11 +304,21 @@ export interface Contrato {
   dataInicio: string;
   dataFim: string;
   advogado: string;
-  status: 'Activo' | 'A Renovar' | 'Em Negociação' | 'Suspenso' | 'Rescindido' | 'Expirado';
+  /** Responsável jurídico (pode igualar advogado) */
+  responsavelJuridico?: string;
+  /** Nome do ficheiro PDF anexado */
+  ficheiroPdf?: string;
+  /** Alertar vencimento N dias antes (ex.: 30) */
+  alertarAntesDias?: number;
+  status: StatusContrato;
+  /** Histórico de alterações */
+  historico?: { data: string; acao: string; utilizador: string }[];
 }
 
 export interface ProcessoJudicial {
   id: number;
+  /** Empresa à qual o processo está associado (opcional para filtro tenant) */
+  empresaId?: number;
   numero: string;
   tribunal: string;
   tipoAccao: string;
@@ -226,10 +330,12 @@ export interface ProcessoJudicial {
   status: 'Em curso' | 'Suspenso' | 'Encerrado' | 'Ganho' | 'Perdido' | 'Acordo';
   advogado: string;
   descricao: string;
+  observacoes?: string;
 }
 
 export interface PrazoLegal {
   id: number;
+  empresaId?: number;
   titulo: string;
   tipo: string;
   descricao: string;
@@ -239,6 +345,7 @@ export interface PrazoLegal {
   status: 'Pendente' | 'Em Tratamento' | 'Concluído' | 'Vencido';
   vinculoProcesso?: string;
   vinculoContrato?: string;
+  observacoes?: string;
 }
 
 export interface Notificacao {
@@ -289,6 +396,7 @@ export interface Acta {
 
 export interface RiscoJuridico {
   id: number;
+  empresaId?: number;
   codigo: string;
   titulo: string;
   descricao: string;
@@ -299,6 +407,8 @@ export interface RiscoJuridico {
   planoAccao: string;
   responsavel: string;
   status: 'Identificado' | 'Em monitorização' | 'Mitigado' | 'Materializado' | 'Encerrado';
+  dataIdentificacao?: string;
+  observacoes?: string;
 }
 
 /** Contabilidade: pagamentos recebidos / registados */
