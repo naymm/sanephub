@@ -22,6 +22,9 @@ function profileToUsuario(p: ProfileRow): Usuario {
     modulos: p.modulos ?? undefined,
     colaboradorId: p.colaborador_id ?? undefined,
     empresaId: p.empresa_id ?? undefined,
+    assinaturaLinha: (p as any).assinatura_linha ?? undefined,
+    assinaturaCargo: (p as any).assinatura_cargo ?? undefined,
+    assinaturaImagemUrl: (p as any).assinatura_imagem_url ?? undefined,
   };
 }
 

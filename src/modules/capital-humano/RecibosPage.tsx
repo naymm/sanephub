@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
@@ -74,6 +76,7 @@ export default function RecibosPage() {
     const matchAno = !anoFilter || anoFilter === 'todos' || r.mesAno.startsWith(anoFilter);
     return matchSearch && matchMes && matchAno;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const calcLiquido = (f: Omit<ReciboSalario, 'id'>) => {
     const bruto = f.vencimentoBase + f.subsidioAlimentacao + f.subsidioTransporte + f.outrosSubsidios;
@@ -185,7 +188,7 @@ export default function RecibosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pagination.slice.map(r => (
               <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-medium">{getColabName(r.colaboradorId)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{r.mesAno}</td>
@@ -211,6 +214,7 @@ export default function RecibosPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum recibo encontrado.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">

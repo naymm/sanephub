@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { RiscoJuridico } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -57,6 +59,7 @@ export default function RiscosJuridicosPage() {
     const matchEmpresa = filterEmpresa === 'todos' || (r.empresaId != null && String(r.empresaId) === filterEmpresa);
     return matchSearch && matchStatus && matchEmpresa;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const empresaNome = (id: number | undefined) => (id != null ? empresas.find(e => e.id === id)?.nome ?? String(id) : '—');
 
@@ -187,7 +190,7 @@ export default function RiscosJuridicosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pagination.slice.map(r => (
               <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
                 <td className="p-3 font-mono text-xs">{r.codigo}</td>
                 {currentEmpresaId === 'consolidado' && <td className="p-3 text-muted-foreground">{empresaNome(r.empresaId)}</td>}
@@ -223,6 +226,7 @@ export default function RiscosJuridicosPage() {
           {canEdit && <Button variant="outline" className="mt-3" onClick={openCreate}>Registar risco</Button>}
         </div>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

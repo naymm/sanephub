@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { ProcessoDisciplinar, MedidaDisciplinarProposta, StatusProcessoDisciplinar } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
@@ -74,6 +76,7 @@ export default function ProcessosDisciplinaresPage() {
     : colaboradores.filter(c => c.empresaId === currentEmpresaId);
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? 1 : (typeof currentEmpresaId === 'number' ? currentEmpresaId : 1);
+  const pagination = useClientSidePagination({ items: processosDisciplinares, pageSize: 25 });
 
   if (processoId != null && processo) {
     return (
@@ -263,7 +266,7 @@ export default function ProcessosDisciplinaresPage() {
             </tr>
           </thead>
           <tbody>
-            {processosDisciplinares.map(p => {
+            {pagination.slice.map(p => {
               const colab = colaboradores.find(c => c.id === p.colaboradorId);
               const lastStep = p.historico[p.historico.length - 1];
               return (
@@ -300,6 +303,7 @@ export default function ProcessosDisciplinaresPage() {
           </tbody>
         </table>
       </div>
+      <DataTablePagination {...pagination.paginationProps} />
 
       {!canSeeDetalhes && (
         <p className="text-xs text-muted-foreground">

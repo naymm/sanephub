@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { MovimentoTesouraria, CategoriaSaidaTesouraria, MetodoPagamentoTesouraria } from '@/types';
 import { formatKz, formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
@@ -92,6 +94,7 @@ export default function TesourariaPage() {
       (m.beneficiario ?? '').toLowerCase().includes(searchLower);
     return matchTipo && matchDate && matchSearch;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = (tipo: 'entrada' | 'saida') => {
     setFormTipo(tipo);
@@ -239,7 +242,7 @@ export default function TesourariaPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(m => (
+            {pagination.slice.map(m => (
               <tr key={m.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-mono text-xs">{m.referencia}</td>
                 <td className="py-3 px-5">
@@ -273,6 +276,7 @@ export default function TesourariaPage() {
       {filtered.length === 0 && (
         <p className="text-center py-8 text-muted-foreground text-sm">Nenhum movimento encontrado.</p>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
 
       {/* Dialog Criar/Editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

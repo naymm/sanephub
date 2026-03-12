@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { fetchColaboradoresPaginated, fetchColaboradoresDepartamentos } from '@/lib/supabaseData';
 import type { Colaborador, StatusColaborador, TipoContrato, Genero } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
@@ -26,6 +27,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const DEFAULT_PAGE_SIZE = 25;
 
 const STATUS_OPTIONS: StatusColaborador[] = ['Activo', 'Inactivo', 'Suspenso', 'Em férias'];
 const TIPO_CONTRATO_OPTIONS: TipoContrato[] = ['Efectivo', 'Prazo Certo', 'Prestação', 'Estágio'];
@@ -54,7 +59,7 @@ const emptyForm: Omit<Colaborador, 'id'> = {
 };
 
 export default function ColaboradoresPage() {
-  const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas } = useData();
+  const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas, refetch } = useData();
   const { usuarios } = useAuth();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
@@ -66,21 +71,106 @@ export default function ColaboradoresPage() {
   const [editing, setEditing] = useState<Colaborador | null>(null);
   const [viewItem, setViewItem] = useState<Colaborador | null>(null);
   const [form, setForm] = useState<Omit<Colaborador, 'id'>>(emptyForm);
-  /** ID do perfil (utilizador) a associar a este colaborador. null = nenhum. */
   const [associarUtilizadorId, setAssociarUtilizadorId] = useState<number | null>(null);
 
-  const departamentos = Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
+  const usePaginated = isSupabaseConfigured() && !!supabase;
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [totalCount, setTotalCount] = useState(0);
+  const [tableRows, setTableRows] = useState<Colaborador[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [departamentosList, setDepartamentosList] = useState<string[]>([]);
+  const [searchDebounced, setSearchDebounced] = useState('');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = colaboradores.filter(c => {
-    const matchSearch =
-      c.nome.toLowerCase().includes(search.toLowerCase()) ||
-      c.cargo.toLowerCase().includes(search.toLowerCase()) ||
-      c.departamento.toLowerCase().includes(search.toLowerCase()) ||
-      c.emailCorporativo.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'todos' || c.status === statusFilter;
-    const matchDept = deptFilter === 'todos' || c.departamento === deptFilter;
-    return matchSearch && matchStatus && matchDept;
-  });
+  useEffect(() => {
+    if (!usePaginated) {
+      setSearchDebounced(search);
+      return;
+    }
+    searchDebounceRef.current = setTimeout(() => setSearchDebounced(search), 300);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [search, usePaginated]);
+
+  const empresaIds = useMemo(() => {
+    if (currentEmpresaId === 'consolidado') {
+      return empresas.filter(e => e.activo).map(e => e.id);
+    }
+    return typeof currentEmpresaId === 'number' ? [currentEmpresaId] : [];
+  }, [currentEmpresaId, empresas]);
+
+  const fetchPaginated = useCallback(async () => {
+    if (!supabase || empresaIds.length === 0) return;
+    setLoading(true);
+    try {
+      const [res, depts] = await Promise.all([
+        fetchColaboradoresPaginated(supabase, {
+          empresaIds,
+          page,
+          pageSize,
+          search: searchDebounced.trim() || undefined,
+          status: statusFilter === 'todos' ? undefined : statusFilter,
+          departamento: deptFilter === 'todos' ? undefined : deptFilter,
+        }),
+        fetchColaboradoresDepartamentos(supabase, empresaIds),
+      ]);
+      setTableRows(res.data);
+      setTotalCount(res.totalCount);
+      setDepartamentosList(depts);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao carregar colaboradores');
+      setTableRows([]);
+      setTotalCount(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [empresaIds, page, pageSize, searchDebounced, statusFilter, deptFilter]);
+
+  useEffect(() => {
+    if (usePaginated) {
+      fetchPaginated();
+    } else {
+      setDepartamentosList(Array.from(new Set(colaboradores.map(c => c.departamento))).sort());
+    }
+  }, [usePaginated, fetchPaginated, colaboradores]);
+
+  const filtered = useMemo(() => {
+    if (usePaginated) return tableRows;
+    return colaboradores.filter(c => {
+      const matchSearch =
+        c.nome.toLowerCase().includes(search.toLowerCase()) ||
+        c.cargo.toLowerCase().includes(search.toLowerCase()) ||
+        c.departamento.toLowerCase().includes(search.toLowerCase()) ||
+        c.emailCorporativo.toLowerCase().includes(search.toLowerCase());
+      const matchStatus = statusFilter === 'todos' || c.status === statusFilter;
+      const matchDept = deptFilter === 'todos' || c.departamento === deptFilter;
+      return matchSearch && matchStatus && matchDept;
+    });
+  }, [usePaginated, tableRows, colaboradores, search, statusFilter, deptFilter]);
+
+  const totalFiltered = usePaginated ? totalCount : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const currentPage = usePaginated ? page : Math.min(page, Math.max(0, totalPages - 1));
+  const paginatedSlice = useMemo(() => {
+    if (usePaginated) return filtered;
+    const from = currentPage * pageSize;
+    return filtered.slice(from, from + pageSize);
+  }, [usePaginated, filtered, currentPage, pageSize]);
+  const from = totalFiltered === 0 ? 0 : currentPage * pageSize + 1;
+  const to = Math.min(currentPage * pageSize + pageSize, totalFiltered);
+  const canPrev = currentPage > 0;
+  const canNext = currentPage < totalPages - 1;
+
+  const goToPage = (p: number) => setPage(Math.max(0, Math.min(p, totalPages - 1)));
+  const onPageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(0);
+  };
+  const resetPage = () => setPage(0);
+
+  const departamentos = usePaginated ? departamentosList : Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
 
   const openCreate = () => {
     setEditing(null);
@@ -153,6 +243,10 @@ export default function ColaboradoresPage() {
       setDialogOpen(false);
       setEditing(null);
       setAssociarUtilizadorId(null);
+      if (usePaginated) {
+        fetchPaginated();
+        refetch();
+      }
       toast.success(editing ? 'Colaborador actualizado.' : 'Colaborador criado.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
@@ -163,6 +257,10 @@ export default function ColaboradoresPage() {
     if (!window.confirm(`Remover o colaborador "${c.nome}"? Esta acção não pode ser desfeita.`)) return;
     try {
       await deleteColaborador(c.id);
+      if (usePaginated) {
+        fetchPaginated();
+        refetch();
+      }
       toast.success('Colaborador removido.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao remover');
@@ -181,9 +279,14 @@ export default function ColaboradoresPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+          <Input
+            placeholder="Pesquisar..."
+            value={search}
+            onChange={e => { setSearch(e.target.value); resetPage(); }}
+            className="pl-9 h-9"
+          />
         </div>
-        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as StatusColaborador | 'todos')}>
+        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v as StatusColaborador | 'todos'); resetPage(); }}>
           <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
@@ -192,7 +295,7 @@ export default function ColaboradoresPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={deptFilter} onValueChange={setDeptFilter}>
+        <Select value={deptFilter} onValueChange={v => { setDeptFilter(v); resetPage(); }}>
           <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Departamento" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
@@ -218,27 +321,48 @@ export default function ColaboradoresPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
-              <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-5 font-medium">{c.nome}</td>
-                <td className="py-3 px-5 text-muted-foreground">{c.cargo}</td>
-                <td className="py-3 px-5 text-muted-foreground">{c.departamento}</td>
-                <td className="py-3 px-5 text-muted-foreground">{formatDate(c.dataAdmissao)}</td>
-                <td className="py-3 px-5"><StatusBadge status={c.tipoContrato} variant="neutral" /></td>
-                <td className="py-3 px-5 text-right font-mono">{formatKz(c.salarioBase)}</td>
-                <td className="py-3 px-5"><StatusBadge status={c.status} /></td>
-                <td className="py-3 px-5 text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(c); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
-                </td>
-              </tr>
-            ))}
+            {loading ? (
+              <tr><td colSpan={8} className="py-8 text-center text-muted-foreground text-sm">A carregar…</td></tr>
+            ) : (
+              paginatedSlice.map(c => (
+                <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="py-3 px-5 font-medium">{c.nome}</td>
+                  <td className="py-3 px-5 text-muted-foreground">{c.cargo}</td>
+                  <td className="py-3 px-5 text-muted-foreground">{c.departamento}</td>
+                  <td className="py-3 px-5 text-muted-foreground">{formatDate(c.dataAdmissao)}</td>
+                  <td className="py-3 px-5"><StatusBadge status={c.tipoContrato} variant="neutral" /></td>
+                  <td className="py-3 px-5 text-right font-mono">{formatKz(c.salarioBase)}</td>
+                  <td className="py-3 px-5"><StatusBadge status={c.status} /></td>
+                  <td className="py-3 px-5 text-right">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(c); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum colaborador encontrado.</p>}
+      {!loading && paginatedSlice.length === 0 && (
+        <p className="text-center py-8 text-muted-foreground text-sm">Nenhum colaborador encontrado.</p>
+      )}
+
+      <DataTablePagination
+        from={from}
+        to={to}
+        totalFiltered={totalFiltered}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        canPrev={canPrev}
+        canNext={canNext}
+        onPrev={() => goToPage(currentPage - 1)}
+        onNext={() => goToPage(currentPage + 1)}
+        onPageSizeChange={onPageSizeChange}
+      />
 
       {/* Dialog Criar/Editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Correspondencia } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -60,6 +62,7 @@ export default function CorrespondenciasPage() {
     const matchEstado = estadoFilter === 'todos' || c.estadoResposta === estadoFilter;
     return matchSearch && matchTipo && matchPrioridade && matchEstado;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
     setEditing(null);
@@ -171,7 +174,7 @@ export default function CorrespondenciasPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
+            {pagination.slice.map(c => (
               <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-mono text-xs">{c.referencia}</td>
                 <td className="py-3 px-5">{c.tipo}</td>
@@ -193,6 +196,7 @@ export default function CorrespondenciasPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma correspondência encontrada.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">

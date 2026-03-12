@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useAuth } from '@/context/AuthContext';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -59,7 +61,11 @@ export default function DeclaracoesPage() {
       return;
     }
     try {
-      await gerarPdfDeclaracaoServico(d, col);
+      await gerarPdfDeclaracaoServico(d, col, {
+        linha: user?.assinaturaLinha || user?.nome,
+        cargo: user?.assinaturaCargo || user?.cargo,
+        imagemUrl: user?.assinaturaImagemUrl,
+      });
       toast.success('PDF da declaração gerado. Verifique os transferidos.');
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
@@ -72,6 +78,7 @@ export default function DeclaracoesPage() {
     const matchStatus = statusFilter === 'todos' || d.status === statusFilter;
     return matchSearch && matchStatus;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
     setEditing(null);
@@ -182,7 +189,7 @@ export default function DeclaracoesPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(d => (
+            {pagination.slice.map(d => (
               <tr key={d.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-medium">{getColabName(d.colaboradorId)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{d.tipo}</td>
@@ -212,6 +219,7 @@ export default function DeclaracoesPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma declaração encontrada.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">

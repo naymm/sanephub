@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { format, parseISO } from 'date-fns';
 import { pt } from 'date-fns/locale';
-import type { Declaracao, Colaborador } from '@/types';
+import type { Declaracao, Colaborador, Usuario } from '@/types';
 
 function dataDeclaracao(dateStr: string): string {
   try {
@@ -78,8 +78,8 @@ function efeitosDeclaracao(declaracao: Declaracao): string {
   return 'Para os devidos efeitos, declara-se que ';
 }
 
-const ASSINATURA_NOME = 'Nestor Quindai';
-const ASSINATURA_CARGO = 'Direcção de Capital Humano';
+const ASSINATURA_NOME_DEFAULT = 'Nestor Quindai';
+const ASSINATURA_CARGO_DEFAULT = 'Direcção de Capital Humano';
 
 /**
  * Desenha uma linha de texto justificada (alinhada à esquerda e à direita).
@@ -235,7 +235,17 @@ function loadImageAsDataUrl(url: string): Promise<string> {
     );
 }
 
-export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colaborador: Colaborador): Promise<void> {
+export interface AssinaturaDigitalInfo {
+  linha?: string;
+  cargo?: string;
+  imagemUrl?: string;
+}
+
+export async function gerarPdfDeclaracaoServico(
+  declaracao: Declaracao,
+  colaborador: Colaborador,
+  assinatura?: AssinaturaDigitalInfo
+): Promise<void> {
   let imgData: string | null = null;
   let carimboData: string | null = null;
   let assinaturaData: string | null = null;
@@ -249,8 +259,9 @@ export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colabora
   } catch {
     // Carimbo opcional
   }
+  const assinaturaUrl = assinatura?.imagemUrl?.trim() || '/assinatura-digital.png';
   try {
-    assinaturaData = await loadImageAsDataUrl('/assinatura-digital.png');
+    assinaturaData = await loadImageAsDataUrl(assinaturaUrl);
   } catch {
     // Assinatura opcional
   }
@@ -337,14 +348,17 @@ export async function gerarPdfDeclaracaoServico(declaracao: Declaracao, colabora
   }
 
   y += 8;
+  const nomeAssinatura = assinatura?.linha?.trim() || ASSINATURA_NOME_DEFAULT;
+  const cargoAssinatura = assinatura?.cargo?.trim() || ASSINATURA_CARGO_DEFAULT;
+
   doc.setFont('times', 'bold');
   doc.setFontSize(11);
-  doc.text(ASSINATURA_NOME, pageW / 2, y, { align: 'center' });
+  doc.text(nomeAssinatura, pageW / 2, y, { align: 'center' });
 
   y += 6;
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
-  doc.text(ASSINATURA_CARGO, pageW / 2, y, { align: 'center' });
+  doc.text(cargoAssinatura, pageW / 2, y, { align: 'center' });
 
   // Gerar o PDF
   doc.save(`Declaracao_Servico_${colaborador.nome.replace(/\s+/g, '_')}_${declaracao.id}.pdf`);

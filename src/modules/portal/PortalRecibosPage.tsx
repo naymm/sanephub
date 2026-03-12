@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
@@ -60,6 +62,7 @@ export default function PortalRecibosPage() {
     const matchAno = !anoFilter || anoFilter === 'todos' || r.mesAno.startsWith(anoFilter);
     return matchMes && matchAno;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   if (colaboradorId == null) {
     return (
@@ -110,7 +113,7 @@ export default function PortalRecibosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pagination.slice.map(r => (
               <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-medium">{r.mesAno}</td>
                 <td className="py-3 px-5 text-right font-mono">{formatKz(r.vencimentoBase)}</td>
@@ -131,6 +134,7 @@ export default function PortalRecibosPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum recibo encontrado.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogContent>

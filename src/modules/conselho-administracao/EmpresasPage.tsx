@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Empresa } from '@/types';
 import { Building2, Users, FileText, Plus, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -51,6 +53,7 @@ export default function EmpresasPage() {
   const filtered = empresas.filter(
     e => (e.nome.toLowerCase().includes(search.toLowerCase()) || e.codigo.toLowerCase().includes(search.toLowerCase()))
   );
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const countColabs = (empresaId: number) => colaboradores.filter(c => c.empresaId === empresaId).length;
   const countReqs = (empresaId: number) => requisicoes.filter(r => r.empresaId === empresaId).length;
@@ -153,7 +156,7 @@ export default function EmpresasPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filtered.map(empresa => (
+        {pagination.slice.map(empresa => (
           <div
             key={empresa.id}
             className="rounded-xl border border-border/80 bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
@@ -208,6 +211,7 @@ export default function EmpresasPage() {
       {filtered.length === 0 && (
         <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma empresa encontrada.</p>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
 
       {/* Dialog Nova / Editar empresa (só Admin) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

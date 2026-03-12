@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Reuniao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -67,6 +69,7 @@ export default function ReunioesPage() {
     if (dataFim) matchDate = matchDate && r.data <= dataFim;
     return matchSearch && matchTipo && matchStatus && matchDate;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
     setEditing(null);
@@ -169,7 +172,7 @@ export default function ReunioesPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pagination.slice.map(r => (
               <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-medium">{r.titulo}</td>
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(r.data)} {r.hora}</td>
@@ -189,6 +192,7 @@ export default function ReunioesPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma reunião encontrada.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

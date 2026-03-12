@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Ferias } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate, diasEntre } from '@/utils/formatters';
@@ -57,6 +59,7 @@ export default function PortalFeriasPage() {
     const matchStatus = statusFilter === 'todos' || f.status === statusFilter;
     return matchStatus;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const updateDias = (inicio: string, fim: string) => {
     const d = diasEntre(inicio, fim);
@@ -129,7 +132,7 @@ export default function PortalFeriasPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(f => (
+            {pagination.slice.map(f => (
               <tr key={f.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-medium">{formatDate(f.dataInicio)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(f.dataFim)}</td>
@@ -146,6 +149,7 @@ export default function PortalFeriasPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum pedido de férias encontrado.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>

@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { formatKz, formatDate } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -50,6 +52,7 @@ export default function RelatoriosPage() {
       return true;
     });
   }, [requisicoes, anoNum, mesINum, mesFNum, centroRef]);
+  const pagination = useClientSidePagination({ items: filteredReqs, pageSize: 25 });
 
   const totalGasto = useMemo(() => filteredReqs.reduce((s, r) => s + r.valor, 0), [filteredReqs]);
   const porStatus = useMemo(() => {
@@ -218,7 +221,7 @@ export default function RelatoriosPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredReqs.slice(0, 20).map(r => (
+              {pagination.slice.map(r => (
                 <tr key={r.id} className="border-b border-border/50 last:border-0">
                   <td className="py-3 px-5 font-mono text-xs">{r.num}</td>
                   <td className="py-3 px-5">{r.fornecedor}</td>
@@ -231,9 +234,7 @@ export default function RelatoriosPage() {
             </tbody>
           </table>
         </div>
-        {filteredReqs.length > 20 && (
-          <p className="py-3 px-5 text-xs text-muted-foreground">A mostrar 20 de {filteredReqs.length}. Exporte em CSV para lista completa.</p>
-        )}
+        <DataTablePagination {...pagination.paginationProps} />
       </div>
     </div>
   );

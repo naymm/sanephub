@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { PrazoLegal } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate, diasRestantes } from '@/utils/formatters';
@@ -57,6 +59,7 @@ export default function PrazosPage() {
     const matchEmpresa = filterEmpresa === 'todos' || (p.empresaId != null && String(p.empresaId) === filterEmpresa);
     return matchSearch && matchStatus && matchEmpresa;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const getRowClass = (p: PrazoLegal) => {
     if (p.status === 'Concluído') return '';
@@ -188,7 +191,7 @@ export default function PrazosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(p => {
+            {pagination.slice.map(p => {
               const d = diasRestantes(p.dataLimite);
               return (
                 <tr key={p.id} className={cn('border-b last:border-0 hover:bg-muted/20 transition-colors', getRowClass(p))}>
@@ -227,6 +230,7 @@ export default function PrazosPage() {
           {canEdit && <Button variant="outline" className="mt-3" onClick={openCreate}>Registar prazo</Button>}
         </div>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

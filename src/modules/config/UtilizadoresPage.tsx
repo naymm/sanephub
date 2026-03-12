@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Usuario, Perfil } from '@/types';
 import { Input } from '@/components/ui/input';
@@ -68,6 +70,9 @@ export default function UtilizadoresPage() {
     modulos: [],
     empresaId: null,
     colaboradorId: null,
+    assinaturaLinha: '',
+    assinaturaCargo: '',
+    assinaturaImagemUrl: '',
   });
 
   // Apenas utilizadores da base de dados (Supabase). Sem Supabase a página fica vazia (sem mock/seed).
@@ -78,6 +83,7 @@ export default function UtilizadoresPage() {
       u.email.toLowerCase().includes(search.toLowerCase()) ||
       u.perfil.toLowerCase().includes(search.toLowerCase())
   );
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
     setEditing(null);
@@ -93,6 +99,9 @@ export default function UtilizadoresPage() {
       modulos: [],
       empresaId: null,
       colaboradorId: null,
+      assinaturaLinha: '',
+      assinaturaCargo: '',
+      assinaturaImagemUrl: '',
     });
     setDialogOpen(true);
   };
@@ -111,6 +120,9 @@ export default function UtilizadoresPage() {
       modulos: u.modulos ?? [],
       empresaId: u.empresaId ?? null,
       colaboradorId: u.colaboradorId ?? null,
+      assinaturaLinha: u.assinaturaLinha ?? '',
+      assinaturaCargo: u.assinaturaCargo ?? '',
+      assinaturaImagemUrl: u.assinaturaImagemUrl ?? '',
     });
     setDialogOpen(true);
   };
@@ -151,6 +163,9 @@ export default function UtilizadoresPage() {
               modulos: modulos ?? null,
               empresa_id: form.empresaId ?? null,
               colaborador_id: form.colaboradorId ?? null,
+              assinatura_linha: (form.assinaturaLinha ?? '').trim() || null,
+              assinatura_cargo: (form.assinaturaCargo ?? '').trim() || null,
+              assinatura_imagem_url: (form.assinaturaImagemUrl ?? '').trim() || null,
               updated_at: new Date().toISOString(),
             })
             .eq('id', editing.id);
@@ -222,6 +237,25 @@ export default function UtilizadoresPage() {
 
   const isOnlyAdmin = (u: Usuario) => u.perfil === 'Admin' && usuariosFromDb.filter(x => x.perfil === 'Admin').length <= 1;
 
+  const handleAssinaturaUpload = async (file: File) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Upload de assinatura requer Supabase configurado.');
+      return;
+    }
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const baseId = editing?.id ?? Date.now();
+      const path = `user-${baseId}/assinatura-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('assinaturas').upload(path, file, { upsert: true });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar assinatura');
+      const { data: pub } = supabase.storage.from('assinaturas').getPublicUrl(data.path);
+      setForm(f => ({ ...f, assinaturaImagemUrl: pub.publicUrl }));
+      toast.success('Assinatura digital carregada com sucesso.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível carregar a assinatura.');
+    }
+  };
+
   if (currentUser?.perfil !== 'Admin') {
     return (
       <div className="space-y-6">
@@ -266,7 +300,7 @@ export default function UtilizadoresPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(u => (
+            {pagination.slice.map(u => (
               <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5">
                   <span className="inline-flex items-center gap-2">
@@ -310,6 +344,7 @@ export default function UtilizadoresPage() {
       {filtered.length === 0 && (
         <p className="text-center py-8 text-muted-foreground text-sm">Nenhum utilizador encontrado.</p>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -442,6 +477,58 @@ export default function UtilizadoresPage() {
                   </label>
                 ))}
               </div>
+            </div>
+            <div className="space-y-2 border-t border-border/80 pt-4">
+              <Label className="text-sm font-semibold">Assinatura digital (para documentos)</Label>
+              <p className="text-xs text-muted-foreground">
+                Estes dados serão usados nos documentos (ex.: despachos, declarações) quando este utilizador for o signatário.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Texto de assinatura</Label>
+                <Input
+                  value={form.assinaturaLinha ?? ''}
+                  onChange={e => setForm(f => ({ ...f, assinaturaLinha: e.target.value }))}
+                  placeholder="Ex.: Naym Mupoia"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Cargo na assinatura</Label>
+                <Input
+                  value={form.assinaturaCargo ?? ''}
+                  onChange={e => setForm(f => ({ ...f, assinaturaCargo: e.target.value }))}
+                  placeholder="Ex.: Director de IT"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Imagem de assinatura digital</Label>
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleAssinaturaUpload(file);
+                }}
+              />
+              {!isSupabaseConfigured() && (
+                <p className="text-xs text-muted-foreground">
+                  Upload de assinatura disponível apenas quando o Supabase estiver configurado.
+                </p>
+              )}
+              {form.assinaturaImagemUrl && (
+                <div className="mt-2 flex items-center gap-3">
+                  <img
+                    src={form.assinaturaImagemUrl}
+                    alt="Pré-visualização da assinatura"
+                    className="h-12 border border-border/80 rounded bg-muted object-contain"
+                  />
+                  <p className="text-xs text-muted-foreground break-all max-w-xs">
+                    {form.assinaturaImagemUrl}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

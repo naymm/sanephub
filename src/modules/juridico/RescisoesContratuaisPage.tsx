@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { RescisaoContrato, TipoRescisao } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
@@ -39,6 +41,7 @@ export default function RescisoesContratuaisPage() {
   });
 
   const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
+  const pagination = useClientSidePagination({ items: rescissoesContrato, pageSize: 25 });
 
   const getContrato = (id: number) => contratos.find(c => c.id === id);
   const getEmpresaNome = (empresaId: number) =>
@@ -115,7 +118,7 @@ export default function RescisoesContratuaisPage() {
             </tr>
           </thead>
           <tbody>
-            {rescissoesContrato.map(r => {
+            {pagination.slice.map(r => {
               const contrato = getContrato(r.contratoId);
               return (
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
@@ -162,6 +165,7 @@ export default function RescisoesContratuaisPage() {
           </tbody>
         </table>
       </div>
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">

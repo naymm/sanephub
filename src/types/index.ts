@@ -33,6 +33,12 @@ export interface Usuario {
   colaboradorId?: number;
   /** ID da empresa à qual o utilizador pertence. null/undefined = nível Grupo (Admin/PCA), com visão consolidada ou seleção de empresa. */
   empresaId?: number | null;
+  /** Linha de assinatura digital (nome que aparece nos documentos). */
+  assinaturaLinha?: string;
+  /** Cargo/função que aparece na assinatura digital (pode ser diferente de cargo interno). */
+  assinaturaCargo?: string;
+  /** URL para imagem de assinatura (PNG/SVG) a usar nos PDFs. */
+  assinaturaImagemUrl?: string;
 }
 
 export type StatusColaborador = 'Activo' | 'Inactivo' | 'Suspenso' | 'Em férias';
@@ -380,6 +386,29 @@ export interface DocumentoOficial {
   data: string;
   autor: string;
   status: 'Rascunho' | 'Em Revisão' | 'Aprovado' | 'Publicado' | 'Arquivado';
+  /** Empresa à qual o despacho/documento diz respeito (quando aplicável). */
+  empresaId?: number | null;
+  /** Tipo de despacho (aplicável apenas quando tipo === 'Despacho'). */
+  despachoTipo?: 'Nomeação' | 'Exoneração' | 'Outro';
+  /** Colaborador alvo do despacho (nomeação/exoneração), quando aplicável. */
+  colaboradorId?: number | null;
+  /** Tratamento protocolar (Sr. / Sr(a).) para Nomeação. */
+  tratamento?: 'Sr.' | 'Sr(a).';
+  /** Função/cargo para a qual o colaborador está a ser nomeado. */
+  funcao?: string;
+  /** Direcção/unidade orgânica. */
+  direccao?: string;
+  /** Se o colaborador acumula função. */
+  acumulaFuncao?: boolean;
+  /** Número de espaço de exoneração (informação de controlo interno). */
+  numeroEspacoExoneracao?: string;
+  /** Assinatura digital do PCA registada para este despacho/documento. */
+  pcaAssinado?: boolean;
+  pcaAssinadoEm?: string;
+  pcaAssinadoPor?: string;
+  /** Dados adicionais da assinatura digital do PCA. */
+  pcaAssinaturaCargo?: string;
+  pcaAssinaturaImagemUrl?: string;
 }
 
 /** Acta de reunião (minuta) — ligada a uma Reunião */

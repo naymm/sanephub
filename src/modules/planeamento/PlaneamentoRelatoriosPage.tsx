@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { RelatorioMensalPlaneamento, StatusRelatorioPlaneamento } from '@/types';
 import { formatKz } from '@/utils/formatters';
 import { gerarPdfRelatorioMensal } from '@/utils/planeamentoPdf';
@@ -33,7 +35,7 @@ function mesAnoLabel(mesAno: string): string {
 
 export default function PlaneamentoRelatoriosPage() {
   const { user } = useAuth();
-  const { relatoriosPlaneamento, setRelatoriosPlaneamento, empresas } = useData();
+  const { relatoriosPlaneamento, updateRelatorioPlaneamento, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const navigate = useNavigate();
   const [mesAnoFilter, setMesAnoFilter] = useState('');
@@ -49,6 +51,7 @@ export default function PlaneamentoRelatoriosPage() {
     const matchStatus = statusFilter === 'todos' || r.status === statusFilter;
     return matchMes && matchStatus;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const mesesDisponiveis = Array.from(new Set(relatoriosPlaneamento.map(r => r.mesAno))).sort().reverse();
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
@@ -119,7 +122,7 @@ export default function PlaneamentoRelatoriosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pagination.slice.map(r => (
               <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
                 <td className="py-3 px-5 font-medium">{empresaNome(r.empresaId)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{mesAnoLabel(r.mesAno)}</td>
@@ -177,6 +180,7 @@ export default function PlaneamentoRelatoriosPage() {
           )}
         </div>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
     </div>
   );
 }

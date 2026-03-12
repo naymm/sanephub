@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useAuth } from '@/context/AuthContext';
 import type { Ferias, StatusFerias } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -64,6 +66,7 @@ export default function FeriasPage() {
     const matchStatus = statusFilter === 'todos' || f.status === statusFilter;
     return matchSearch && matchStatus;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const updateDias = (inicio: string, fim: string) => {
     const d = diasEntre(inicio, fim);
@@ -191,7 +194,7 @@ export default function FeriasPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(f => (
+            {pagination.slice.map(f => (
               <tr key={f.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-medium">{getColabName(f.colaboradorId)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{getColabDept(f.colaboradorId)}</td>
@@ -225,6 +228,7 @@ export default function FeriasPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum pedido de férias encontrado.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>

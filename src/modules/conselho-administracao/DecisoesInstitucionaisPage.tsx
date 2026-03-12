@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { Search } from 'lucide-react';
 
 const DECISOES_MOCK = [
@@ -19,6 +21,7 @@ export default function DecisoesInstitucionaisPage() {
       d.tipo.toLowerCase().includes(search.toLowerCase()) ||
       d.estado.toLowerCase().includes(search.toLowerCase())
   );
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   return (
     <div className="space-y-6">
@@ -41,7 +44,7 @@ export default function DecisoesInstitucionaisPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((d) => (
+            {pagination.slice.map((d) => (
               <tr key={d.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(d.data)}</td>
                 <td className="py-3 px-5 font-medium">{d.titulo}</td>
@@ -65,6 +68,7 @@ export default function DecisoesInstitucionaisPage() {
         </table>
       </div>
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma decisao encontrada.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
     </div>
   );
 }

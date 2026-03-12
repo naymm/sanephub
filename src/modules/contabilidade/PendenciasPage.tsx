@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { PendenciaDocumental, TipoPendencia, PrioridadePendencia } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -57,6 +59,7 @@ export default function PendenciasPage() {
     const matchStatus = statusFilter === 'todos' || p.status === statusFilter;
     return matchSearch && matchStatus;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
     setEditing(null);
@@ -152,7 +155,7 @@ export default function PendenciasPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(p => (
+            {pagination.slice.map(p => (
               <tr key={p.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-medium">{p.titulo}</td>
                 <td className="py-3 px-5 text-muted-foreground">{p.tipo}</td>
@@ -175,6 +178,7 @@ export default function PendenciasPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma pendência encontrada.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

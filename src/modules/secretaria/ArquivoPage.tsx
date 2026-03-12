@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import {
@@ -75,6 +77,7 @@ export default function ArquivoPage() {
     if (dataFim) matchDate = matchDate && i.data <= dataFim;
     return matchSearch && matchTipo && matchDate;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const Icon = ({ tipo }: { tipo: TipoArquivo }) => {
     if (tipo === 'Documento') return <FileText className="h-4 w-4 text-muted-foreground" />;
@@ -118,7 +121,7 @@ export default function ArquivoPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(i => (
+            {pagination.slice.map(i => (
               <tr key={i.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5"><Icon tipo={i.tipo} /></td>
                 <td className="py-3 px-5 font-medium">{i.tipo}</td>
@@ -141,6 +144,7 @@ export default function ArquivoPage() {
           Nenhum item arquivado encontrado. Documentos com status &quot;Arquivado&quot;, correspondências &quot;Arquivada&quot; e actas &quot;Arquivada&quot; aparecem aqui.
         </p>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
     </div>
   );
 }

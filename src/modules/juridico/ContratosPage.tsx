@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Contrato, StatusContrato } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate, formatKz, diasRestantes } from '@/utils/formatters';
@@ -85,6 +87,7 @@ export default function ContratosPage() {
     const matchEmpresa = filterEmpresa === 'todos' || (c.empresaId != null && String(c.empresaId) === filterEmpresa);
     return matchSearch && matchTipo && matchStatus && matchEmpresa;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const getDiasClass = (dataFim: string) => {
     const d = diasRestantes(dataFim);
@@ -257,7 +260,7 @@ export default function ContratosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => {
+            {pagination.slice.map(c => {
               const d = diasRestantes(c.dataFim);
               return (
                 <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
@@ -306,6 +309,7 @@ export default function ContratosPage() {
           {canEdit && <Button variant="outline" className="mt-3" onClick={openCreate}>Criar primeiro contrato</Button>}
         </div>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

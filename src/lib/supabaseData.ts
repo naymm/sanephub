@@ -115,6 +115,134 @@ export async function loadAllTables(supabase: SupabaseClient) {
   };
 }
 
+export interface ColaboradoresPaginatedParams {
+  empresaIds: number[];
+  page: number;
+  pageSize: number;
+  search?: string;
+  status?: string;
+  departamento?: string;
+}
+
+export interface ColaboradoresPaginatedResult {
+  data: Colaborador[];
+  totalCount: number;
+}
+
+/** Paginação no servidor: devolve uma página de colaboradores e o total. */
+export async function fetchColaboradoresPaginated(
+  supabase: SupabaseClient,
+  params: ColaboradoresPaginatedParams
+): Promise<ColaboradoresPaginatedResult> {
+  const { empresaIds, page, pageSize, search, status, departamento } = params;
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
+  let q = supabase
+    .from('colaboradores')
+    .select('*', { count: 'exact' })
+    .in('empresa_id', empresaIds)
+    .order('nome', { ascending: true });
+
+  if (search?.trim()) {
+    const raw = search.trim().replace(/,/g, ' ');
+    const term = `%${raw}%`;
+    q = q.or(`nome.ilike.${term},cargo.ilike.${term},departamento.ilike.${term},email_corporativo.ilike.${term}`);
+  }
+  if (status && status !== 'todos') {
+    q = q.eq('status', status);
+  }
+  if (departamento && departamento !== 'todos') {
+    q = q.eq('departamento', departamento);
+  }
+
+  const { data, error, count } = await q.range(from, to);
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    data: mapRowsFromDb<Colaborador>('colaboradores', rows),
+    totalCount: count ?? 0,
+  };
+}
+
+/** Lista de departamentos distintos dos colaboradores (para filtro). */
+export async function fetchColaboradoresDepartamentos(
+  supabase: SupabaseClient,
+  empresaIds: number[]
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('colaboradores')
+    .select('departamento')
+    .in('empresa_id', empresaIds);
+  if (error) throw error;
+  const rows = (data ?? []) as { departamento: string | null }[];
+  const set = new Set(rows.map(r => r.departamento).filter(Boolean) as string[]);
+  return Array.from(set).sort();
+}
+
+/** IDs de colaboradores por empresa (para filtrar ferias, faltas, recibos, declaracoes). */
+export async function fetchColaboradorIdsByEmpresa(
+  supabase: SupabaseClient,
+  empresaIds: number[]
+): Promise<number[]> {
+  if (empresaIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('colaboradores')
+    .select('id')
+    .in('empresa_id', empresaIds);
+  if (error) throw error;
+  return ((data ?? []) as { id: number }[]).map(r => r.id);
+}
+
+export interface TablePaginatedParams {
+  page: number;
+  pageSize: number;
+  orderBy: string;
+  ascending?: boolean;
+  empresaIds?: number[];
+  filters?: Record<string, string | number>;
+  searchColumns?: string[];
+  searchTerm?: string;
+  colabIds?: number[];
+  colabIdColumn?: string;
+}
+
+/** Paginação genérica para qualquer tabela. */
+export async function fetchTablePaginated<T>(
+  supabase: SupabaseClient,
+  tableKey: keyof typeof TABLE_NAMES,
+  mapperKey: keyof typeof NUMERIC_KEYS,
+  params: TablePaginatedParams
+): Promise<{ data: T[]; totalCount: number }> {
+  const { page, pageSize, orderBy, ascending = true, empresaIds, filters, searchColumns, searchTerm, colabIds, colabIdColumn } = params;
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+  const tableName = TABLE_NAMES[tableKey];
+
+  let q = supabase.from(tableName).select('*', { count: 'exact' }).order(orderBy, { ascending });
+
+  if (empresaIds?.length) q = q.in('empresa_id', empresaIds);
+  if (colabIds?.length && colabIdColumn) q = q.in(colabIdColumn, colabIds);
+  if (filters) {
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== '' && v !== 'todos') q = q.eq(k, v);
+    }
+  }
+  if (searchTerm?.trim() && searchColumns?.length) {
+    const raw = searchTerm.trim().replace(/,/g, ' ');
+    const term = `%${raw}%`;
+    q = q.or(searchColumns.map(c => `${c}.ilike.${term}`).join(','));
+  }
+
+  const { data, error, count } = await q.range(from, to);
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    data: mapRowsFromDb<T>(mapperKey, rows),
+    totalCount: count ?? 0,
+  };
+}
+
 async function insertOne<T>(
   supabase: SupabaseClient,
   table: keyof typeof TABLE_NAMES,

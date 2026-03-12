@@ -64,7 +64,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   processos_disciplinares: ['id', 'empresaId', 'colaboradorId'],
   rescisoes_contrato: ['id', 'contratoId', 'empresaId'],
   correspondencias: ['id'],
-  documentos_oficiais: ['id'],
+  documentos_oficiais: ['id', 'empresaId', 'colaboradorId'],
   pendencias_documentais: ['id', 'entidadeId'],
   relatorios_planeamento: ['id', 'empresaId', 'ebitda', 'margemBruta', 'margemEbitda'],
 };

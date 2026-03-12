@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useTenant } from '@/context/TenantContext';
 import { formatKz } from '@/utils/formatters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +22,7 @@ export default function PlaneamentoConsolidacaoPage() {
   const mesesDisponiveis = Array.from(new Set(relatoriosPlaneamento.map(r => r.mesAno))).sort().reverse();
   const mesSelecionado = mesAnoFilter || mesesDisponiveis[0];
   const relatoriosMes = relatoriosPlaneamento.filter(r => r.mesAno === mesSelecionado);
+  const pagination = useClientSidePagination({ items: relatoriosMes, pageSize: 25 });
 
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
 
@@ -88,7 +91,7 @@ export default function PlaneamentoConsolidacaoPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {relatoriosMes.map(r => {
+                    {pagination.slice.map(r => {
                       const vendas = r.vendasProdutos.reduce((a, l) => a + l.quantidade * l.precoUnitario, 0) + r.vendasServicos.reduce((a, l) => a + l.quantidade * l.precoUnitario, 0);
                       return (
                         <tr key={r.id} className="border-b border-border/50">
@@ -103,6 +106,7 @@ export default function PlaneamentoConsolidacaoPage() {
                   </tbody>
                 </table>
               </div>
+              <DataTablePagination {...pagination.paginationProps} />
             </CardContent>
           </Card>
         </>

@@ -4,6 +4,8 @@ import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Requisicao, StatusRequisicao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
@@ -73,6 +75,7 @@ export default function PortalRequisicoesPage() {
     const matchStatus = statusFilter === 'todos' || r.status === statusFilter;
     return matchStatus;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
     const dept = departamentos.find(d => d.nome === user?.departamento)?.nome ?? departamentos[0]?.nome ?? '';
@@ -175,7 +178,7 @@ export default function PortalRequisicoesPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pagination.slice.map(r => (
               <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-mono text-xs">{r.num}</td>
                 <td className="py-3 px-5 font-medium">{r.fornecedor}</td>
@@ -193,6 +196,7 @@ export default function PortalRequisicoesPage() {
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma requisição encontrada.</p>}
+      <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-6">

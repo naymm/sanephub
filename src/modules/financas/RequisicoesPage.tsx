@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import type { Requisicao, StatusRequisicao } from '@/types';
@@ -99,6 +101,7 @@ export default function RequisicoesPage() {
     if (dataFim) matchDate = matchDate && r.data <= dataFim;
     return matchSearch && matchStatus && matchCentro && matchDate;
   });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
     setEditing(null);
@@ -310,7 +313,7 @@ export default function RequisicoesPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(r => (
+            {pagination.slice.map(r => (
               <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="py-3 px-5 font-mono text-xs">{r.num}</td>
                 <td className="py-3 px-5 font-medium">{r.fornecedor}</td>
@@ -362,6 +365,7 @@ export default function RequisicoesPage() {
       {filtered.length === 0 && (
         <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma requisição encontrada.</p>
       )}
+      <DataTablePagination {...pagination.paginationProps} />
 
       {/* Dialog Criar/Editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
