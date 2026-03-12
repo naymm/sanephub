@@ -281,12 +281,14 @@ export async function gerarPdfDespacho(
     const nomeColab = colaborador?.nome ?? '________________';
     const funcao = despacho.funcao ?? '__________';
     const direccao = despacho.direccao ?? '__________';
+    const tratamento = despacho.tratamento === 'Sr(a).' ? 'a Sra.' : 'o Sr.';
+    const verboNomeacao = despacho.tratamento === 'Sr(a).' ? 'É nomeada ' : 'É nomeado ';
     const segmentsNomeacao: { text: string; bold: boolean }[] = [
-      { text: 'É nomeado o Sr. ', bold: false },
+      { text: `${verboNomeacao}${tratamento} `, bold: false },
       { text: nomeColab, bold: true },
       { text: ', para exercer em comissão de serviço, a função de ', bold: false },
       { text: funcao, bold: true },
-      { text: ', na Direcção ', bold: false },
+      { text: ', na', bold: false },
       { text: direccao, bold: true },
       ...(empresaLabel
         ? [
@@ -297,7 +299,7 @@ export async function gerarPdfDespacho(
       {
         text: despacho.acumulaFuncao
           ? ', acumulando assim, funções que tem desempenhado anteriormente.'
-          : '.',
+          : ', cessando assim, todas as funções desempenhadas anteriormente.',
         bold: false,
       },
     ];
@@ -306,8 +308,10 @@ export async function gerarPdfDespacho(
   } else {
     if (despacho.despachoTipo === 'Exoneração') {
       const nomeColab = colaborador?.nome ?? '________________';
+      const tratamentoExo = despacho.tratamento === 'Sr(a).' ? 'a Sra.' : 'o Sr.';
+      const exonerado = despacho.tratamento === 'Sr(a).' ? 'exonerada' : 'exonerado';
       texto.push(
-        `É o Sr. ${nomeColab}, exonerado do cargo que exercia,`,
+        `É ${tratamentoExo} ${nomeColab}, ${exonerado} do cargo que exercia,`,
         'produzindo este despacho efeitos a partir desta data.'
       );
       if (despacho.numeroEspacoExoneracao) {
