@@ -16,7 +16,7 @@ O sistema pode usar **Supabase** para autenticação (e opcionalmente base de da
 
 ## 2. Base de dados (Auth + todas as tabelas)
 
-O projecto tem duas migrações SQL:
+O projecto tem três migrações SQL (por ordem):
 
 1. **`20250306000000_create_profiles.sql`** — Tabela `profiles` ligada a `auth.users` (obrigatória para login).
 2. **`20250306100000_create_all_tables.sql`** — Todas as tabelas do domínio com relacionamentos:
@@ -34,8 +34,11 @@ O projecto tem duas migrações SQL:
    - **rescisoes_contrato** → contratos, empresas
    - **correspondencias**, **documentos_oficiais**, **notificacoes**, **pendencias_documentais**
    - **relatorios_planeamento** → empresas (campos em JSONB)
+3. **`20250312000000_profiles_admin_read_all.sql`** — Função `current_user_is_admin()` e política para Admins lerem todos os perfis.
+4. **`20250312000001_profiles_admin_read_all_fix.sql`** — Corrige recursão RLS (500) na policy de leitura.
+5. **`20250312000002_profiles_admin_update_delete.sql`** — Políticas para Admin actualizar e apagar qualquer perfil (CRUD completo).
 
-Execute as migrações pelo **SQL Editor** do Supabase (1ª depois 2ª) ou use a CLI:
+Execute as migrações pelo **SQL Editor** do Supabase (por ordem) ou use a CLI:
 
 ```bash
 npx supabase link --project-ref SEU_PROJECT_REF

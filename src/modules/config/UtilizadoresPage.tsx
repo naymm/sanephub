@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Usuario, Perfil } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -69,7 +69,9 @@ export default function UtilizadoresPage() {
     empresaId: null,
   });
 
-  const filtered = usuarios.filter(
+  // Apenas utilizadores da base de dados (Supabase). Sem Supabase a página fica vazia (sem mock/seed).
+  const usuariosFromDb = isSupabaseConfigured() ? usuarios : [];
+  const filtered = usuariosFromDb.filter(
     u =>
       u.nome.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -132,6 +134,35 @@ export default function UtilizadoresPage() {
     const payload = { ...form, avatar, senha, modulos };
 
     if (editing) {
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              nome: form.nome.trim(),
+              perfil: form.perfil,
+              cargo: (form.cargo ?? '').trim(),
+              departamento: (form.departamento ?? '').trim(),
+              avatar,
+              permissoes: form.permissoes ?? [],
+              modulos: modulos ?? null,
+              empresa_id: form.empresaId ?? null,
+              colaborador_id: form.colaboradorId ?? null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', editing.id);
+          if (error) throw new Error(error.message);
+          setUsuarios(prev =>
+            prev.map(u => (u.id === editing.id ? { ...editing, ...payload } : u))
+          );
+          setDialogOpen(false);
+          setEditing(null);
+          toast.success('Utilizador actualizado.');
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : 'Erro ao actualizar utilizador');
+        }
+        return;
+      }
       setUsuarios(prev =>
         prev.map(u => (u.id === editing.id ? { ...editing, ...payload } : u))
       );
@@ -170,12 +201,23 @@ export default function UtilizadoresPage() {
     setEditing(null);
   };
 
-  const remove = (u: Usuario) => {
-    if (u.perfil === 'Admin' && usuarios.filter(x => x.perfil === 'Admin').length <= 1) return;
+  const remove = async (u: Usuario) => {
+    if (u.perfil === 'Admin' && usuariosFromDb.filter(x => x.perfil === 'Admin').length <= 1) return;
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { error } = await supabase.from('profiles').delete().eq('id', u.id);
+        if (error) throw new Error(error.message);
+        setUsuarios(prev => prev.filter(x => x.id !== u.id));
+        toast.success('Utilizador removido.');
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Erro ao remover utilizador');
+      }
+      return;
+    }
     setUsuarios(prev => prev.filter(x => x.id !== u.id));
   };
 
-  const isOnlyAdmin = (u: Usuario) => u.perfil === 'Admin' && usuarios.filter(x => x.perfil === 'Admin').length <= 1;
+  const isOnlyAdmin = (u: Usuario) => u.perfil === 'Admin' && usuariosFromDb.filter(x => x.perfil === 'Admin').length <= 1;
 
   if (currentUser?.perfil !== 'Admin') {
     return (
