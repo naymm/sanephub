@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Eye, FileDown } from 'lucide-react';
+import { Search, Plus, Eye, FileDown, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const MESES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
@@ -30,7 +30,7 @@ const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set
 const ANO_ACTUAL = new Date().getFullYear();
 
 export default function RecibosPage() {
-  const { recibos, addRecibo, updateRecibo, colaboradores } = useData();
+  const { recibos, addRecibo, updateRecibo, deleteRecibo, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [mesFilter, setMesFilter] = useState<string>('todos');
   const [anoFilter, setAnoFilter] = useState<string>(String(ANO_ACTUAL));
@@ -127,6 +127,16 @@ export default function RecibosPage() {
     }
   };
 
+  const remove = async (r: ReciboSalario) => {
+    if (!window.confirm(`Remover o recibo de ${getColabName(r.colaboradorId)} (${r.mesAno})?`)) return;
+    try {
+      await deleteRecibo(r.id);
+      toast.success('Recibo removido.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -191,6 +201,7 @@ export default function RecibosPage() {
                     {r.status === 'Emitido' && (
                       <Button variant="ghost" size="sm" onClick={() => marcarPago(r)}>Marcar Pago</Button>
                     )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(r)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </td>
               </tr>

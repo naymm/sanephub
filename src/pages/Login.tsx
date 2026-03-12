@@ -133,31 +133,6 @@ export default function Login() {
             </Button>
           </form>
 
-          <div className="border-t border-border/80 pt-5">
-            <p className="text-xs text-muted-foreground text-center mb-2">Contas de demonstração</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {[
-                { empresaId: 'grupo' as const, email: 'naym@sanep.ao', senha: '1234', label: 'Admin (Grupo)' },
-                { empresaId: 'grupo' as const, email: 'planeamento@sanep.ao', senha: 'plan123', label: 'Planeamento (Grupo)' },
-                { empresaId: 'grupo' as const, email: 'pca@sanep.ao', senha: 'pca123', label: 'PCA (Grupo)' },
-                { empresaId: 1 as const, email: 'antonio@sanep.ao', senha: 'dir123', label: 'Director (Holding)' },
-                { empresaId: 1 as const, email: 'maria@sanep.ao', senha: 'rh123', label: 'RH (Holding)' },
-                { empresaId: 1 as const, email: 'joao@sanep.ao', senha: 'fin123', label: 'Finanças (Holding)' },
-                { empresaId: 1 as const, email: 'isabel@sanep.ao', senha: 'jur123', label: 'Jurídico (Holding)' },
-                { empresaId: 2 as const, email: 'ines@sanep.pt', senha: 'pt123', label: 'Finanças (Crediangolar)' },
-              ].map(c => (
-                <button
-                  key={`${c.empresaId}-${c.email}`}
-                  type="button"
-                  className="p-2.5 rounded-lg border border-border/80 text-left hover:bg-muted/50 transition-colors"
-                  onClick={() => fillDemo(c.empresaId, c.email, c.senha)}
-                >
-                  <span className="font-medium text-foreground">{c.label}</span>
-                  <span className="block text-muted-foreground truncate mt-0.5">{c.email}</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

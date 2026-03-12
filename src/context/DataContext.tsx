@@ -87,6 +87,7 @@ interface DataContextType {
   deleteFalta: (id: number) => Promise<void>;
   addRecibo: (p: Partial<ReciboSalario>) => Promise<ReciboSalario>;
   updateRecibo: (id: number, p: Partial<ReciboSalario>) => Promise<ReciboSalario>;
+  deleteRecibo: (id: number) => Promise<void>;
   addDeclaracao: (p: Partial<Declaracao>) => Promise<Declaracao>;
   updateDeclaracao: (id: number, p: Partial<Declaracao>) => Promise<Declaracao>;
   deleteDeclaracao: (id: number) => Promise<void>;
@@ -426,6 +427,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       runMutation(() => db.recibos_salario.update(supabase!, id, p), row => setRecibos(prev => prev.map(r => (r.id === id ? row : r)))),
     [runMutation]
   );
+  const deleteRecibo = useCallback(
+    (id: number) =>
+      runMutation(() => (db.recibos_salario.delete(supabase!, id) as Promise<void>), () => setRecibos(prev => prev.filter(r => r.id !== id))),
+    [runMutation]
+  );
 
   const addDeclaracao = useCallback(
     (p: Partial<Declaracao>) =>
@@ -693,6 +699,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteFalta,
       addRecibo,
       updateRecibo,
+      deleteRecibo,
       addDeclaracao,
       updateDeclaracao,
       deleteDeclaracao,
@@ -771,6 +778,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteFalta,
       addRecibo,
       updateRecibo,
+      deleteRecibo,
       addDeclaracao,
       updateDeclaracao,
       deleteDeclaracao,

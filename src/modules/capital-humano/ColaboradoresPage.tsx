@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
 
 const STATUS_OPTIONS: StatusColaborador[] = ['Activo', 'Inactivo', 'Suspenso', 'Em férias'];
 const TIPO_CONTRATO_OPTIONS: TipoContrato[] = ['Efectivo', 'Prazo Certo', 'Prestação', 'Estágio'];
@@ -52,7 +52,7 @@ const emptyForm: Omit<Colaborador, 'id'> = {
 };
 
 export default function ColaboradoresPage() {
-  const { colaboradores, addColaborador, updateColaborador, empresas } = useData();
+  const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -128,6 +128,16 @@ export default function ColaboradoresPage() {
     }
   };
 
+  const remove = async (c: Colaborador) => {
+    if (!window.confirm(`Remover o colaborador "${c.nome}"? Esta acção não pode ser desfeita.`)) return;
+    try {
+      await deleteColaborador(c.id);
+      toast.success('Colaborador removido.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -189,6 +199,7 @@ export default function ColaboradoresPage() {
                 <td className="py-3 px-5 text-right">
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(c); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
                 </td>
               </tr>
             ))}

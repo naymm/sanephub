@@ -96,6 +96,7 @@ export default function FaltasPage() {
     if (!window.confirm('Remover este registo de falta?')) return;
     try {
       await deleteFalta(f.id);
+      toast.success('Registo de falta removido.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao remover');
     }

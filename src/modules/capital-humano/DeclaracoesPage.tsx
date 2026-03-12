@@ -24,10 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Check, FileDown } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Check, FileDown, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Rendimentos', 'Antiguidade', 'Outro'];
+const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
 const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
 
 export default function DeclaracoesPage() {
@@ -134,6 +134,16 @@ export default function DeclaracoesPage() {
     }
   };
 
+  const remove = async (d: Declaracao) => {
+    if (!window.confirm('Remover esta declaração?')) return;
+    try {
+      await deleteDeclaracao(d.id);
+      toast.success('Declaração removida.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -186,6 +196,7 @@ export default function DeclaracoesPage() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
                     )}
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(d)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
                     {d.status === 'Pendente' && (
                       <Button variant="ghost" size="sm" onClick={() => marcarEmitida(d)}>Emitir</Button>
                     )}

@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Check, X } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Check, X, Trash2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 
@@ -36,7 +36,7 @@ const STATUS_OPTIONS: { value: StatusFerias | 'todos'; label: string }[] = [
 
 export default function FeriasPage() {
   const { user } = useAuth();
-  const { ferias, addFerias, updateFerias, colaboradores } = useData();
+  const { ferias, addFerias, updateFerias, deleteFerias, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFerias | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -142,6 +142,16 @@ export default function FeriasPage() {
     }
   };
 
+  const remove = async (f: Ferias) => {
+    if (!window.confirm(`Remover o pedido de férias de ${getColabName(f.colaboradorId)} (${f.dataInicio}–${f.dataFim})?`)) return;
+    try {
+      await deleteFerias(f.id);
+      toast.success('Pedido de férias removido.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao remover');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -205,6 +215,7 @@ export default function FeriasPage() {
                     {f.status === 'Pendente' && (
                       <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => handleCancel(f)}>Cancelar</Button>
                     )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(f)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </td>
               </tr>
