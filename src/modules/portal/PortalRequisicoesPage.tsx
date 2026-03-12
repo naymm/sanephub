@@ -48,7 +48,7 @@ function nextNum(requisicoes: Requisicao[]): string {
 export default function PortalRequisicoesPage() {
   const { user } = useAuth();
   const colaboradorId = useColaboradorId();
-  const { requisicoes, addRequisicao, centrosCusto, departamentos, colaboradores } = useData();
+  const { requisicoes, addRequisicao, centrosCusto, departamentos, colaboradoresTodos } = useData();
   const { currentEmpresaId } = useTenant();
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -108,7 +108,7 @@ export default function PortalRequisicoesPage() {
   const save = async () => {
     if (colaboradorId == null || !form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0 || !form.departamento.trim()) return;
     if (form.proformaAnexos.length === 0) return;
-    const empresaId = typeof currentEmpresaId === 'number' ? currentEmpresaId : (colaboradores.find(c => c.id === colaboradorId)?.empresaId ?? 1);
+    const empresaId = typeof currentEmpresaId === 'number' ? currentEmpresaId : (colaboradoresTodos.find(c => c.id === colaboradorId)?.empresaId ?? 1);
     try {
       await addRequisicao({
         num: nextNum(requisicoes),

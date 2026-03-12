@@ -52,7 +52,7 @@ type UsuarioFormState = Omit<Usuario, 'id'> & { empresaId?: number | null };
 
 export default function UtilizadoresPage() {
   const { user: currentUser, usuarios, setUsuarios, createUserInSupabase } = useAuth();
-  const { empresas } = useData();
+  const { empresas, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
@@ -67,6 +67,7 @@ export default function UtilizadoresPage() {
     permissoes: [],
     modulos: [],
     empresaId: null,
+    colaboradorId: null,
   });
 
   // Apenas utilizadores da base de dados (Supabase). Sem Supabase a página fica vazia (sem mock/seed).
@@ -91,6 +92,7 @@ export default function UtilizadoresPage() {
       permissoes: [],
       modulos: [],
       empresaId: null,
+      colaboradorId: null,
     });
     setDialogOpen(true);
   };
@@ -108,6 +110,7 @@ export default function UtilizadoresPage() {
       permissoes: u.permissoes ?? [],
       modulos: u.modulos ?? [],
       empresaId: u.empresaId ?? null,
+      colaboradorId: u.colaboradorId ?? null,
     });
     setDialogOpen(true);
   };
@@ -401,6 +404,24 @@ export default function UtilizadoresPage() {
             <div className="space-y-2">
               <Label>Departamento</Label>
               <Input value={form.departamento} onChange={e => setForm(f => ({ ...f, departamento: e.target.value }))} placeholder="Departamento" />
+            </div>
+            <div className="space-y-2">
+              <Label>Associar a colaborador (opcional)</Label>
+              <Select
+                value={form.colaboradorId != null ? String(form.colaboradorId) : 'nenhum'}
+                onValueChange={v => setForm(f => ({ ...f, colaboradorId: v === 'nenhum' ? null : Number(v) }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Nenhum — utilizador sem ficha de colaborador" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nenhum">Nenhum</SelectItem>
+                  {colaboradores.map(c => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.cargo} ({c.emailCorporativo})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Se associar a um colaborador, este utilizador verá no Portal os seus recibos, férias, faltas e declarações.
+              </p>
             </div>
             <div className="space-y-2 border-t border-border/80 pt-4">
               <Label>Acesso a módulos</Label>

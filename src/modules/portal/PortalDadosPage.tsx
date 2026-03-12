@@ -28,11 +28,11 @@ const emptyContact: EditableContactFields = {
 
 export default function PortalDadosPage() {
   const colaboradorId = useColaboradorId();
-  const { colaboradores, updateColaborador } = useData();
+  const { colaboradoresTodos, updateColaborador } = useData();
   const [form, setForm] = useState<EditableContactFields>(emptyContact);
 
   const colaborador = colaboradorId != null
-    ? colaboradores.find(c => c.id === colaboradorId) ?? null
+    ? colaboradoresTodos.find(c => c.id === colaboradorId) ?? null
     : null;
 
   useEffect(() => {

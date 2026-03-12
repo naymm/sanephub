@@ -13,6 +13,8 @@ interface DataContextType {
   empresas: Empresa[];
   setEmpresas: React.Dispatch<React.SetStateAction<Empresa[]>>;
   colaboradores: Colaborador[];
+  /** Lista completa (sem filtro por empresa). Use no Portal para encontrar o colaborador do utilizador logado. */
+  colaboradoresTodos: Colaborador[];
   setColaboradores: React.Dispatch<React.SetStateAction<Colaborador[]>>;
   ferias: Ferias[];
   setFerias: React.Dispatch<React.SetStateAction<Ferias[]>>;
@@ -625,6 +627,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       empresas,
       setEmpresas,
       colaboradores: filtered.colaboradores,
+      colaboradoresTodos: colaboradores,
       setColaboradores,
       ferias: filtered.ferias,
       setFerias,
@@ -742,6 +745,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       departamentos,
       empresas,
       filtered,
+      colaboradores,
       reunioes,
       actas,
       correspondencias,

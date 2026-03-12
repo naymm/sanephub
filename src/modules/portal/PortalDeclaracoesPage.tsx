@@ -49,7 +49,7 @@ const PAISES_EMBAIXADA = ['ESPANHA', 'PORTUGAL', 'CHINA', 'EUA', 'BRASIL'];
 
 export default function PortalDeclaracoesPage() {
   const colaboradorId = useColaboradorId();
-  const { declaracoes, addDeclaracao, colaboradores } = useData();
+  const { declaracoes, addDeclaracao, colaboradoresTodos } = useData();
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -77,7 +77,7 @@ export default function PortalDeclaracoesPage() {
       toast.error('Só pode imprimir declarações emitidas ou entregues.');
       return;
     }
-    const col = colaboradores.find(c => c.id === d.colaboradorId);
+    const col = colaboradoresTodos.find(c => c.id === d.colaboradorId);
     if (!col) {
       toast.error('Dados do colaborador não encontrados.');
       return;
@@ -316,7 +316,7 @@ export default function PortalDeclaracoesPage() {
             <DialogDescription>Detalhe da sua declaração</DialogDescription>
           </DialogHeader>
           {viewItem && (() => {
-            const col = colaboradores.find(c => c.id === viewItem.colaboradorId);
+            const col = colaboradoresTodos.find(c => c.id === viewItem.colaboradorId);
             return (
               <div className="space-y-4">
                 <div className="space-y-3 text-sm">

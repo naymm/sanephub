@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
 import { useTenant } from '@/context/TenantContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Colaborador, StatusColaborador, TipoContrato, Genero } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
@@ -53,6 +55,7 @@ const emptyForm: Omit<Colaborador, 'id'> = {
 
 export default function ColaboradoresPage() {
   const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas } = useData();
+  const { usuarios } = useAuth();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -63,6 +66,8 @@ export default function ColaboradoresPage() {
   const [editing, setEditing] = useState<Colaborador | null>(null);
   const [viewItem, setViewItem] = useState<Colaborador | null>(null);
   const [form, setForm] = useState<Omit<Colaborador, 'id'>>(emptyForm);
+  /** ID do perfil (utilizador) a associar a este colaborador. null = nenhum. */
+  const [associarUtilizadorId, setAssociarUtilizadorId] = useState<number | null>(null);
 
   const departamentos = Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
 
@@ -79,6 +84,7 @@ export default function ColaboradoresPage() {
 
   const openCreate = () => {
     setEditing(null);
+    setAssociarUtilizadorId(null);
     const today = new Date().toISOString().slice(0, 10);
     setForm({ ...emptyForm, empresaId: empresaIdForNew, dataAdmissao: today });
     setDialogOpen(true);
@@ -86,6 +92,8 @@ export default function ColaboradoresPage() {
 
   const openEdit = (c: Colaborador) => {
     setEditing(c);
+    const usuarioLinked = usuarios.find(u => u.colaboradorId === c.id);
+    setAssociarUtilizadorId(usuarioLinked?.id ?? null);
     setForm({
       empresaId: c.empresaId,
       nome: c.nome,
@@ -119,10 +127,33 @@ export default function ColaboradoresPage() {
     if (!form.nome.trim() || !form.emailCorporativo.trim()) return;
     const payload = { ...form, empresaId: form.empresaId ?? empresaIdForNew };
     try {
-      if (editing) await updateColaborador(editing.id, payload);
-      else await addColaborador(payload);
+      let colaboradorId: number;
+      if (editing) {
+        await updateColaborador(editing.id, payload);
+        colaboradorId = editing.id;
+      } else {
+        const created = await addColaborador(payload);
+        colaboradorId = created.id;
+      }
+      if (isSupabaseConfigured() && supabase && (associarUtilizadorId != null || editing)) {
+        const colabIdToSync = editing ? editing.id : colaboradorId;
+        const { error: clearErr } = await supabase
+          .from('profiles')
+          .update({ colaborador_id: null })
+          .eq('colaborador_id', colabIdToSync);
+        if (clearErr) console.warn('Ao desassociar perfis:', clearErr.message);
+        if (associarUtilizadorId != null) {
+          const { error: linkErr } = await supabase
+            .from('profiles')
+            .update({ colaborador_id: colaboradorId })
+            .eq('id', associarUtilizadorId);
+          if (linkErr) throw new Error(linkErr.message);
+        }
+      }
       setDialogOpen(false);
       setEditing(null);
+      setAssociarUtilizadorId(null);
+      toast.success(editing ? 'Colaborador actualizado.' : 'Colaborador criado.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -354,6 +385,26 @@ export default function ColaboradoresPage() {
                 </SelectContent>
               </Select>
             </div>
+            {isSupabaseConfigured() && usuarios.length > 0 && (
+              <div className="space-y-2 border-t border-border/80 pt-4">
+                <Label>Associar a utilizador (opcional)</Label>
+                <Select
+                  value={associarUtilizadorId != null ? String(associarUtilizadorId) : 'nenhum'}
+                  onValueChange={v => setAssociarUtilizadorId(v === 'nenhum' ? null : Number(v))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Nenhum — colaborador sem conta de acesso" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nenhum">Nenhum</SelectItem>
+                    {usuarios.map(u => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.nome} — {u.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Se associar a um utilizador, ele verá no Portal (Meus Recibos, Férias, etc.) os dados deste colaborador.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>

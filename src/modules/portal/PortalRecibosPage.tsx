@@ -29,13 +29,13 @@ const ANO_ACTUAL = new Date().getFullYear();
 
 export default function PortalRecibosPage() {
   const colaboradorId = useColaboradorId();
-  const { recibos, colaboradores } = useData();
+  const { recibos, colaboradoresTodos } = useData();
   const [mesFilter, setMesFilter] = useState<string>('todos');
   const [anoFilter, setAnoFilter] = useState<string>('todos');
   const [viewOpen, setViewOpen] = useState(false);
   const [viewItem, setViewItem] = useState<ReciboSalario | null>(null);
 
-  const colaborador = colaboradorId != null ? colaboradores.find(c => c.id === colaboradorId) ?? null : null;
+  const colaborador = colaboradorId != null ? colaboradoresTodos.find(c => c.id === colaboradorId) ?? null : null;
 
   const handleGerarPdf = (r: ReciboSalario) => {
     if (!colaborador) {
