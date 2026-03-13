@@ -25,7 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Eye } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Search, Plus } from 'lucide-react';
 
 const METODO_OPTIONS: Pagamento['metodoPagamento'][] = ['Transferência', 'Cheque', 'Numerário', 'Outro'];
 
@@ -56,6 +62,8 @@ export default function PagamentosPage() {
     registadoPor: user?.nome ?? '',
     registadoEm: new Date().toISOString().slice(0, 10),
   });
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
 
   const requisicoesPagaveis = requisicoes.filter(r => r.status === 'Aprovado' || r.status === 'Enviado à Contabilidade');
 
@@ -72,7 +80,8 @@ export default function PagamentosPage() {
 
   const totalRecebido = filtered.reduce((s, p) => s + p.valor, 0);
 
-  const getRequisicaoNum = (reqId: number) => requisicoes.find(r => r.id === reqId)?.num ?? `#${reqId}`;
+  const getRequisicao = (reqId: number) => requisicoes.find(r => r.id === reqId);
+  const getRequisicaoNum = (reqId: number) => getRequisicao(reqId)?.num ?? `#${reqId}`;
 
   const openNew = () => {
     const req = requisicoesPagaveis[0];
@@ -154,9 +163,69 @@ export default function PagamentosPage() {
                 <td className="py-3 px-5 text-muted-foreground">{p.metodoPagamento}</td>
                 <td className="py-3 px-5"><StatusBadge status={p.status} /></td>
                 <td className="py-3 px-5 text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(p); setViewOpen(true); }}>
-                    <Eye className="h-4 w-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        Ações
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setViewItem(p);
+                          setViewOpen(true);
+                        }}
+                      >
+                        Ver
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.proformaAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const req = getRequisicao(p.requisicaoId);
+                          const url = (req?.proformaAnexos ?? []).find(u => u.startsWith('http'));
+                          if (!url) {
+                            toast.error('Nenhuma factura proforma em PDF anexada para pré-visualizar.');
+                            return;
+                          }
+                          setPdfPreviewUrl(url);
+                          setPdfPreviewOpen(true);
+                        }}
+                      >
+                        Proforma
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.facturaFinalAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const req = getRequisicao(p.requisicaoId);
+                          const url = (req?.facturaFinalAnexos ?? []).find(u => u.startsWith('http'));
+                          if (!url) {
+                            toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
+                            return;
+                          }
+                          setPdfPreviewUrl(url);
+                          setPdfPreviewOpen(true);
+                        }}
+                      >
+                        Comprovativo
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.facturaFinalAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const req = getRequisicao(p.requisicaoId);
+                          const urls = (req?.facturaFinalAnexos ?? []).filter(u => u.startsWith('http'));
+                          const url = urls[urls.length - 1];
+                          if (!url) {
+                            toast.error('Nenhuma factura final em PDF anexada para pré-visualizar.');
+                            return;
+                          }
+                          setPdfPreviewUrl(url);
+                          setPdfPreviewOpen(true);
+                        }}
+                      >
+                        Factura Final
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </td>
               </tr>
             ))}
@@ -253,6 +322,30 @@ export default function PagamentosPage() {
               <p><span className="text-muted-foreground">Registado por:</span> {viewItem.registadoPor} em {formatDate(viewItem.registadoEm)}</p>
               {viewItem.observacoes && <p><span className="text-muted-foreground">Observações:</span> {viewItem.observacoes}</p>}
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) {
+            setPdfPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <div className="w-full h-full">
+              <iframe
+                src={pdfPreviewUrl}
+                title="Pré-visualização do documento"
+                className="w-full h-full border-0 rounded-md"
+              />
+            </div>
+          ) : (
+            <DialogDescription>Gerando pré-visualização...</DialogDescription>
           )}
         </DialogContent>
       </Dialog>

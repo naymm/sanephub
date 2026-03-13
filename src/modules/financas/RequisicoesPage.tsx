@@ -5,7 +5,8 @@ import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
-import type { Requisicao, StatusRequisicao } from '@/types';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import type { Requisicao, StatusRequisicao, Pagamento } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Check, X, Send, Banknote, Paperclip, Trash2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Search, Plus, Pencil, Eye, Check, X, Send, Banknote, Paperclip, Trash2, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -40,8 +57,7 @@ const STATUS_OPTIONS: { value: StatusRequisicao | 'todos'; label: string }[] = [
   { value: 'Pago', label: 'Pago' },
 ];
 
-const emptyRequisicao: Omit<Requisicao, 'id' | 'num'> = {
-  empresaId: 1,
+const emptyRequisicao: Omit<Requisicao, 'id' | 'num' | 'empresaId'> = {
   fornecedor: '',
   descricao: '',
   valor: 0,
@@ -67,7 +83,7 @@ function nextNum(requisicoes: Requisicao[]): string {
 
 export default function RequisicoesPage() {
   const { user } = useAuth();
-  const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, empresas } = useData();
+  const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, empresas, departamentos, addPagamento } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -79,14 +95,21 @@ export default function RequisicoesPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [editing, setEditing] = useState<Requisicao | null>(null);
   const [viewReq, setViewReq] = useState<Requisicao | null>(null);
-  const [form, setForm] = useState(emptyRequisicao);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [form, setForm] = useState<Omit<Requisicao, 'id' | 'num'>>(() => ({
+    ...emptyRequisicao,
+    empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
+  }));
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReq, setRejectReq] = useState<Requisicao | null>(null);
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
-  const [novoAnexoNome, setNovoAnexoNome] = useState('');
+  const [valorInput, setValorInput] = useState('');
+  const [deptOpen, setDeptOpen] = useState(false);
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false);
   const [reqParaPago, setReqParaPago] = useState<Requisicao | null>(null);
   const [facturaFinalAnexos, setFacturaFinalAnexos] = useState<string[]>([]);
+  const [comprovativoDialogFromApprove, setComprovativoDialogFromApprove] = useState(false);
   const [novoFacturaFinalNome, setNovoFacturaFinalNome] = useState('');
 
   const filtered = requisicoes.filter(r => {
@@ -105,13 +128,19 @@ export default function RequisicoesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...emptyRequisicao, data: new Date().toISOString().slice(0, 10) });
+    setForm({
+      ...emptyRequisicao,
+      empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
+      data: new Date().toISOString().slice(0, 10),
+    });
+    setValorInput('');
     setDialogOpen(true);
   };
 
   const openEdit = (r: Requisicao) => {
     setEditing(r);
     setForm({
+      empresaId: r.empresaId,
       fornecedor: r.fornecedor,
       nifFornecedor: r.nifFornecedor,
       descricao: r.descricao,
@@ -134,14 +163,15 @@ export default function RequisicoesPage() {
       dataPagamento: r.dataPagamento,
       observacoes: r.observacoes,
     });
+    setValorInput(r.valor ? String(r.valor) : '');
     setDialogOpen(true);
   };
 
-  const addProformaAnexo = (fileName: string) => {
-    if (!fileName.trim()) return;
+  const addProformaAnexo = (url: string) => {
+    if (!url.trim()) return;
     setForm(f => ({
       ...f,
-      proformaAnexos: [...(f.proformaAnexos ?? []), fileName.trim()],
+      proformaAnexos: [...(f.proformaAnexos ?? []), url.trim()],
       proforma: true,
     }));
   };
@@ -153,6 +183,25 @@ export default function RequisicoesPage() {
     });
   };
 
+  const uploadProformaFile = async (file: File) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Upload de proforma requer Supabase configurado.');
+      return;
+    }
+    try {
+      const ext = file.name.split('.').pop() || 'pdf';
+      const baseId = editing?.id ?? Date.now();
+      const path = `requisicoes/proformas/req-${baseId}-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('proformas').upload(path, file, { upsert: true });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar proforma');
+      const { data: pub } = supabase.storage.from('proformas').getPublicUrl(data.path);
+      addProformaAnexo(pub.publicUrl);
+      toast.success('Proforma anexada com sucesso.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível carregar a proforma.');
+    }
+  };
+
   const openPagoDialog = (r: Requisicao) => {
     setReqParaPago(r);
     setFacturaFinalAnexos(r.facturaFinalAnexos ?? []);
@@ -160,10 +209,23 @@ export default function RequisicoesPage() {
     setPagoDialogOpen(true);
   };
 
-  const addFacturaFinalAnexo = (nome: string) => {
-    if (!nome.trim()) return;
-    setFacturaFinalAnexos(prev => [...prev, nome.trim()]);
-    setNovoFacturaFinalNome('');
+  const uploadComprovativoFile = async (file: File) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Upload de comprovativo requer Supabase configurado.');
+      return;
+    }
+    try {
+      const ext = file.name.split('.').pop() || 'pdf';
+      const reqId = reqParaPago?.id ?? Date.now();
+      const path = `requisicoes/comprovativos/req-${reqId}-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('comprovativos').upload(path, file, { upsert: true });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar comprovativo');
+      const { data: pub } = supabase.storage.from('comprovativos').getPublicUrl(data.path);
+      setFacturaFinalAnexos(prev => [...prev, pub.publicUrl]);
+      toast.success('Comprovativo anexado com sucesso.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível carregar o comprovativo.');
+    }
   };
 
   const removeFacturaFinalAnexo = (index: number) => {
@@ -185,18 +247,54 @@ export default function RequisicoesPage() {
     }));
   };
 
+  const guardarComprovativo = async () => {
+    if (!reqParaPago || facturaFinalAnexos.length === 0) return;
+    try {
+      await updateRequisicao(reqParaPago.id, {
+        facturaFinalAnexos,
+        comprovante: true,
+      });
+      toast.success('Comprovativo guardado.');
+      setPagoDialogOpen(false);
+      setReqParaPago(null);
+      setFacturaFinalAnexos([]);
+      setComprovativoDialogFromApprove(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar comprovativo');
+    }
+  };
+
   const confirmarPago = async () => {
     if (!reqParaPago || facturaFinalAnexos.length === 0) return;
     try {
+      const hoje = new Date().toISOString().slice(0, 10);
+
+      // 1) Actualizar requisição para Pago (mantendo a lógica de factura/comprovante)
       await updateRequisicao(reqParaPago.id, {
         status: 'Pago',
         factura: true,
         facturaFinalAnexos,
-        dataPagamento: new Date().toISOString().slice(0, 10),
+        comprovante: true,
+        dataPagamento: hoje,
+      });
+
+      // 2) Criar automaticamente um registo em Pagamentos (Pagamentos Recebidos)
+      const referenciaAuto = `PAG-${new Date().getFullYear()}-${String(reqParaPago.id).padStart(4, '0')}`;
+      await addPagamento({
+        requisicaoId: reqParaPago.id,
+        referencia: referenciaAuto,
+        beneficiario: reqParaPago.fornecedor,
+        valor: reqParaPago.valor,
+        dataPagamento: hoje,
+        metodoPagamento: 'Transferência' as Pagamento['metodoPagamento'],
+        status: 'Recebido',
+        registadoPor: user?.nome ?? '',
+        registadoEm: hoje,
       });
       setPagoDialogOpen(false);
       setReqParaPago(null);
       setFacturaFinalAnexos([]);
+      setComprovativoDialogFromApprove(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao registar pagamento');
     }
@@ -225,6 +323,8 @@ export default function RequisicoesPage() {
   const aprovar = async (r: Requisicao) => {
     try {
       await updateRequisicao(r.id, { status: 'Aprovado', aprovadoPor: user?.nome });
+      setComprovativoDialogFromApprove(true);
+      openPagoDialog({ ...r, status: 'Aprovado', aprovadoPor: user?.nome ?? undefined });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao aprovar');
     }
@@ -307,7 +407,6 @@ export default function RequisicoesPage() {
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Centro Custo</th>
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valor</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
-              <th className="text-center py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Docs</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
             </tr>
@@ -321,40 +420,83 @@ export default function RequisicoesPage() {
                 <td className="py-3 px-5 text-muted-foreground">{r.centroCusto}</td>
                 <td className="py-3 px-5 text-right font-mono">{formatKz(r.valor)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(r.data)}</td>
-                <td className="py-3 px-5 text-center">
-                  <span className="text-xs" title={[r.proformaAnexos?.length ? `Proforma: ${(r.proformaAnexos ?? []).join(', ')}` : null, (r.facturaFinalAnexos?.length ?? 0) > 0 ? `Factura final: ${(r.facturaFinalAnexos ?? []).join(', ')}` : null].filter(Boolean).join(' | ') || undefined}>
-                    {r.proforma ? (r.proformaAnexos?.length ? `P (${r.proformaAnexos.length})` : 'P') : '—'} {(r.factura || (r.facturaFinalAnexos?.length ?? 0) > 0) ? ((r.facturaFinalAnexos?.length ?? 0) > 0 ? `F (${r.facturaFinalAnexos!.length})` : 'F') : '—'} {r.comprovante ? 'C' : '—'}
-                  </span>
-                </td>
                 <td className="py-3 px-5"><StatusBadge status={r.status} /></td>
                 <td className="py-3 px-5 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openView(r)}><Eye className="h-4 w-4" /></Button>
-                    {(user?.perfil === 'Admin' || user?.perfil === 'Financeiro') && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)}><Pencil className="h-4 w-4" /></Button>
-                    )}
-                    {r.status === 'Pendente' && (user?.perfil === 'Admin' || user?.perfil === 'Financeiro') && (
-                      <>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-success" onClick={() => aprovar(r)} title="Aprovar"><Check className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setRejectReq(r); setRejectOpen(true); }} title="Rejeitar"><X className="h-4 w-4" /></Button>
-                      </>
-                    )}
-                    {r.status === 'Aprovado' && (user?.perfil === 'Admin' || user?.perfil === 'Financeiro') && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => enviarContabilidade(r)}
-                        title={temFacturaFinal(r) ? 'Enviar à Contabilidade' : 'Anexe a factura final para enviar à contabilidade'}
-                        disabled={!temFacturaFinal(r)}
-                      >
-                        <Send className="h-4 w-4" />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        Ações
                       </Button>
-                    )}
-                    {(r.status === 'Enviado à Contabilidade' || r.status === 'Aprovado') && (user?.perfil === 'Admin' || user?.perfil === 'Contabilidade' || user?.perfil === 'Financeiro') && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPagoDialog(r)} title="Marcar como pago (anexar factura final)"><Banknote className="h-4 w-4" /></Button>
-                    )}
-                  </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => openView(r)}>
+                        Ver
+                      </DropdownMenuItem>
+                      {(user?.perfil === 'Admin' || user?.perfil === 'Financeiro') && (
+                        <DropdownMenuItem onSelect={() => openEdit(r)}>
+                          Editar
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        disabled={!(r.status === 'Pendente' && (user?.perfil === 'Admin' || user?.perfil === 'Financeiro'))}
+                        onSelect={() => aprovar(r)}
+                      >
+                        Aceitar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!(r.status === 'Pendente' && (user?.perfil === 'Admin' || user?.perfil === 'Financeiro'))}
+                        onSelect={() => {
+                          setRejectReq(r);
+                          setRejectOpen(true);
+                        }}
+                      >
+                        Rejeitar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!(user?.perfil === 'Admin' || user?.perfil === 'Financeiro') || (r.proformaAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const url = (r.proformaAnexos ?? []).find(u => u.startsWith('http'));
+                          if (!url) {
+                            toast.error('Nenhuma factura proforma em PDF anexada para pré-visualizar.');
+                            return;
+                          }
+                          setPdfPreviewUrl(url);
+                          setPdfPreviewOpen(true);
+                        }}
+                      >
+                        Proforma
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={(r.facturaFinalAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const url = (r.facturaFinalAnexos ?? []).find(u => u.startsWith('http'));
+                          if (!url) {
+                            toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
+                            return;
+                          }
+                          setPdfPreviewUrl(url);
+                          setPdfPreviewOpen(true);
+                        }}
+                      >
+                        Comprovativo
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={(r.facturaFinalAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const urls = (r.facturaFinalAnexos ?? []).filter(u => u.startsWith('http'));
+                          const url = urls[urls.length - 1];
+                          if (!url) {
+                            toast.error('Nenhuma factura final em PDF anexada para pré-visualizar.');
+                            return;
+                          }
+                          setPdfPreviewUrl(url);
+                          setPdfPreviewOpen(true);
+                        }}
+                      >
+                        Factura Final
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </td>
               </tr>
             ))}
@@ -392,7 +534,20 @@ export default function RequisicoesPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Valor (Kz)</Label>
-                <Input type="number" min={0} value={form.valor || ''} onChange={e => setForm(f => ({ ...f, valor: Number(e.target.value) || 0 }))} />
+                <Input
+                  inputMode="decimal"
+                  value={valorInput}
+                  onChange={e => {
+                    // Permitir apenas dígitos e vírgula no input visível
+                    const raw = e.target.value.replace(/[^\d,]/g, '');
+                    setValorInput(raw);
+                    // Converter para número usando ponto como separador decimal
+                    const normalized = raw.replace(',', '.');
+                    const num = normalized ? Number(normalized) : 0;
+                    setForm(f => ({ ...f, valor: Number.isNaN(num) ? 0 : num }));
+                  }}
+                  placeholder="0,00"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Data</Label>
@@ -402,7 +557,47 @@ export default function RequisicoesPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Departamento</Label>
-                <Input value={form.departamento} onChange={e => setForm(f => ({ ...f, departamento: e.target.value }))} />
+                <Popover open={deptOpen} onOpenChange={setDeptOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={deptOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {form.departamento || 'Seleccionar departamento'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Pesquisar departamento..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum departamento encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {departamentos.map(d => (
+                            <CommandItem
+                              key={d.id}
+                              value={d.nome}
+                              onSelect={() => {
+                                setForm(f => ({ ...f, departamento: d.nome }));
+                                setDeptOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  form.departamento === d.nome ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              {d.nome}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>Centro de Custo</Label>
@@ -416,64 +611,51 @@ export default function RequisicoesPage() {
                 </Select>
               </div>
             </div>
+            {/* Anexar facturas proforma — visível em criar e editar; colocado aqui para aparecer sem scroll em Nova requisição */}
+            <div className="space-y-2 border-t border-border/80 pt-4">
+              <Label className="flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                Facturas proforma anexadas
+              </Label>
+              {(form.proformaAnexos ?? []).length > 0 && (
+                <ul className="space-y-1.5">
+                  {(form.proformaAnexos ?? []).map((urlOuNome, i) => {
+                    const displayName = urlOuNome.startsWith('http') ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome : urlOuNome;
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                        {urlOuNome.startsWith('http') ? (
+                          <a href={urlOuNome} target="_blank" rel="noopener noreferrer" className="truncate text-primary underline hover:no-underline">{displayName}</a>
+                        ) : (
+                          <span className="truncate">{displayName}</span>
+                        )}
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => removeProformaAnexo(i)} aria-label="Remover anexo">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <Input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    uploadProformaFile(file);
+                    e.target.value = '';
+                  }
+                }}
+              />
+            </div>
+
             {editing && (
               <div className="space-y-2">
                 <Label>Projecto (opcional)</Label>
                 <Input value={form.projecto ?? ''} onChange={e => setForm(f => ({ ...f, projecto: e.target.value || undefined }))} />
               </div>
             )}
-            {/* Anexar facturas proforma — visível em criar e editar */}
-            <div className="space-y-2 border-t border-border/80 pt-4">
-              <Label className="flex items-center gap-2">
-                <Paperclip className="h-4 w-4" />
-                Facturas proforma anexadas
-              </Label>
-              <p className="text-xs text-muted-foreground">Adicione os ficheiros de proforma associados a esta requisição.</p>
-              {(form.proformaAnexos ?? []).length > 0 && (
-                <ul className="space-y-1.5">
-                  {(form.proformaAnexos ?? []).map((nome, i) => (
-                    <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
-                      <span className="truncate">{nome}</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => removeProformaAnexo(i)} aria-label="Remover anexo">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Nome do ficheiro (ex: proforma_techsupply.pdf)"
-                  value={novoAnexoNome}
-                  onChange={e => setNovoAnexoNome(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addProformaAnexo(novoAnexoNome); setNovoAnexoNome(''); } }}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { addProformaAnexo(novoAnexoNome); setNovoAnexoNome(''); }}
-                  disabled={!novoAnexoNome.trim()}
-                >
-                  Adicionar
-                </Button>
-              </div>
-              <div className="relative">
-                <Input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-8"
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file) { addProformaAnexo(file.name); e.target.value = ''; }
-                  }}
-                />
-                <div className="flex items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/30 py-2 text-xs text-muted-foreground pointer-events-none">
-                  <Paperclip className="h-3.5 w-3.5" /> ou clique para seleccionar ficheiro (PDF, imagem, Word)
-                </div>
-              </div>
-            </div>
 
             {/* Factura final — apenas em edição e quando Aprovado ou Pago */}
             {editing && (form.status === 'Aprovado' || form.status === 'Pago') && (
@@ -580,19 +762,57 @@ export default function RequisicoesPage() {
                 <div>
                   <p className="text-muted-foreground text-xs mb-1">Facturas proforma anexadas:</p>
                   <ul className="list-disc list-inside text-sm space-y-0.5">
-                    {(viewReq.proformaAnexos ?? []).map((nome, i) => (
-                      <li key={i}>{nome}</li>
-                    ))}
+                    {(viewReq.proformaAnexos ?? []).map((urlOuNome, i) => {
+                      const displayName = urlOuNome.startsWith('http') ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome : urlOuNome;
+                      return (
+                        <li key={i}>
+                          {urlOuNome.startsWith('http') ? (
+                            <button
+                              type="button"
+                              className="text-primary underline hover:no-underline"
+                              onClick={() => {
+                                setPdfPreviewUrl(urlOuNome);
+                                setViewOpen(false);
+                                setTimeout(() => setPdfPreviewOpen(true), 0);
+                              }}
+                            >
+                              {displayName}
+                            </button>
+                          ) : (
+                            displayName
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
               {(viewReq.facturaFinalAnexos ?? []).length > 0 && (
                 <div>
-                  <p className="text-muted-foreground text-xs mb-1">Factura final anexada:</p>
+                  <p className="text-muted-foreground text-xs mb-1">Factura final / comprovativo anexado:</p>
                   <ul className="list-disc list-inside text-sm space-y-0.5">
-                    {(viewReq.facturaFinalAnexos ?? []).map((nome, i) => (
-                      <li key={i}>{nome}</li>
-                    ))}
+                    {(viewReq.facturaFinalAnexos ?? []).map((urlOuNome, i) => {
+                      const displayName = urlOuNome.startsWith('http') ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome : urlOuNome;
+                      return (
+                        <li key={i}>
+                          {urlOuNome.startsWith('http') ? (
+                            <button
+                              type="button"
+                              className="text-primary underline hover:no-underline"
+                              onClick={() => {
+                                setPdfPreviewUrl(urlOuNome);
+                                setViewOpen(false);
+                                setTimeout(() => setPdfPreviewOpen(true), 0);
+                              }}
+                            >
+                              {displayName}
+                            </button>
+                          ) : (
+                            displayName
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
@@ -621,60 +841,114 @@ export default function RequisicoesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Marcar como Pago — obriga a anexar factura final */}
-      <Dialog open={pagoDialogOpen} onOpenChange={open => { if (!open) { setReqParaPago(null); setFacturaFinalAnexos([]); } setPagoDialogOpen(open); }}>
+      {/* Dialog Marcar como Pago / Anexar factura final / Comprovativo */}
+      <Dialog open={pagoDialogOpen} onOpenChange={open => { if (!open) { setReqParaPago(null); setFacturaFinalAnexos([]); setComprovativoDialogFromApprove(false); } setPagoDialogOpen(open); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Marcar como pago</DialogTitle>
-            <DialogDescription>Anexe pelo menos um ficheiro da factura final para confirmar o pagamento.</DialogDescription>
+            <DialogTitle>
+              {reqParaPago?.status === 'Pago'
+                ? 'Anexar factura final'
+                : comprovativoDialogFromApprove
+                ? 'Comprovativo de pagamento e conclusão'
+                : 'Marcar como pago'}
+            </DialogTitle>
+            <DialogDescription>
+              {reqParaPago?.status === 'Pago'
+                ? 'Anexe a factura final desta requisição já paga.'
+                : comprovativoDialogFromApprove
+                ? 'Anexe o comprovativo de pagamento e conclusão. Pode guardar agora e marcar como pago mais tarde.'
+                : 'Anexe pelo menos um ficheiro da factura final para confirmar o pagamento.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label>Factura final</Label>
+            <Label className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              {reqParaPago?.status === 'Pago'
+                ? 'Factura final'
+                : comprovativoDialogFromApprove
+                ? 'Comprovativo de pagamento e conclusão'
+                : 'Factura final / comprovativo'}
+            </Label>
             {facturaFinalAnexos.length > 0 && (
               <ul className="space-y-1.5">
-                {facturaFinalAnexos.map((nome, i) => (
-                  <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
-                    <span className="truncate">{nome}</span>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => removeFacturaFinalAnexo(i)} aria-label="Remover anexo">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </li>
-                ))}
+                {facturaFinalAnexos.map((urlOuNome, i) => {
+                  const displayName = urlOuNome.startsWith('http') ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome : urlOuNome;
+                  return (
+                    <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                      {urlOuNome.startsWith('http') ? (
+                        <button
+                          type="button"
+                          className="truncate text-primary underline hover:no-underline"
+                          onClick={() => {
+                            setPdfPreviewUrl(urlOuNome);
+                            setPagoDialogOpen(false);
+                            setTimeout(() => setPdfPreviewOpen(true), 0);
+                          }}
+                        >
+                          {displayName}
+                        </button>
+                      ) : (
+                        <span className="truncate">{displayName}</span>
+                      )}
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => removeFacturaFinalAnexo(i)} aria-label="Remover anexo">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nome do ficheiro (ex: factura_final.pdf)"
-                value={novoFacturaFinalNome}
-                onChange={e => setNovoFacturaFinalNome(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addFacturaFinalAnexo(novoFacturaFinalNome); } }}
-                className="flex-1"
-              />
-              <Button type="button" variant="outline" size="sm" onClick={() => addFacturaFinalAnexo(novoFacturaFinalNome)} disabled={!novoFacturaFinalNome.trim()}>
-                Adicionar
-              </Button>
-            </div>
-            <div className="relative">
-              <Input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-8"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) { addFacturaFinalAnexo(file.name); e.target.value = ''; }
-                }}
-              />
-              <div className="flex items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/30 py-2 text-xs text-muted-foreground pointer-events-none">
-                <Paperclip className="h-3.5 w-3.5" /> ou clique para seleccionar ficheiro
-              </div>
-            </div>
+            <Input
+              type="file"
+              accept=".pdf,application/pdf"
+              className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  uploadComprovativoFile(file);
+                  e.target.value = '';
+                }
+              }}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPagoDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmarPago} disabled={facturaFinalAnexos.length === 0}>
-              Marcar como pago
-            </Button>
+            {(comprovativoDialogFromApprove || reqParaPago?.status === 'Pago') && (
+              <Button variant="secondary" onClick={guardarComprovativo} disabled={facturaFinalAnexos.length === 0}>
+                Guardar comprovativo
+              </Button>
+            )}
+            {reqParaPago?.status !== 'Pago' && (
+              <Button onClick={confirmarPago} disabled={facturaFinalAnexos.length === 0}>
+                Marcar como pago
+              </Button>
+            )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de pré-visualização de PDFs (proforma, factura, comprovativo) */}
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) {
+            setPdfPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <div className="w-full h-full">
+              <iframe
+                src={pdfPreviewUrl}
+                title="Pré-visualização do documento"
+                className="w-full h-full border-0 rounded-md"
+              />
+            </div>
+          ) : (
+            <DialogDescription>Gerando pré-visualização...</DialogDescription>
+          )}
         </DialogContent>
       </Dialog>
     </div>
