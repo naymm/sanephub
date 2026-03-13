@@ -26,8 +26,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Check, FileDown, Trash2 } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Search, Plus, Pencil, Eye, Check, FileDown, Trash2, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
 const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
@@ -47,6 +61,9 @@ export default function DeclaracoesPage() {
     dataPedido: new Date().toISOString().slice(0, 10),
     status: 'Pendente',
   });
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [colabSelectOpen, setColabSelectOpen] = useState(false);
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
 
@@ -61,12 +78,13 @@ export default function DeclaracoesPage() {
       return;
     }
     try {
-      await gerarPdfDeclaracaoServico(d, col, {
+      const blobUrl = await gerarPdfDeclaracaoServico(d, col, {
         linha: user?.assinaturaLinha || user?.nome,
         cargo: user?.assinaturaCargo || user?.cargo,
         imagemUrl: user?.assinaturaImagemUrl,
       });
-      toast.success('PDF da declaração gerado. Verifique os transferidos.');
+      setPdfPreviewUrl(blobUrl);
+      setPdfPreviewOpen(true);
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
       toast.error('Não foi possível gerar o PDF.');
@@ -230,14 +248,49 @@ export default function DeclaracoesPage() {
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Colaborador</Label>
-              <Select value={form.colaboradorId ? String(form.colaboradorId) : ''} onValueChange={v => setForm(f => ({ ...f, colaboradorId: Number(v) }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  {colaboradores.map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.departamento}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={colabSelectOpen} onOpenChange={setColabSelectOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={colabSelectOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    {form.colaboradorId
+                      ? (colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar')
+                      : 'Seleccionar colaborador'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Pesquisar colaborador..." />
+                    <CommandList>
+                      <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        {colaboradores.map(c => (
+                          <CommandItem
+                            key={c.id}
+                            value={c.nome}
+                            onSelect={() => {
+                              setForm(f => ({ ...f, colaboradorId: c.id }));
+                              setColabSelectOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                form.colaboradorId === c.id ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            {c.nome} — {c.departamento}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label>Tipo</Label>
@@ -296,6 +349,30 @@ export default function DeclaracoesPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={!form.colaboradorId || !form.dataPedido}>Guardar</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) {
+            setPdfPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <div className="w-full h-full">
+              <iframe
+                src={pdfPreviewUrl}
+                title="Pré-visualização da declaração de serviço"
+                className="w-full h-full border-0 rounded-md"
+              />
+            </div>
+          ) : (
+            <DialogDescription>Gerando pré-visualização...</DialogDescription>
+          )}
         </DialogContent>
       </Dialog>
 

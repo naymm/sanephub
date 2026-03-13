@@ -41,10 +41,10 @@ morada:"Rua Direita da Samba, Edificio LGT, 1º Andar"
 const DIAS_MES = 22
 const CAMBIO = 500
 
-export function gerarPdfRecibo(recibo:any,colaborador:any){
+export function gerarPdfRecibo(recibo:any,colaborador:any): string {
 
 const doc = new jsPDF({unit:"mm",format:"a4"})
-const pageW = doc.getPageWidth()
+const pageW = doc.internal.pageSize.getWidth()
 
 const left = 14
 const right = pageW-14
@@ -194,12 +194,11 @@ linhas.forEach(l => {
   if (l.des > 0)
     doc.text(fmtNumTable(l.des), colX[5] - 2, y, { align: "right" })
 
-  // --- Linha tracejada cinza ---
+  // --- Linha cinza fina entre linhas da tabela ---
   doc.setLineWidth(0.1)
   doc.setDrawColor(150, 150, 150) // cinza médio
-  doc.setLineDash([1.5, 1.5])     // ajuste como preferir
   doc.line(left, y + 2, right, y + 2)
-  doc.setLineDash([])             // volta ao sólido para não afetar outras linhas
+  doc.setDrawColor(0, 0, 0) // repõe preto
   // ------------------------------
 
   y += 6
@@ -248,5 +247,6 @@ doc.line(left,y+5,left+80,y+5)
 doc.setFontSize(7)
 doc.text("© PRIMAVERA BSS / Licença de: SANEP-SGPS, SA",left,285)
 
-doc.save(`Recibo_${colaborador.nome}_${recibo.mesAno}.pdf`)
+const blobUrl = doc.output("bloburl")
+return typeof blobUrl === "string" ? blobUrl : String(blobUrl)
 }

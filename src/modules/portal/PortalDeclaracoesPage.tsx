@@ -64,6 +64,8 @@ export default function PortalDeclaracoesPage() {
   });
   const [bancoOpen, setBancoOpen] = useState(false);
   const [paisOpen, setPaisOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
 
   const minhasDeclaracoes = colaboradorId == null
     ? []
@@ -86,8 +88,9 @@ export default function PortalDeclaracoesPage() {
       return;
     }
     try {
-      await gerarPdfDeclaracaoServico(d, col, undefined);
-      toast.success('PDF da declaração gerado. Verifique os transferidos.');
+      const blobUrl = await gerarPdfDeclaracaoServico(d, col, undefined);
+      setPdfPreviewUrl(blobUrl);
+      setPdfPreviewOpen(true);
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
       toast.error('Não foi possível gerar o PDF.');
@@ -310,6 +313,30 @@ export default function PortalDeclaracoesPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={!form.dataPedido}>Enviar pedido</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) {
+            setPdfPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <div className="w-full h-full">
+              <iframe
+                src={pdfPreviewUrl}
+                title="Pré-visualização da declaração de serviço"
+                className="w-full h-full border-0 rounded-md"
+              />
+            </div>
+          ) : (
+            <DialogDescription>Gerando pré-visualização...</DialogDescription>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -245,7 +245,7 @@ export async function gerarPdfDeclaracaoServico(
   declaracao: Declaracao,
   colaborador: Colaborador,
   assinatura?: AssinaturaDigitalInfo
-): Promise<void> {
+): Promise<string> {
   let imgData: string | null = null;
   let carimboData: string | null = null;
   let assinaturaData: string | null = null;
@@ -360,6 +360,7 @@ export async function gerarPdfDeclaracaoServico(
   doc.setFontSize(10);
   doc.text(cargoAssinatura, pageW / 2, y, { align: 'center' });
 
-  // Gerar o PDF
-  doc.save(`Declaracao_Servico_${colaborador.nome.replace(/\s+/g, '_')}_${declaracao.id}.pdf`);
+  // Devolver um blob URL para pré-visualização (por exemplo, num modal com <iframe />)
+  const blobUrl = doc.output('bloburl');
+  return typeof blobUrl === 'string' ? blobUrl : String(blobUrl);
 }

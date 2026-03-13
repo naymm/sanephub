@@ -52,6 +52,8 @@ export default function RecibosPage() {
     liquido: 0,
     status: 'Emitido',
   });
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
 
@@ -62,8 +64,9 @@ export default function RecibosPage() {
       return;
     }
     try {
-      gerarPdfRecibo(r, col);
-      toast.success('Recibo em PDF gerado. Verifique os transferidos.');
+      const blobUrl = gerarPdfRecibo(r, col);
+      setPdfPreviewUrl(blobUrl);
+      setPdfPreviewOpen(true);
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
       toast.error('Não foi possível gerar o PDF. Tente novamente.');
@@ -298,6 +301,30 @@ export default function RecibosPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={!form.colaboradorId || !form.mesAno || form.vencimentoBase <= 0}>Emitir</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) {
+            setPdfPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <div className="w-full h-full">
+              <iframe
+                src={pdfPreviewUrl}
+                title="Pré-visualização do recibo de salário"
+                className="w-full h-full border-0 rounded-md"
+              />
+            </div>
+          ) : (
+            <DialogDescription>Gerando pré-visualização...</DialogDescription>
+          )}
         </DialogContent>
       </Dialog>
 
