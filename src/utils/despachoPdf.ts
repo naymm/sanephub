@@ -193,9 +193,9 @@ function drawJustifiedParagraph(
 export async function gerarPdfDespacho(
   despacho: DocumentoOficial,
   colaborador: Colaborador | null,
-  assinatura: AssinaturaDigitalInfo,
+  assinatura?: AssinaturaDigitalInfo | null,
   empresaNome?: string
-): Promise<void> {
+): Promise<string> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -310,21 +310,49 @@ export async function gerarPdfDespacho(
       const nomeColab = colaborador?.nome ?? '________________';
       const tratamentoExo = despacho.tratamento === 'Sr(a).' ? 'a Sra.' : 'o Sr.';
       const exonerado = despacho.tratamento === 'Sr(a).' ? 'exonerada' : 'exonerado';
-      texto.push(
-        `É ${tratamentoExo} ${nomeColab}, ${exonerado} do cargo que exercia,`,
-        'produzindo este despacho efeitos a partir desta data.'
-      );
-      if (despacho.numeroEspacoExoneracao) {
-        texto.push(`Registe-se no espaço de exoneração nº ${despacho.numeroEspacoExoneracao}.`);
-      }
+      const queNomeou = despacho.tratamento === 'Sr(a).' ? 'que a nomeou' : 'que o nomeou';
+      const funcao = despacho.funcao?.trim() || '________________';
+      const direccao = despacho.direccao?.trim() || '________________';
+      const empresaParte = empresaLabel ? ` ${empresaLabel}` : '';
+      const numeroRef = despacho.numeroEspacoExoneracao?.trim() || '______';
+      const dataRefExtenso = formatarDataPorExtenso(despacho.dataReferenciaNomeacao);
+      const segmentsExoneracao: { text: string; bold: boolean }[] = [
+        { text: 'É ', bold: false },
+        { text: tratamentoExo, bold: true },
+        { text: ' ', bold: false },
+        { text: nomeColab, bold: true },
+        { text: ', ', bold: false },
+        { text: exonerado, bold: false },
+        { text: ' do cargo que exercia como ', bold: false },
+        { text: funcao, bold: true },
+        { text: ' ', bold: false },
+        { text: direccao, bold: true },
+        ...(empresaParte
+          ? [
+              { text: empresaParte, bold: true },
+            ]
+          : []),
+        { text: ', em virtude do Despacho N ° ', bold: false },
+        { text: numeroRef, bold: true },
+        { text: ' ', bold: false },
+        { text: queNomeou, bold: false },
+        { text: ', desde o dia ', bold: false },
+        { text: dataRefExtenso, bold: false },
+        {
+          text: ', e por sua vez, cessam imediatamente todas as funções outrora desempenhadas.',
+          bold: false,
+        },
+      ];
+      y = drawMixedBoldParagraph(doc, left, y, maxWidth, lineStep, segmentsExoneracao);
+      y += 2;
     } else {
       texto.push('Despacho emitido para os devidos efeitos internos.');
+      texto.forEach((paragrafo) => {
+        const lines = doc.splitTextToSize(paragrafo, maxWidth);
+        doc.text(lines, left, y);
+        y += lines.length * lineStep + 2;
+      });
     }
-    texto.forEach((paragrafo) => {
-      const lines = doc.splitTextToSize(paragrafo, maxWidth);
-      doc.text(lines, left, y);
-      y += lines.length * lineStep + 2;
-    });
   }
 
   // Local e data
@@ -339,57 +367,59 @@ export async function gerarPdfDespacho(
   doc.text(`Luanda, aos ${dataExtenso}`, left, y);
   y += 24;
 
-  // Assinatura
-  const nomeAssinatura = assinatura.linha?.trim() || '_______________________';
-  const cargoAssinatura = assinatura.cargo?.trim() || '';
-  const sigUrl = assinatura.imagemUrl?.trim() || '';
+  // Assinatura (apenas se fornecida — por exemplo, depois do PCA assinar)
+  if (assinatura) {
+    const nomeAssinatura = assinatura.linha?.trim() || '_______________________';
+    const cargoAssinatura = assinatura.cargo?.trim() || '';
+    const sigUrl = assinatura.imagemUrl?.trim() || '';
 
-  // Reservar área para assinatura: imagem (se houver) por cima da linha
-  const lineSigY = y + 10;
-  const lineSigW = 60;
+    // Reservar área para assinatura: imagem (se houver) por cima da linha
+    const lineSigY = y + 10;
+    const lineSigW = 60;
 
-  if (sigUrl) {
-    try {
-      const imgRes = await fetch(sigUrl);
-      const blob = await imgRes.blob();
-      const mime = blob.type || 'image/png';
-      const format = mime.includes('jpeg') || mime.includes('jpg') ? 'JPEG' : 'PNG';
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      const sigW = 45;
-      const sigH = 30;
-      // imagem centrada, sobrepondo a linha (linha passa sensivelmente a meio da imagem)
-      const imgY = lineSigY - sigH / 2;
-      doc.addImage(dataUrl, format, pageW / 2 - sigW / 2, imgY, sigW, sigH);
-    } catch {
-      // Se falhar o carregamento da imagem, segue apenas com linha + texto
+    if (sigUrl) {
+      try {
+        const imgRes = await fetch(sigUrl);
+        const blob = await imgRes.blob();
+        const mime = blob.type || 'image/png';
+        const format = mime.includes('jpeg') || mime.includes('jpg') ? 'JPEG' : 'PNG';
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const sigW = 45;
+        const sigH = 30;
+        // imagem centrada, sobrepondo a linha (linha passa sensivelmente a meio da imagem)
+        const imgY = lineSigY - sigH / 2;
+        doc.addImage(dataUrl, format, pageW / 2 - sigW / 2, imgY, sigW, sigH);
+      } catch {
+        // Se falhar o carregamento da imagem, segue apenas com linha + texto
+      }
+    }
+
+    // Linha de assinatura
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.line(pageW / 2 - lineSigW / 2, lineSigY, pageW / 2 + lineSigW / 2, lineSigY);
+
+    // Nome imediatamente abaixo da linha
+    y = lineSigY + 6;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(11);
+    doc.text(nomeAssinatura, pageW / 2, y, { align: 'center' });
+
+    if (cargoAssinatura) {
+      y += 6;
+      doc.setFont('times', 'normal');
+      doc.setFontSize(10);
+      doc.text(cargoAssinatura, pageW / 2, y, { align: 'center' });
     }
   }
 
-  // Linha de assinatura
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.3);
-  doc.line(pageW / 2 - lineSigW / 2, lineSigY, pageW / 2 + lineSigW / 2, lineSigY);
-
-  // Nome imediatamente abaixo da linha
-  y = lineSigY + 6;
-  doc.setFont('times', 'bold');
-  doc.setFontSize(11);
-  doc.text(nomeAssinatura, pageW / 2, y, { align: 'center' });
-
-  if (cargoAssinatura) {
-    y += 6;
-    doc.setFont('times', 'normal');
-    doc.setFontSize(10);
-    doc.text(cargoAssinatura, pageW / 2, y, { align: 'center' });
-  }
-
-  // Em vez de descarregar de imediato, abrir em pré-visualização num novo separador
+  // Devolve um blob URL (string) para ser usado em pré-visualização (por exemplo, num modal com <iframe />)
   const blobUrl = doc.output('bloburl');
-  window.open(blobUrl, '_blank');
+  return typeof blobUrl === 'string' ? blobUrl : String(blobUrl);
 }
 

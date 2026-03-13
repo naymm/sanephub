@@ -25,11 +25,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Trash2, FileDown } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from '@/components/ui/command';
+import { Search, Plus, Pencil, Eye, Trash2, FileDown, ChevronsUpDown, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { gerarPdfDespacho } from '@/utils/despachoPdf';
 
 const TIPO_OPTIONS: DocumentoOficial['tipo'][] = ['Deliberação', 'Despacho', 'Circular', 'Convocatória', 'Comunicado Interno'];
-const STATUS_OPTIONS: DocumentoOficial['status'][] = ['Rascunho', 'Em Revisão', 'Aprovado', 'Publicado', 'Arquivado'];
+const STATUS_OPTIONS: DocumentoOficial['status'][] = ['Rascunho', 'Em Revisão', 'Aprovado', 'Publicado', 'Arquivado', 'Assinado'];
 
 function nextNumero(tipo: DocumentoOficial['tipo'], docs: DocumentoOficial[]): string {
   const year = new Date().getFullYear();
@@ -54,6 +64,26 @@ function nextNumero(tipo: DocumentoOficial['tipo'], docs: DocumentoOficial[]): s
     .filter(n => !Number.isNaN(n));
   const next = (nums.length ? Math.max(...nums) : 0) + 1;
   return `${prefix}${String(next).padStart(4, '0')}`;
+}
+
+/** Devolve o despacho de nomeação mais recente associado ao colaborador (para preencher referência na exoneração). */
+function nomeacaoPorColaborador(
+  colaboradorId: number,
+  docs: DocumentoOficial[]
+): DocumentoOficial | undefined {
+  const nomeacoes = docs
+    .filter(
+      d =>
+        d.tipo === 'Despacho' &&
+        d.despachoTipo === 'Nomeação' &&
+        d.colaboradorId === colaboradorId
+    )
+    .sort((a, b) => {
+      const da = a.data ? new Date(a.data).getTime() : 0;
+      const db = b.data ? new Date(b.data).getTime() : 0;
+      return db - da;
+    });
+  return nomeacoes[0];
 }
 
 export default function DocumentosOficiaisPage() {
@@ -81,11 +111,15 @@ export default function DocumentosOficiaisPage() {
     direccao: '',
     acumulaFuncao: false,
     numeroEspacoExoneracao: '',
+    dataReferenciaNomeacao: undefined,
     pcaAssinado: false,
     pcaAssinadoEm: undefined,
     pcaAssinadoPor: undefined,
   });
-  const [despachoColabSearch, setDespachoColabSearch] = useState('');
+  const [nomeacaoColabOpen, setNomeacaoColabOpen] = useState(false);
+  const [exoneracaoColabOpen, setExoneracaoColabOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
 
   const filtered = documentosOficiais.filter(d => {
     const matchSearch =
@@ -115,6 +149,7 @@ export default function DocumentosOficiaisPage() {
       direccao: '',
       acumulaFuncao: false,
       numeroEspacoExoneracao: '',
+      dataReferenciaNomeacao: undefined,
       pcaAssinado: false,
       pcaAssinadoEm: undefined,
       pcaAssinadoPor: undefined,
@@ -139,6 +174,7 @@ export default function DocumentosOficiaisPage() {
       direccao: d.direccao ?? '',
       acumulaFuncao: d.acumulaFuncao ?? false,
       numeroEspacoExoneracao: d.numeroEspacoExoneracao ?? '',
+      dataReferenciaNomeacao: d.dataReferenciaNomeacao ?? undefined,
       pcaAssinado: d.pcaAssinado ?? false,
       pcaAssinadoEm: d.pcaAssinadoEm,
       pcaAssinadoPor: d.pcaAssinadoPor,
@@ -160,6 +196,7 @@ export default function DocumentosOficiaisPage() {
       direccao: tipo === 'Despacho' ? f.direccao ?? '' : '',
       acumulaFuncao: tipo === 'Despacho' ? f.acumulaFuncao ?? false : false,
       numeroEspacoExoneracao: tipo === 'Despacho' ? f.numeroEspacoExoneracao ?? '' : '',
+      dataReferenciaNomeacao: tipo === 'Despacho' ? f.dataReferenciaNomeacao ?? undefined : undefined,
       titulo: tipo === 'Despacho' ? despachoTituloBase(f.despachoTipo ?? 'Nomeação') : f.titulo,
     }));
   };
@@ -189,7 +226,7 @@ export default function DocumentosOficiaisPage() {
         ? empresas.find(e => e.id === d.empresaId)?.nome
         : undefined;
     try {
-      await gerarPdfDespacho(
+      const blobUrl = await gerarPdfDespacho(
         d,
         col,
         {
@@ -199,7 +236,8 @@ export default function DocumentosOficiaisPage() {
         },
         empresaNome
       );
-      toast.success('PDF do despacho gerado. Verifique os transferidos.');
+      setPdfPreviewUrl(blobUrl);
+      setPdfPreviewOpen(true);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível gerar o PDF do despacho.');
     }
@@ -419,17 +457,55 @@ export default function DocumentosOficiaisPage() {
                       </div>
                       <div className="space-y-2 col-span-2">
                         <Label>Colaborador</Label>
-                        <Select
-                          value={form.colaboradorId != null ? String(form.colaboradorId) : ''}
-                          onValueChange={v => setForm(f => ({ ...f, colaboradorId: v ? Number(v) : null }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Seleccionar colaborador" /></SelectTrigger>
-                          <SelectContent>
-                            {(form.empresaId ? colaboradores.filter(c => c.empresaId === form.empresaId) : colaboradores).map(c => (
-                              <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={nomeacaoColabOpen} onOpenChange={setNomeacaoColabOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={nomeacaoColabOpen}
+                              className="w-full justify-between font-normal"
+                            >
+                              {form.colaboradorId != null
+                                ? colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar colaborador'
+                                : 'Seleccionar colaborador'}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Pesquisar colaborador..." />
+                              <CommandList>
+                                <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  {(form.empresaId
+                                    ? colaboradores.filter(c => c.empresaId === form.empresaId)
+                                    : colaboradores
+                                  ).map(c => (
+                                    <CommandItem
+                                      key={c.id}
+                                      value={c.nome}
+                                      onSelect={() => {
+                                        setForm(f => ({
+                                          ...f,
+                                          colaboradorId: c.id,
+                                        }));
+                                        setNomeacaoColabOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          'mr-2 h-4 w-4',
+                                          form.colaboradorId === c.id ? 'opacity-100' : 'opacity-0'
+                                        )}
+                                      />
+                                      {c.nome}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -461,35 +537,70 @@ export default function DocumentosOficiaisPage() {
                   <div className="grid gap-4 border border-border/60 rounded-md p-3">
                     <p className="text-xs font-medium text-muted-foreground">Dados da Exoneração</p>
                     <div className="space-y-2">
-                      <Label>Pesquisar colaborador</Label>
-                      <Input
-                        placeholder="Pesquisar colaborador..."
-                        value={despachoColabSearch}
-                        onChange={e => setDespachoColabSearch(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
                       <Label>Colaborador</Label>
-                      <Select
-                        value={form.colaboradorId != null ? String(form.colaboradorId) : ''}
-                        onValueChange={v => setForm(f => ({ ...f, colaboradorId: v ? Number(v) : null }))}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Seleccionar colaborador" /></SelectTrigger>
-                        <SelectContent>
-                          {(form.empresaId ? colaboradores.filter(c => c.empresaId === form.empresaId) : colaboradores)
-                            .filter(c => c.nome.toLowerCase().includes(despachoColabSearch.toLowerCase()))
-                            .map(c => (
-                              <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover open={exoneracaoColabOpen} onOpenChange={setExoneracaoColabOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={exoneracaoColabOpen}
+                            className="w-full justify-between font-normal"
+                          >
+                            {form.colaboradorId != null
+                              ? colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar colaborador'
+                              : 'Seleccionar colaborador'}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Pesquisar colaborador..." />
+                            <CommandList>
+                              <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
+                              <CommandGroup>
+                                {(form.empresaId
+                                  ? colaboradores.filter(c => c.empresaId === form.empresaId)
+                                  : colaboradores
+                                ).map(c => (
+                                  <CommandItem
+                                    key={c.id}
+                                    value={c.nome}
+                                    onSelect={() => {
+                                      const nomeacao = nomeacaoPorColaborador(c.id, documentosOficiais);
+                                      setForm(f => ({
+        ...f,
+        colaboradorId: c.id,
+        numeroEspacoExoneracao: nomeacao?.numero ?? "",
+        dataReferenciaNomeacao: nomeacao?.data ?? undefined,
+        funcao: nomeacao?.funcao ?? f.funcao ?? "",
+        direccao: nomeacao?.direccao ?? f.direccao ?? "",
+        empresaId: nomeacao?.empresaId ?? f.empresaId ?? null,
+        tratamento: nomeacao?.tratamento ?? f.tratamento ?? "Sr.",
+      }));
+                                      setExoneracaoColabOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        'mr-2 h-4 w-4',
+                                        form.colaboradorId === c.id ? 'opacity-100' : 'opacity-0'
+                                      )}
+                                    />
+                                    {c.nome}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div className="space-y-2">
                       <Label>Número de espaço de exoneração</Label>
                       <Input
                         value={form.numeroEspacoExoneracao ?? ''}
                         onChange={e => setForm(f => ({ ...f, numeroEspacoExoneracao: e.target.value }))}
-                        placeholder="Número de espaço de exoneração"
+                        placeholder="Referência do despacho de nomeação (preenchido ao seleccionar o colaborador)"
                       />
                     </div>
                   </div>
@@ -536,6 +647,30 @@ export default function DocumentosOficiaisPage() {
               <p><span className="text-muted-foreground">Autor:</span> {viewItem.autor}</p>
               <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) {
+            setPdfPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <div className="w-full h-full">
+              <iframe
+                src={pdfPreviewUrl}
+                title="Pré-visualização do despacho"
+                className="w-full h-full border-0 rounded-md"
+              />
+            </div>
+          ) : (
+            <DialogDescription>Gerando pré-visualização...</DialogDescription>
           )}
         </DialogContent>
       </Dialog>

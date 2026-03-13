@@ -385,7 +385,7 @@ export interface DocumentoOficial {
   titulo: string;
   data: string;
   autor: string;
-  status: 'Rascunho' | 'Em Revisão' | 'Aprovado' | 'Publicado' | 'Arquivado';
+  status: 'Rascunho' | 'Em Revisão' | 'Aprovado' | 'Publicado' | 'Arquivado' | 'Assinado';
   /** Empresa à qual o despacho/documento diz respeito (quando aplicável). */
   empresaId?: number | null;
   /** Tipo de despacho (aplicável apenas quando tipo === 'Despacho'). */
@@ -400,8 +400,10 @@ export interface DocumentoOficial {
   direccao?: string;
   /** Se o colaborador acumula função. */
   acumulaFuncao?: boolean;
-  /** Número de espaço de exoneração (informação de controlo interno). */
+  /** Número de espaço de exoneração (referência ao despacho de nomeação). */
   numeroEspacoExoneracao?: string;
+  /** Data do despacho de nomeação de referência (para texto da exoneração: "desde o dia X"). */
+  dataReferenciaNomeacao?: string | null;
   /** Assinatura digital do PCA registada para este despacho/documento. */
   pcaAssinado?: boolean;
   pcaAssinadoEm?: string;
