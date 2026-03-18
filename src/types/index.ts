@@ -156,6 +156,10 @@ export interface Requisicao {
   factura: boolean;
   facturaFinalAnexos?: string[];
   comprovante: boolean;
+  /** URLs (ou nomes) dos anexos do comprovativo de pagamento. */
+  comprovativoAnexos?: string[];
+  /** Data/hora em que o comprovativo foi anexado (para controlo das 48h). */
+  comprovativoAnexadoEm?: string;
   enviadoContabilidade: boolean;
   motivoRejeicao?: string;
   aprovadoPor?: string;

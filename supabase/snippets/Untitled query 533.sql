@@ -1,1 +1,1 @@
-comment on column public.requisicoes.comprovante is 'Comprovativo de pagamento e conclusão anexado';
+comment on column public.requisicoes.comprovativo_anexado_em is 'Data/hora em que o comprovativo foi anexado (para controle de 48h).';

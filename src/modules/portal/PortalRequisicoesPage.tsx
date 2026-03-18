@@ -4,6 +4,7 @@ import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Requisicao, StatusRequisicao } from '@/types';
@@ -21,13 +22,19 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Eye, Paperclip, Trash2 } from 'lucide-react';
+import { Plus, Paperclip, Trash2 } from 'lucide-react';
 
 const STATUS_OPTIONS: { value: StatusRequisicao | 'todos'; label: string }[] = [
   { value: 'todos', label: 'Todos' },
@@ -50,12 +57,14 @@ function nextNum(requisicoes: Requisicao[]): string {
 export default function PortalRequisicoesPage() {
   const { user } = useAuth();
   const colaboradorId = useColaboradorId();
-  const { requisicoes, addRequisicao, centrosCusto, departamentos, colaboradoresTodos } = useData();
+  const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, departamentos, colaboradoresTodos, addPagamento } = useData();
   const { currentEmpresaId } = useTenant();
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [viewReq, setViewReq] = useState<Requisicao | null>(null);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     fornecedor: '',
     descricao: '',
@@ -63,9 +72,9 @@ export default function PortalRequisicoesPage() {
     departamento: '',
     centroCusto: 'CC-001',
     data: new Date().toISOString().slice(0, 10),
+    tipoSolicitacao: 'Factura Proforma' as 'Factura Proforma' | 'Somente factura depois da compra',
     proformaAnexos: [] as string[],
   });
-  const [novoAnexoProforma, setNovoAnexoProforma] = useState('');
 
   const minhasRequisicoes = colaboradorId == null
     ? []
@@ -77,6 +86,27 @@ export default function PortalRequisicoesPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
+  const openPdfPreview = (url?: string | null) => {
+    const httpUrl = (url ?? '').startsWith('http') ? url : null;
+    if (!httpUrl) return;
+    setPdfPreviewUrl(httpUrl);
+    setPdfPreviewOpen(true);
+  };
+
+  const getFirstHttpUrl = (urls?: string[]) => (urls ?? []).filter(u => u.startsWith('http'))[0];
+  const getLastHttpUrl = (urls?: string[]) => {
+    const httpUrls = (urls ?? []).filter(u => u.startsWith('http'));
+    return httpUrls[httpUrls.length - 1];
+  };
+
+  const prazoParaFacturaFinalValido = (r: Requisicao) => {
+    if (!r.comprovativoAnexadoEm) return false;
+    const ts = new Date(r.comprovativoAnexadoEm).getTime();
+    if (Number.isNaN(ts)) return false;
+    const diffMs = Date.now() - ts;
+    return diffMs >= 0 && diffMs <= 48 * 60 * 60 * 1000;
+  };
+
   const openCreate = () => {
     const dept = departamentos.find(d => d.nome === user?.departamento)?.nome ?? departamentos[0]?.nome ?? '';
     setForm({
@@ -86,9 +116,9 @@ export default function PortalRequisicoesPage() {
       departamento: dept,
       centroCusto: 'CC-001',
       data: new Date().toISOString().slice(0, 10),
+      tipoSolicitacao: 'Factura Proforma',
       proformaAnexos: [],
     });
-    setNovoAnexoProforma('');
     setDialogOpen(true);
   };
 
@@ -98,7 +128,6 @@ export default function PortalRequisicoesPage() {
       ...f,
       proformaAnexos: [...f.proformaAnexos, nome.trim()],
     }));
-    setNovoAnexoProforma('');
   };
 
   const removeProformaAnexo = (index: number) => {
@@ -110,8 +139,13 @@ export default function PortalRequisicoesPage() {
 
   const save = async () => {
     if (colaboradorId == null || !form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0 || !form.departamento.trim()) return;
-    if (form.proformaAnexos.length === 0) return;
+    const temProforma = form.tipoSolicitacao === 'Factura Proforma';
+    if (temProforma && form.proformaAnexos.length === 0) {
+      toast.error('Seleccione e anexe pelo menos uma factura proforma em PDF.');
+      return;
+    }
     const empresaId = typeof currentEmpresaId === 'number' ? currentEmpresaId : (colaboradoresTodos.find(c => c.id === colaboradorId)?.empresaId ?? 1);
+    const proformaAnexos = temProforma ? form.proformaAnexos : [];
     try {
       await addRequisicao({
         num: nextNum(requisicoes),
@@ -122,10 +156,12 @@ export default function PortalRequisicoesPage() {
         centroCusto: form.centroCusto,
         data: form.data,
         status: 'Pendente',
-        proforma: true,
-        proformaAnexos: form.proformaAnexos,
+        proforma: temProforma,
+        proformaAnexos,
         factura: false,
+        facturaFinalAnexos: [],
         comprovante: false,
+        comprovativoAnexos: [],
         enviadoContabilidade: false,
         requisitanteColaboradorId: colaboradorId,
         empresaId,
@@ -187,7 +223,48 @@ export default function PortalRequisicoesPage() {
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(r.data)}</td>
                 <td className="py-3 px-5"><StatusBadge status={r.status} /></td>
                 <td className="py-3 px-5 text-right">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewReq(r); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        Ações
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => { setViewReq(r); setViewOpen(true); }}>
+                        Ver
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={(r.proformaAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const url = getFirstHttpUrl(r.proformaAnexos);
+                          if (!url) return;
+                          openPdfPreview(url);
+                        }}
+                      >
+                        Proforma
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={(r.comprovativoAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const url = getFirstHttpUrl(r.comprovativoAnexos);
+                          if (!url) return;
+                          openPdfPreview(url);
+                        }}
+                      >
+                        Comprovativo
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={(r.facturaFinalAnexos?.length ?? 0) === 0}
+                        onSelect={() => {
+                          const url = getLastHttpUrl(r.facturaFinalAnexos);
+                          if (!url) return;
+                          openPdfPreview(url);
+                        }}
+                      >
+                        Factura Final
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </td>
               </tr>
             ))}
@@ -243,63 +320,97 @@ export default function PortalRequisicoesPage() {
               <Label>Data</Label>
               <Input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
             </div>
+            <div className="space-y-2">
+              <Label>Tipo de factura</Label>
+              <Select value={form.tipoSolicitacao} onValueChange={v => setForm(f => ({ ...f, tipoSolicitacao: v as typeof f.tipoSolicitacao }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent position="popper" className="z-[100]">
+                  <SelectItem value="Factura Proforma">Factura Proforma</SelectItem>
+                  <SelectItem value="Somente factura depois da compra">Somente factura depois da compra</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2 border-t border-border/80 pt-4">
               <Label className="flex items-center gap-2">
                 <Paperclip className="h-4 w-4" />
-                Factura proforma <span className="text-destructive">(obrigatório)</span>
+                Facturas proforma anexadas
               </Label>
-              <p className="text-xs text-muted-foreground">Anexe pelo menos uma factura proforma. Indique o nome do ficheiro ou seleccione o ficheiro.</p>
-              {form.proformaAnexos.length > 0 && (
+
+              {(form.proformaAnexos ?? []).length > 0 && (
                 <ul className="space-y-1.5">
-                  {form.proformaAnexos.map((nome, i) => (
-                    <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
-                      <span className="truncate">{nome}</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => removeProformaAnexo(i)} aria-label="Remover anexo">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
-                  ))}
+                  {(form.proformaAnexos ?? []).map((urlOuNome, i) => {
+                    const displayName = urlOuNome.startsWith('http')
+                      ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome
+                      : urlOuNome;
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                        {urlOuNome.startsWith('http') ? (
+                          <a
+                            href={urlOuNome}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate text-primary underline hover:no-underline"
+                          >
+                            {displayName}
+                          </a>
+                        ) : (
+                          <span className="truncate">{displayName}</span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                          onClick={() => removeProformaAnexo(i)}
+                          aria-label="Remover anexo"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Nome do ficheiro (ex: proforma_fornecedor.pdf)"
-                  value={novoAnexoProforma}
-                  onChange={e => setNovoAnexoProforma(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addProformaAnexo(novoAnexoProforma); } }}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addProformaAnexo(novoAnexoProforma)}
-                  disabled={!novoAnexoProforma.trim()}
-                >
-                  Adicionar
-                </Button>
-              </div>
-              <div className="relative">
+
+              {(form.tipoSolicitacao === 'Factura Proforma' || (form.proformaAnexos ?? []).length > 0) && (
                 <Input
                   type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-8"
-                  onChange={e => {
+                  accept=".pdf,application/pdf"
+                  className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+                  onChange={async e => {
                     const file = e.target.files?.[0];
-                    if (file) { addProformaAnexo(file.name); e.target.value = ''; }
+                    if (!file) return;
+                    if (!isSupabaseConfigured() || !supabase) {
+                      toast.error('Upload requer Supabase configurado.');
+                      return;
+                    }
+                    try {
+                      const ext = file.name.split('.').pop() || 'pdf';
+                      const path = `requisicoes/proformas/portal-proforma-${Date.now()}.${ext}`;
+                      const { data, error } = await supabase.storage.from('proformas').upload(path, file, { upsert: true });
+                      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar proforma');
+                      const { data: pub } = supabase.storage.from('proformas').getPublicUrl(data.path);
+                      addProformaAnexo(pub.publicUrl);
+                      e.target.value = '';
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Não foi possível carregar a proforma.');
+                    }
                   }}
                 />
-                <div className="flex items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/30 py-2 text-xs text-muted-foreground pointer-events-none">
-                  <Paperclip className="h-3.5 w-3.5" /> ou clique para seleccionar ficheiro (PDF, imagem, Word)
-                </div>
-              </div>
+              )}
             </div>
           </div>
           <DialogFooter className="shrink-0 border-t border-border/80 pt-4 mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button
               onClick={save}
-              disabled={!form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0 || !form.departamento.trim() || form.proformaAnexos.length === 0}
+              disabled={
+                !form.fornecedor.trim() ||
+                !form.descricao.trim() ||
+                form.valor <= 0 ||
+                !form.departamento.trim() ||
+                (form.tipoSolicitacao === 'Factura Proforma' && form.proformaAnexos.length === 0)
+              }
             >
               Submeter
             </Button>
@@ -314,26 +425,174 @@ export default function PortalRequisicoesPage() {
             <DialogDescription>Detalhe da requisição</DialogDescription>
           </DialogHeader>
           {viewReq && (
-            <div className="space-y-3 text-sm">
-              <p><span className="text-muted-foreground">Fornecedor:</span> {viewReq.fornecedor}</p>
-              <p><span className="text-muted-foreground">Descrição:</span> {viewReq.descricao}</p>
-              <p><span className="text-muted-foreground">Valor:</span> {formatKz(viewReq.valor)}</p>
-              <p><span className="text-muted-foreground">Departamento:</span> {viewReq.departamento}</p>
-              <p><span className="text-muted-foreground">Centro de custo:</span> {viewReq.centroCusto}</p>
-              <p><span className="text-muted-foreground">Data:</span> {formatDate(viewReq.data)}</p>
-              <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewReq.status} /></p>
+            <div className="space-y-4 text-sm">
+              <div className="space-y-1.5">
+                <p><span className="text-muted-foreground">Fornecedor:</span> {viewReq.fornecedor}</p>
+                <p><span className="text-muted-foreground">Descrição:</span> {viewReq.descricao}</p>
+                <p><span className="text-muted-foreground">Valor:</span> {formatKz(viewReq.valor)}</p>
+                <p><span className="text-muted-foreground">Departamento:</span> {viewReq.departamento}</p>
+                <p><span className="text-muted-foreground">Centro de custo:</span> {viewReq.centroCusto}</p>
+                <p><span className="text-muted-foreground">Data:</span> {formatDate(viewReq.data)}</p>
+                <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewReq.status} /></p>
+              </div>
+
               {(viewReq.proformaAnexos ?? []).length > 0 && (
                 <div>
                   <p className="text-muted-foreground text-xs mb-1">Factura(s) proforma anexada(s):</p>
                   <ul className="list-disc list-inside space-y-0.5">
-                    {(viewReq.proformaAnexos ?? []).map((nome, i) => (
-                      <li key={i}>{nome}</li>
+                    {(viewReq.proformaAnexos ?? []).map((urlOuNome, i) => (
+                      <li key={i}>
+                        {urlOuNome.startsWith('http') ? (
+                          <button
+                            type="button"
+                            className="text-primary underline hover:no-underline"
+                            onClick={() => openPdfPreview(urlOuNome)}
+                          >
+                            {urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome}
+                          </button>
+                        ) : (
+                          urlOuNome
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
-              {viewReq.motivoRejeicao && <p><span className="text-muted-foreground">Motivo rejeição:</span> {viewReq.motivoRejeicao}</p>}
+
+              {(viewReq.comprovativoAnexos ?? []).length > 0 && (
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Comprovativo(s) de pagamento:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {(viewReq.comprovativoAnexos ?? []).map((urlOuNome, i) => (
+                      <li key={i}>
+                        {urlOuNome.startsWith('http') ? (
+                          <button
+                            type="button"
+                            className="text-primary underline hover:no-underline"
+                            onClick={() => openPdfPreview(urlOuNome)}
+                          >
+                            {urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome}
+                          </button>
+                        ) : (
+                          urlOuNome
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {(viewReq.facturaFinalAnexos ?? []).length > 0 && (
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Factura final anexada:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {(viewReq.facturaFinalAnexos ?? []).map((urlOuNome, i) => (
+                      <li key={i}>
+                        {urlOuNome.startsWith('http') ? (
+                          <button
+                            type="button"
+                            className="text-primary underline hover:no-underline"
+                            onClick={() => openPdfPreview(urlOuNome)}
+                          >
+                            {urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome}
+                          </button>
+                        ) : (
+                          urlOuNome
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {viewReq.motivoRejeicao && (
+                <p><span className="text-muted-foreground">Motivo rejeição:</span> {viewReq.motivoRejeicao}</p>
+              )}
+
+              {viewReq.comprovante && (viewReq.facturaFinalAnexos ?? []).length === 0 && (
+                <div className="space-y-2 border-t border-border/80 pt-3">
+                  <Label>Factura final (até 48h após comprovativo)</Label>
+                  {!prazoParaFacturaFinalValido(viewReq) ? (
+                    <p className="text-xs text-destructive">
+                      O prazo de 48h para anexar a factura final expirou.
+                    </p>
+                  ) : (
+                    <Input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={async e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!isSupabaseConfigured() || !supabase) {
+                          toast.error('Upload requer Supabase configurado.');
+                          return;
+                        }
+                        try {
+                          const ext = file.name.split('.').pop() || 'pdf';
+                          const path = `requisicoes/factura-final/req-${viewReq.id}-${Date.now()}.${ext}`;
+                          const { data, error } = await supabase.storage.from('proformas').upload(path, file, { upsert: true });
+                          if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar factura final');
+                          const { data: pub } = supabase.storage.from('proformas').getPublicUrl(data.path);
+
+                          const hoje = new Date().toISOString().slice(0, 10);
+                          const updated = await updateRequisicao(viewReq.id, {
+                            factura: true,
+                            facturaFinalAnexos: [pub.publicUrl],
+                            status: 'Pago',
+                            comprovante: true,
+                            dataPagamento: hoje,
+                          });
+
+                          const referenciaAuto = `PAG-${new Date().getFullYear()}-${String(viewReq.id).padStart(4, '0')}`;
+                          await addPagamento({
+                            requisicaoId: viewReq.id,
+                            referencia: referenciaAuto,
+                            beneficiario: viewReq.fornecedor,
+                            valor: viewReq.valor,
+                            dataPagamento: hoje,
+                            metodoPagamento: 'Transferência',
+                            status: 'Recebido',
+                            registadoPor: user?.nome ?? 'Sistema',
+                            registadoEm: hoje,
+                          });
+
+                          toast.success('Factura final anexada. Requisição concluída.');
+                          setViewReq(updated);
+                          setViewOpen(false);
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : 'Não foi possível anexar a factura final.');
+                        } finally {
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              )}
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de pré-visualização de PDFs */}
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) setPdfPreviewUrl(null);
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <div className="w-full h-full">
+              <iframe
+                src={pdfPreviewUrl}
+                title="Pré-visualização do documento"
+                className="w-full h-full border-0 rounded-md"
+              />
+            </div>
+          ) : (
+            <DialogDescription>Gerando pré-visualização...</DialogDescription>
           )}
         </DialogContent>
       </Dialog>

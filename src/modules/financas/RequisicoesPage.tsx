@@ -4,7 +4,7 @@ import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useTenant } from '@/context/TenantContext';
-import { useAuth } from '@/context/AuthContext';
+import { hasModuleAccess, useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Requisicao, StatusRequisicao, Pagamento } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -83,9 +83,10 @@ function nextNum(requisicoes: Requisicao[]): string {
 
 export default function RequisicoesPage() {
   const { user } = useAuth();
-  const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, empresas, departamentos, addPagamento } = useData();
+  const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, empresas, departamentos, addPagamento, colaboradoresTodos } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
+  const canAccessFinancas = hasModuleAccess(user, 'financas');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [centroFilter, setCentroFilter] = useState<string>('todos');
@@ -97,6 +98,7 @@ export default function RequisicoesPage() {
   const [viewReq, setViewReq] = useState<Requisicao | null>(null);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [viewInlinePdfUrl, setViewInlinePdfUrl] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<Requisicao, 'id' | 'num'>>(() => ({
     ...emptyRequisicao,
     empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
@@ -111,6 +113,20 @@ export default function RequisicoesPage() {
   const [facturaFinalAnexos, setFacturaFinalAnexos] = useState<string[]>([]);
   const [comprovativoDialogFromApprove, setComprovativoDialogFromApprove] = useState(false);
   const [novoFacturaFinalNome, setNovoFacturaFinalNome] = useState('');
+
+  const resolvePublicUrl = async (bucket: 'proformas' | 'comprovativos', value: string): Promise<string | null> => {
+    if (!value) return null;
+    if (value.startsWith('http')) return value;
+    if (!isSupabaseConfigured() || !supabase) return null;
+    const { data } = supabase.storage.from(bucket).getPublicUrl(value);
+    return data?.publicUrl ?? null;
+  };
+
+  const getFirstTruthy = (arr?: string[]) => (arr ?? []).find(v => !!v) ?? null;
+  const getLastTruthy = (arr?: string[]) => {
+    const xs = (arr ?? []).filter(v => !!v);
+    return xs.length ? xs[xs.length - 1] : null;
+  };
 
   const filtered = requisicoes.filter(r => {
     const matchSearch =
@@ -204,7 +220,9 @@ export default function RequisicoesPage() {
 
   const openPagoDialog = (r: Requisicao) => {
     setReqParaPago(r);
-    setFacturaFinalAnexos(r.facturaFinalAnexos ?? []);
+    // Neste fluxo, o diálogo é para anexar o comprovativo.
+    // Guardamos os URLs em comprovativoAnexos (no estado reutilizamos facturaFinalAnexos para evitar refactor grande).
+    setFacturaFinalAnexos(r.comprovativoAnexos ?? []);
     setNovoFacturaFinalNome('');
     setPagoDialogOpen(true);
   };
@@ -251,8 +269,9 @@ export default function RequisicoesPage() {
     if (!reqParaPago || facturaFinalAnexos.length === 0) return;
     try {
       await updateRequisicao(reqParaPago.id, {
-        facturaFinalAnexos,
         comprovante: true,
+        comprovativoAnexos: facturaFinalAnexos,
+        comprovativoAnexadoEm: new Date().toISOString(),
       });
       toast.success('Comprovativo guardado.');
       setPagoDialogOpen(false);
@@ -323,8 +342,7 @@ export default function RequisicoesPage() {
   const aprovar = async (r: Requisicao) => {
     try {
       await updateRequisicao(r.id, { status: 'Aprovado', aprovadoPor: user?.nome });
-      setComprovativoDialogFromApprove(true);
-      openPagoDialog({ ...r, status: 'Aprovado', aprovadoPor: user?.nome ?? undefined });
+      setComprovativoDialogFromApprove(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao aprovar');
     }
@@ -453,44 +471,87 @@ export default function RequisicoesPage() {
                         Rejeitar
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={!(user?.perfil === 'Admin' || user?.perfil === 'Financeiro') || (r.proformaAnexos?.length ?? 0) === 0}
+                        disabled={!canAccessFinancas || (getFirstTruthy(r.proformaAnexos) == null)}
                         onSelect={() => {
-                          const url = (r.proformaAnexos ?? []).find(u => u.startsWith('http'));
-                          if (!url) {
+                          const candidate = getFirstTruthy(r.proformaAnexos);
+                          if (!candidate) {
                             toast.error('Nenhuma factura proforma em PDF anexada para pré-visualizar.');
                             return;
                           }
-                          setPdfPreviewUrl(url);
-                          setPdfPreviewOpen(true);
+                          void (async () => {
+                            try {
+                              const url = await resolvePublicUrl('proformas', candidate);
+                              if (!url) {
+                                toast.error('Não foi possível resolver a pré-visualização da proforma.');
+                                return;
+                              }
+                              setPdfPreviewUrl(url);
+                              setPdfPreviewOpen(true);
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar proforma');
+                            }
+                          })();
                         }}
                       >
                         Proforma
                       </DropdownMenuItem>
+                      {(user?.perfil === 'Admin' || user?.perfil === 'Financeiro') && r.status === 'Aprovado' && (
+                        <DropdownMenuItem
+                          onSelect={() => openPagoDialog(r)}
+                          disabled={(r.comprovativoAnexos?.length ?? 0) > 0}
+                        >
+                          Fazer pagamento
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
-                        disabled={(r.facturaFinalAnexos?.length ?? 0) === 0}
+                        disabled={
+                          !canAccessFinancas ||
+                          (getFirstTruthy(r.comprovativoAnexos) == null && getFirstTruthy(r.facturaFinalAnexos) == null)
+                        }
                         onSelect={() => {
-                          const url = (r.facturaFinalAnexos ?? []).find(u => u.startsWith('http'));
-                          if (!url) {
+                          const candidate = getFirstTruthy(r.comprovativoAnexos) ?? getFirstTruthy(r.facturaFinalAnexos);
+                          if (!candidate) {
                             toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
                             return;
                           }
-                          setPdfPreviewUrl(url);
-                          setPdfPreviewOpen(true);
+                          void (async () => {
+                            try {
+                              const url = await resolvePublicUrl('comprovativos', candidate);
+                              if (!url) {
+                                toast.error('Não foi possível resolver a pré-visualização do comprovativo.');
+                                return;
+                              }
+                              setPdfPreviewUrl(url);
+                              setPdfPreviewOpen(true);
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar comprovativo');
+                            }
+                          })();
                         }}
                       >
                         Comprovativo
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={(r.facturaFinalAnexos?.length ?? 0) === 0}
+                        disabled={getLastTruthy(r.facturaFinalAnexos) == null}
                         onSelect={() => {
-                          const urls = (r.facturaFinalAnexos ?? []).filter(u => u.startsWith('http'));
-                          const url = urls[urls.length - 1];
-                          if (!url) {
+                          const candidate = getLastTruthy(r.facturaFinalAnexos);
+                          if (!candidate) {
                             toast.error('Nenhuma factura final em PDF anexada para pré-visualizar.');
                             return;
                           }
-                          setPdfPreviewUrl(url);
-                          setPdfPreviewOpen(true);
+                          void (async () => {
+                            try {
+                              const url = await resolvePublicUrl('proformas', candidate);
+                              if (!url) {
+                                toast.error('Não foi possível resolver a pré-visualização da factura final.');
+                                return;
+                              }
+                              setPdfPreviewUrl(url);
+                              setPdfPreviewOpen(true);
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar factura final');
+                            }
+                          })();
                         }}
                       >
                         Factura Final
@@ -743,13 +804,35 @@ export default function RequisicoesPage() {
       </Dialog>
 
       {/* Dialog Ver */}
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+      <Dialog
+        open={viewOpen}
+        onOpenChange={open => {
+          setViewOpen(open);
+          if (!open) {
+            setViewInlinePdfUrl(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{viewReq?.num}</DialogTitle>
             <DialogDescription>Detalhe da requisição</DialogDescription>
           </DialogHeader>
           {viewReq && (
+            viewInlinePdfUrl ? (
+              <div className="w-full h-[70vh]">
+                <iframe
+                  src={viewInlinePdfUrl}
+                  title="Pré-visualização do PDF"
+                  className="w-full h-full border-0 rounded-md"
+                />
+                <div className="mt-3 flex justify-end">
+                  <Button type="button" variant="outline" onClick={() => setViewInlinePdfUrl(null)}>
+                    Voltar
+                  </Button>
+                </div>
+              </div>
+            ) : (
             <div className="space-y-3 text-sm">
               <p><span className="text-muted-foreground">Fornecedor:</span> {viewReq.fornecedor}</p>
               <p><span className="text-muted-foreground">Descrição:</span> {viewReq.descricao}</p>
@@ -757,7 +840,39 @@ export default function RequisicoesPage() {
               <p><span className="text-muted-foreground">Data:</span> {formatDate(viewReq.data)}</p>
               <p><span className="text-muted-foreground">Departamento:</span> {viewReq.departamento}</p>
               <p><span className="text-muted-foreground">Centro de Custo:</span> {viewReq.centroCusto}</p>
-              <p><span className="text-muted-foreground">Documentos:</span> Proforma {viewReq.proforma ? 'Sim' : 'Não'} | Factura {viewReq.factura ? 'Sim' : 'Não'} | Comprovante {viewReq.comprovante ? 'Sim' : 'Não'}</p>
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">Documentos:</span>
+                <span
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-md border',
+                    viewReq.proforma
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700'
+                      : 'border-border bg-muted text-muted-foreground',
+                  )}
+                >
+                  Proforma {viewReq.proforma ? 'Sim' : 'Não'}
+                </span>
+                <span
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-md border',
+                    viewReq.factura
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700'
+                      : 'border-border bg-muted text-muted-foreground',
+                  )}
+                >
+                  Factura {viewReq.factura ? 'Sim' : 'Não'}
+                </span>
+                <span
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-md border',
+                    viewReq.comprovante
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700'
+                      : 'border-border bg-muted text-muted-foreground',
+                  )}
+                >
+                  Comprovante {viewReq.comprovante ? 'Sim' : 'Não'}
+                </span>
+              </p>
               {(viewReq.proformaAnexos ?? []).length > 0 && (
                 <div>
                   <p className="text-muted-foreground text-xs mb-1">Facturas proforma anexadas:</p>
@@ -766,21 +881,46 @@ export default function RequisicoesPage() {
                       const displayName = urlOuNome.startsWith('http') ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome : urlOuNome;
                       return (
                         <li key={i}>
-                          {urlOuNome.startsWith('http') ? (
-                            <button
-                              type="button"
-                              className="text-primary underline hover:no-underline"
-                              onClick={() => {
-                                setPdfPreviewUrl(urlOuNome);
-                                setViewOpen(false);
-                                setTimeout(() => setPdfPreviewOpen(true), 0);
-                              }}
-                            >
-                              {displayName}
-                            </button>
-                          ) : (
-                            displayName
-                          )}
+                          <button
+                            type="button"
+                            className="text-primary underline hover:no-underline"
+                            onClick={() => {
+                              void (async () => {
+                                const resolved = await resolvePublicUrl('proformas', urlOuNome);
+                                if (resolved) setViewInlinePdfUrl(resolved);
+                                else toast.error('Não foi possível pré-visualizar a proforma.');
+                              })();
+                            }}
+                          >
+                            {displayName}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              {(viewReq.comprovativoAnexos ?? []).length > 0 && (
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Comprovativo(s) anexado(s):</p>
+                  <ul className="list-disc list-inside text-sm space-y-0.5">
+                    {(viewReq.comprovativoAnexos ?? []).map((urlOuNome, i) => {
+                      const displayName = urlOuNome.startsWith('http') ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome : urlOuNome;
+                      return (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            className="text-primary underline hover:no-underline"
+                            onClick={() => {
+                              void (async () => {
+                                const resolved = await resolvePublicUrl('comprovativos', urlOuNome);
+                                if (resolved) setViewInlinePdfUrl(resolved);
+                                else toast.error('Não foi possível pré-visualizar o comprovativo.');
+                              })();
+                            }}
+                          >
+                            {displayName}
+                          </button>
                         </li>
                       );
                     })}
@@ -789,36 +929,39 @@ export default function RequisicoesPage() {
               )}
               {(viewReq.facturaFinalAnexos ?? []).length > 0 && (
                 <div>
-                  <p className="text-muted-foreground text-xs mb-1">Factura final / comprovativo anexado:</p>
+                  <p className="text-muted-foreground text-xs mb-1">Factura final anexada:</p>
                   <ul className="list-disc list-inside text-sm space-y-0.5">
                     {(viewReq.facturaFinalAnexos ?? []).map((urlOuNome, i) => {
                       const displayName = urlOuNome.startsWith('http') ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome : urlOuNome;
                       return (
                         <li key={i}>
-                          {urlOuNome.startsWith('http') ? (
-                            <button
-                              type="button"
-                              className="text-primary underline hover:no-underline"
-                              onClick={() => {
-                                setPdfPreviewUrl(urlOuNome);
-                                setViewOpen(false);
-                                setTimeout(() => setPdfPreviewOpen(true), 0);
-                              }}
-                            >
-                              {displayName}
-                            </button>
-                          ) : (
-                            displayName
-                          )}
+                          <button
+                            type="button"
+                            className="text-primary underline hover:no-underline"
+                            onClick={() => {
+                              void (async () => {
+                                const resolved = await resolvePublicUrl('proformas', urlOuNome);
+                                if (resolved) setViewInlinePdfUrl(resolved);
+                                else toast.error('Não foi possível pré-visualizar a factura final.');
+                              })();
+                            }}
+                          >
+                            {displayName}
+                          </button>
                         </li>
                       );
                     })}
                   </ul>
                 </div>
               )}
+              <p>
+                <span className="text-muted-foreground">Requisitante:</span>{' '}
+                {colaboradoresTodos.find(c => c.id === viewReq.requisitanteColaboradorId)?.nome ?? '—'}
+              </p>
               <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewReq.status} /></p>
               {viewReq.motivoRejeicao && <p><span className="text-muted-foreground">Motivo rejeição:</span> {viewReq.motivoRejeicao}</p>}
             </div>
+            )
           )}
         </DialogContent>
       </Dialog>
@@ -848,14 +991,14 @@ export default function RequisicoesPage() {
             <DialogTitle>
               {reqParaPago?.status === 'Pago'
                 ? 'Anexar factura final'
-                : comprovativoDialogFromApprove
+                : comprovativoDialogFromApprove || reqParaPago?.status === 'Aprovado'
                 ? 'Comprovativo de pagamento e conclusão'
                 : 'Marcar como pago'}
             </DialogTitle>
             <DialogDescription>
               {reqParaPago?.status === 'Pago'
                 ? 'Anexe a factura final desta requisição já paga.'
-                : comprovativoDialogFromApprove
+                : comprovativoDialogFromApprove || reqParaPago?.status === 'Aprovado'
                 ? 'Anexe o comprovativo de pagamento e conclusão. Pode guardar agora e marcar como pago mais tarde.'
                 : 'Anexe pelo menos um ficheiro da factura final para confirmar o pagamento.'}
             </DialogDescription>
@@ -865,7 +1008,7 @@ export default function RequisicoesPage() {
               <Paperclip className="h-4 w-4" />
               {reqParaPago?.status === 'Pago'
                 ? 'Factura final'
-                : comprovativoDialogFromApprove
+                : comprovativoDialogFromApprove || reqParaPago?.status === 'Aprovado'
                 ? 'Comprovativo de pagamento e conclusão'
                 : 'Factura final / comprovativo'}
             </Label>
@@ -913,14 +1056,9 @@ export default function RequisicoesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPagoDialogOpen(false)}>Cancelar</Button>
-            {(comprovativoDialogFromApprove || reqParaPago?.status === 'Pago') && (
+            {(comprovativoDialogFromApprove || reqParaPago?.status === 'Aprovado') && (
               <Button variant="secondary" onClick={guardarComprovativo} disabled={facturaFinalAnexos.length === 0}>
-                Guardar comprovativo
-              </Button>
-            )}
-            {reqParaPago?.status !== 'Pago' && (
-              <Button onClick={confirmarPago} disabled={facturaFinalAnexos.length === 0}>
-                Marcar como pago
+                Processar pagamento
               </Button>
             )}
           </DialogFooter>

@@ -194,10 +194,10 @@ export default function PagamentosPage() {
                         Proforma
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.facturaFinalAnexos?.length ?? 0) === 0}
+                        disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.comprovativoAnexos?.length ?? 0) === 0}
                         onSelect={() => {
                           const req = getRequisicao(p.requisicaoId);
-                          const url = (req?.facturaFinalAnexos ?? []).find(u => u.startsWith('http'));
+                          const url = (req?.comprovativoAnexos ?? []).find(u => u.startsWith('http'));
                           if (!url) {
                             toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
                             return;
