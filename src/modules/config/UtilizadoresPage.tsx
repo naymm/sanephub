@@ -24,8 +24,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Check, ChevronsUpDown } from 'lucide-react';
 
 const PERFIS: Perfil[] = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'];
 
@@ -58,6 +69,7 @@ export default function UtilizadoresPage() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
+  const [colaboradorSelectOpen, setColaboradorSelectOpen] = useState(false);
   const [form, setForm] = useState<UsuarioFormState>({
     nome: '',
     email: '',
@@ -442,18 +454,49 @@ export default function UtilizadoresPage() {
             </div>
             <div className="space-y-2">
               <Label>Associar a colaborador (opcional)</Label>
-              <Select
-                value={form.colaboradorId != null ? String(form.colaboradorId) : 'nenhum'}
-                onValueChange={v => setForm(f => ({ ...f, colaboradorId: v === 'nenhum' ? null : Number(v) }))}
-              >
-                <SelectTrigger><SelectValue placeholder="Nenhum — utilizador sem ficha de colaborador" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="nenhum">Nenhum</SelectItem>
-                  {colaboradores.map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.cargo} ({c.emailCorporativo})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={colaboradorSelectOpen} onOpenChange={setColaboradorSelectOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between font-normal">
+                    {form.colaboradorId != null
+                      ? `${colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar colaborador'}`
+                      : 'Nenhum — utilizador sem ficha de colaborador'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Pesquisar colaborador..." />
+                    <CommandList>
+                      <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="nenhum"
+                          onSelect={() => {
+                            setForm(f => ({ ...f, colaboradorId: null }));
+                            setColaboradorSelectOpen(false);
+                          }}
+                        >
+                          <Check className={cn('mr-2 h-4 w-4', form.colaboradorId == null ? 'opacity-100' : 'opacity-0')} />
+                          Nenhum
+                        </CommandItem>
+                        {colaboradores.map(c => (
+                          <CommandItem
+                            key={c.id}
+                            value={c.nome}
+                            onSelect={() => {
+                              setForm(f => ({ ...f, colaboradorId: c.id }));
+                              setColaboradorSelectOpen(false);
+                            }}
+                          >
+                            <Check className={cn('mr-2 h-4 w-4', form.colaboradorId === c.id ? 'opacity-100' : 'opacity-0')} />
+                            {c.nome} — {c.cargo} ({c.emailCorporativo})
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               <p className="text-xs text-muted-foreground">
                 Se associar a um colaborador, este utilizador verá no Portal os seus recibos, férias, faltas e declarações.
               </p>

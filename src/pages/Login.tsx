@@ -1,16 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, type LoginEmpresaId } from '@/context/AuthContext';
-import { useData } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Lock, Mail, AlertCircle, Building2 } from 'lucide-react';
+import { Lock, Mail, AlertCircle } from 'lucide-react';
 
 export default function Login() {
-  const { empresas } = useData();
-  const empresasAtivas = empresas.filter(e => e.activo);
-  const [empresaId, setEmpresaId] = useState<LoginEmpresaId>('grupo');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
@@ -25,16 +21,9 @@ export default function Login() {
     e.preventDefault();
     setError('');
     if (!email || !senha) { setError('Preencha todos os campos.'); return; }
-    const success = await login(empresaId, email, senha);
+    const success = await login(email, senha);
     if (success) navigate('/dashboard');
-    else setError('Credenciais inválidas. Verifique a empresa, email e senha.');
-  };
-
-  const fillDemo = (eid: LoginEmpresaId, em: string, pw: string) => {
-    setEmpresaId(eid);
-    setEmail(em);
-    setSenha(pw);
-    setError('');
+    else setError('Credenciais inválidas. Verifique o email e a senha.');
   };
 
   if (!isAuthReady) {
@@ -78,25 +67,6 @@ export default function Login() {
                 {error}
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="empresa" className="text-xs font-medium text-muted-foreground">Empresa / contexto</Label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <select
-                  id="empresa"
-                  value={empresaId === 'grupo' ? 'grupo' : String(empresaId)}
-                  onChange={e => setEmpresaId(e.target.value === 'grupo' ? 'grupo' : Number(e.target.value))}
-                  className="flex h-10 w-full rounded-lg border border-border/80 bg-background pl-10 pr-4 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="grupo">Grupo (Admin / PCA / Planeamento)</option>
-                  {empresasAtivas.map(e => (
-                    <option key={e.id} value={e.id}>{e.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <p className="text-[11px] text-muted-foreground">Para Admin, PCA ou Planeamento use «Grupo»; para Director da empresa ou outros perfis escolha a empresa.</p>
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Email corporativo</Label>

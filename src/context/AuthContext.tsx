@@ -63,8 +63,6 @@ function loadUsuarios(): Usuario[] {
   return USUARIOS_SEED;
 }
 
-export type LoginEmpresaId = number | 'grupo';
-
 /** Payload para criar utilizador no Supabase (Auth + profiles) via Edge Function. */
 export interface CreateUserSupabasePayload {
   email: string;
@@ -84,8 +82,8 @@ interface AuthContextType {
   user: Usuario | null;
   usuarios: Usuario[];
   setUsuarios: React.Dispatch<React.SetStateAction<Usuario[]>>;
-  /** Login por empresa: seleccionar 'grupo' para Admin/PCA, ou id da empresa para utilizadores dessa empresa. */
-  login: (empresaId: LoginEmpresaId, email: string, senha: string) => boolean | Promise<boolean>;
+  /** Login simples: email + senha. O contexto (empresa/grupo) é inferido do perfil. */
+  login: (email: string, senha: string) => boolean | Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
   /** False enquanto Supabase restaura a sessão (evita flash da página de login). */
@@ -184,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [usuarios]);
 
   const login = useCallback(
-    async (empresaId: LoginEmpresaId, email: string, senha: string): Promise<boolean> => {
+    async (email: string, senha: string): Promise<boolean> => {
       if (isSupabaseConfigured() && supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
         if (error) return false;
@@ -199,24 +197,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
           return false;
         }
-        const eid = empresaId === 'grupo' ? 'grupo' : Number(empresaId);
-        const profileEmpresaId = (profile as ProfileRow).empresa_id ?? null;
-        if (eid === 'grupo' && profileEmpresaId != null) {
-          await supabase.auth.signOut();
-          return false;
-        }
-        if (eid !== 'grupo' && profileEmpresaId !== eid) {
-          await supabase.auth.signOut();
-          return false;
-        }
         setUser(profileToUsuario(profile as ProfileRow));
         return true;
       }
-      const eid = empresaId === 'grupo' ? 'grupo' : Number(empresaId);
       const found = usuarios.find(u => {
         if (u.email !== email || u.senha !== senha) return false;
-        if (eid === 'grupo') return u.empresaId == null;
-        return Number(u.empresaId) === eid;
+        return true;
       });
       if (found) {
         setUser(found);
