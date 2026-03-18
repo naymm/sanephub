@@ -5,6 +5,7 @@ import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { useNotifications } from '@/context/NotificationContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Requisicao, StatusRequisicao } from '@/types';
@@ -59,6 +60,7 @@ export default function PortalRequisicoesPage() {
   const colaboradorId = useColaboradorId();
   const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, departamentos, colaboradoresTodos, addPagamento } = useData();
   const { currentEmpresaId } = useTenant();
+  const { addNotification } = useNotifications();
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -86,17 +88,35 @@ export default function PortalRequisicoesPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
-  const openPdfPreview = (url?: string | null) => {
-    const httpUrl = (url ?? '').startsWith('http') ? url : null;
-    if (!httpUrl) return;
-    setPdfPreviewUrl(httpUrl);
-    setPdfPreviewOpen(true);
+  const resolvePublicUrlFromAny = async (value?: string | null): Promise<string | null> => {
+    if (!value) return null;
+    if (!isSupabaseConfigured() || !supabase) return value.startsWith('http') ? value : null;
+    if (!value.startsWith('http')) return null;
+
+    // Se o publicUrl foi guardado com "localhost", extraímos o path dentro do bucket
+    // e re-resolvemos para a origem atual do Supabase.
+    const m = value.match(/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+    if (!m) return value;
+    const bucket = m[1] as 'proformas' | 'comprovativos';
+    const objectPath = m[2];
+    if (bucket !== 'proformas' && bucket !== 'comprovativos') return value;
+    const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+    return data?.publicUrl ?? value;
   };
 
-  const getFirstHttpUrl = (urls?: string[]) => (urls ?? []).filter(u => u.startsWith('http'))[0];
-  const getLastHttpUrl = (urls?: string[]) => {
-    const httpUrls = (urls ?? []).filter(u => u.startsWith('http'));
-    return httpUrls[httpUrls.length - 1];
+  const openPdfPreview = (url?: string | null) => {
+    void (async () => {
+      const resolved = await resolvePublicUrlFromAny(url);
+      if (!resolved) return;
+      setPdfPreviewUrl(resolved);
+      setPdfPreviewOpen(true);
+    })();
+  };
+
+  const getFirstUrlValue = (urls?: string[]) => (urls ?? []).filter(u => !!u)[0] ?? null;
+  const getLastUrlValue = (urls?: string[]) => {
+    const xs = (urls ?? []).filter(u => !!u);
+    return xs.length ? xs[xs.length - 1] : null;
   };
 
   const prazoParaFacturaFinalValido = (r: Requisicao) => {
@@ -146,9 +166,10 @@ export default function PortalRequisicoesPage() {
     }
     const empresaId = typeof currentEmpresaId === 'number' ? currentEmpresaId : (colaboradoresTodos.find(c => c.id === colaboradorId)?.empresaId ?? 1);
     const proformaAnexos = temProforma ? form.proformaAnexos : [];
+    const newNum = nextNum(requisicoes);
     try {
       await addRequisicao({
-        num: nextNum(requisicoes),
+        num: newNum,
         fornecedor: form.fornecedor.trim(),
         descricao: form.descricao.trim(),
         valor: form.valor,
@@ -165,6 +186,15 @@ export default function PortalRequisicoesPage() {
         enviadoContabilidade: false,
         requisitanteColaboradorId: colaboradorId,
         empresaId,
+      });
+      // Notificar a equipa de Finanças (privacidade: só perfis que têm acesso ao módulo)
+      addNotification({
+        tipo: 'info',
+        titulo: 'Requisição enviada',
+        mensagem: `${newNum} foi submetida para análise financeira.`,
+        moduloOrigem: 'portal',
+        destinatarioPerfil: ['Financeiro', 'Admin'],
+        link: '/financas/requisicoes',
       });
       setDialogOpen(false);
     } catch (e) {
@@ -236,7 +266,7 @@ export default function PortalRequisicoesPage() {
                       <DropdownMenuItem
                         disabled={(r.proformaAnexos?.length ?? 0) === 0}
                         onSelect={() => {
-                          const url = getFirstHttpUrl(r.proformaAnexos);
+                          const url = getFirstUrlValue(r.proformaAnexos);
                           if (!url) return;
                           openPdfPreview(url);
                         }}
@@ -246,7 +276,7 @@ export default function PortalRequisicoesPage() {
                       <DropdownMenuItem
                         disabled={(r.comprovativoAnexos?.length ?? 0) === 0}
                         onSelect={() => {
-                          const url = getFirstHttpUrl(r.comprovativoAnexos);
+                          const url = getFirstUrlValue(r.comprovativoAnexos);
                           if (!url) return;
                           openPdfPreview(url);
                         }}
@@ -256,7 +286,7 @@ export default function PortalRequisicoesPage() {
                       <DropdownMenuItem
                         disabled={(r.facturaFinalAnexos?.length ?? 0) === 0}
                         onSelect={() => {
-                          const url = getLastHttpUrl(r.facturaFinalAnexos);
+                          const url = getLastUrlValue(r.facturaFinalAnexos);
                           if (!url) return;
                           openPdfPreview(url);
                         }}
@@ -557,6 +587,15 @@ export default function PortalRequisicoesPage() {
                           });
 
                           toast.success('Factura final anexada. Requisição concluída.');
+                          // Notificar Contabilidade: agora existe um registo de Pagamento recebido
+                          addNotification({
+                            tipo: 'sucesso',
+                            titulo: 'Pagamento recebido',
+                            mensagem: `O pagamento associado à ${viewReq.num} foi registado.`,
+                            moduloOrigem: 'portal',
+                            destinatarioPerfil: ['Contabilidade', 'Financeiro', 'Admin'],
+                            link: '/contabilidade/pagamentos',
+                          });
                           setViewReq(updated);
                           setViewOpen(false);
                         } catch (err) {

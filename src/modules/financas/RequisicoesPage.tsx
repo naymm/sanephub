@@ -114,12 +114,32 @@ export default function RequisicoesPage() {
   const [comprovativoDialogFromApprove, setComprovativoDialogFromApprove] = useState(false);
   const [novoFacturaFinalNome, setNovoFacturaFinalNome] = useState('');
 
-  const resolvePublicUrl = async (bucket: 'proformas' | 'comprovativos', value: string): Promise<string | null> => {
+  const resolvePublicUrl = async (
+    bucket: 'proformas' | 'comprovativos',
+    value: string,
+  ): Promise<string | null> => {
     if (!value) return null;
-    if (value.startsWith('http')) return value;
     if (!isSupabaseConfigured() || !supabase) return null;
-    const { data } = supabase.storage.from(bucket).getPublicUrl(value);
+
+    // Caso o DB tenha guardado um publicUrl com "localhost" (outro dispositivo), tenta re-resolver
+    // extraindo o path dentro do bucket.
+    let objectPath = value;
+    if (value.startsWith('http')) {
+      const re = new RegExp(`storage\\/v1\\/object\\/public\\/${bucket}\\/(.+)$`);
+      const m = value.match(re);
+      if (m?.[1]) objectPath = m[1];
+      else return value; // não conseguimos extrair path do bucket
+    }
+
+    const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
     return data?.publicUrl ?? null;
+  };
+
+  const inferBucketFromPublicUrl = (value: string): 'proformas' | 'comprovativos' => {
+    const m = value.match(/storage\/v1\/object\/public\/([^/]+)\//);
+    const b = m?.[1];
+    if (b === 'comprovativos' || b === 'proformas') return b;
+    return 'proformas';
   };
 
   const getFirstTruthy = (arr?: string[]) => (arr ?? []).find(v => !!v) ?? null;
@@ -509,14 +529,17 @@ export default function RequisicoesPage() {
                           (getFirstTruthy(r.comprovativoAnexos) == null && getFirstTruthy(r.facturaFinalAnexos) == null)
                         }
                         onSelect={() => {
-                          const candidate = getFirstTruthy(r.comprovativoAnexos) ?? getFirstTruthy(r.facturaFinalAnexos);
+                          const candidateComprov = getFirstTruthy(r.comprovativoAnexos);
+                          const candidateFacturaFinal = getFirstTruthy(r.facturaFinalAnexos);
+                          const candidate = candidateComprov ?? candidateFacturaFinal;
+                          const bucket = candidateComprov ? 'comprovativos' : 'proformas';
                           if (!candidate) {
                             toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
                             return;
                           }
                           void (async () => {
                             try {
-                              const url = await resolvePublicUrl('comprovativos', candidate);
+                              const url = await resolvePublicUrl(bucket, candidate);
                               if (!url) {
                                 toast.error('Não foi possível resolver a pré-visualização do comprovativo.');
                                 return;
@@ -1023,9 +1046,17 @@ export default function RequisicoesPage() {
                           type="button"
                           className="truncate text-primary underline hover:no-underline"
                           onClick={() => {
-                            setPdfPreviewUrl(urlOuNome);
-                            setPagoDialogOpen(false);
-                            setTimeout(() => setPdfPreviewOpen(true), 0);
+                            void (async () => {
+                              const bucket = inferBucketFromPublicUrl(urlOuNome);
+                              const resolved = await resolvePublicUrl(bucket, urlOuNome);
+                              if (resolved) {
+                                setPdfPreviewUrl(resolved);
+                                setPagoDialogOpen(false);
+                                setTimeout(() => setPdfPreviewOpen(true), 0);
+                              } else {
+                                toast.error('Não foi possível pré-visualizar o documento.');
+                              }
+                            })();
                           }}
                         >
                           {displayName}
