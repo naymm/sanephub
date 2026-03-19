@@ -13,6 +13,13 @@ function toCamelKey(s: string) {
   return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
+/** BigInt/realtime pode vir como string no payload; notificações usam id texto. */
+function samePk(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a != null && b != null) return String(a) === String(b);
+  return false;
+}
+
 /**
  * Realtime sync genérico para uma tabela do Supabase.
  * - Faz fetch inicial
@@ -70,10 +77,70 @@ export function useRealtimeTable<T>(
 
     void fetchInitial();
 
+    const pkCamel = toCamelKey(primaryKeyColumn);
+
+    const cleanups: Array<() => void> = [];
+
+    // SSE opcional (ex.: gateway próprio). Nunca substitui o Realtime do Supabase:
+    // com VITE_SSE_URL definido, antes o hook fazia return cedo e a lista deixava
+    // de receber postgres_changes (ex.: requisicoes sem eventos no SSE).
+    const sseBaseUrl = import.meta.env.VITE_SSE_URL as string | undefined;
+    if (sseBaseUrl) {
+      try {
+        const url = new URL('/realtime', sseBaseUrl);
+        url.searchParams.set('table', String(table));
+        const es = new EventSource(url.toString());
+
+        es.onmessage = (event) => {
+          if (cancelled) return;
+          try {
+            const payload = JSON.parse(event.data) as PostgresChangesPayload;
+            if (payload.eventType === 'INSERT') {
+              const row = payload.new;
+              if (!row) return;
+              const mapped = mapRowFn(row);
+              const id = (mapped as any)?.[pkCamel];
+              if (id == null) return;
+              setRows(prev => {
+                const exists = prev.some(x => samePk((x as any)?.[pkCamel], id));
+                if (exists) return prev;
+                return [mapped, ...prev];
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              const row = payload.new;
+              if (!row) return;
+              const mapped = mapRowFn(row);
+              const id = (mapped as any)?.[pkCamel];
+              if (id == null) return;
+              setRows(prev => {
+                const exists = prev.some(x => samePk((x as any)?.[pkCamel], id));
+                if (!exists) return [mapped, ...prev];
+                return prev.map(x => (samePk((x as any)?.[pkCamel], id) ? mapped : x));
+              });
+            } else if (payload.eventType === 'DELETE') {
+              const row = payload.old;
+              if (!row) return;
+              const id = (row as any)?.[primaryKeyColumn] ?? (row as any)?.[pkCamel];
+              if (id == null) return;
+              setRows(prev => prev.filter(x => !samePk((x as any)?.[pkCamel], id)));
+            }
+          } catch (e) {
+            console.error('[useRealtimeTable] SSE message parse error', e);
+          }
+        };
+
+        es.onerror = (err) => {
+          console.error('[useRealtimeTable] SSE connection error', err);
+        };
+
+        cleanups.push(() => es.close());
+      } catch (e) {
+        console.error('[useRealtimeTable] SSE init failed', e);
+      }
+    }
+
     const channelName = `realtime-table:${String(table)}:${primaryKeyColumn}`;
     const channel = supabase.channel(channelName);
-
-    const pkCamel = toCamelKey(primaryKeyColumn);
 
     const handleInsert = (payload: any) => {
       const row = payload?.new;
@@ -84,7 +151,7 @@ export function useRealtimeTable<T>(
       if (id == null) return;
 
       setRows(prev => {
-        const exists = prev.some(x => (x as any)?.[pkCamel] === id);
+        const exists = prev.some(x => samePk((x as any)?.[pkCamel], id));
         if (exists) return prev;
         return [mapped, ...prev];
       });
@@ -99,9 +166,9 @@ export function useRealtimeTable<T>(
       if (id == null) return;
 
       setRows(prev => {
-        const exists = prev.some(x => (x as any)?.[pkCamel] === id);
+        const exists = prev.some(x => samePk((x as any)?.[pkCamel], id));
         if (!exists) return [mapped, ...prev];
-        return prev.map(x => ((x as any)?.[pkCamel] === id ? mapped : x));
+        return prev.map(x => (samePk((x as any)?.[pkCamel], id) ? mapped : x));
       });
     };
 
@@ -112,7 +179,7 @@ export function useRealtimeTable<T>(
       console.log(`[useRealtimeTable] DELETE ${String(table)} id=${id}`);
       if (id == null) return;
 
-      setRows(prev => prev.filter(x => (x as any)?.[pkCamel] !== id));
+      setRows(prev => prev.filter(x => !samePk((x as any)?.[pkCamel], id)));
     };
 
     channel
@@ -124,12 +191,22 @@ export function useRealtimeTable<T>(
       console.log(`[useRealtimeTable] channel ${channelName} status=${String(status)}`);
     });
 
-    return () => {
-      cancelled = true;
+    cleanups.push(() => {
       try {
         void supabase.removeChannel(channel);
       } catch {
         // ignore
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      for (const fn of cleanups) {
+        try {
+          fn();
+        } catch {
+          // ignore
+        }
       }
     };
   }, [primaryKeyColumn, table]);
