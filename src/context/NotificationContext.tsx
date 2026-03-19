@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import type { Notificacao } from '@/types';
 import { NOTIFICACOES_SEED } from '@/data/seed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { useRealtimeTable } from '@/hooks/useRealtimeTable';
+import { mapRowFromDb } from '@/lib/supabaseMappers';
 
 const STORAGE_NOTIFICACOES = 'sanep_notifications_v1';
 
@@ -17,6 +19,8 @@ interface NotificationContextType {
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
+  const realtimeEnabled = isSupabaseConfigured() && !!supabase;
+
   // Em ambiente com Supabase ligado, evita mostrar notificações seed/mocked.
   // Neste projecto as notificações são ainda em estado client-side (sem persistência em DB).
   // Para desenvolvimento/local, mantém seed quando Supabase NÃO está configurado.
@@ -36,39 +40,29 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const [notifications, setNotifications] = useState<Notificacao[]>(() => {
     const stored = loadStored();
-    if (isSupabaseConfigured()) return stored ?? [];
+    // Em Supabase (produção / multi-utilizador), o DB é fonte de verdade.
+    if (isSupabaseConfigured()) return [];
     return stored ?? NOTIFICACOES_SEED;
   });
 
-  const fetchFromDb = async (): Promise<Notificacao[] | null> => {
-    if (!isSupabaseConfigured() || !supabase) return null;
-    try {
-      const { data, error } = await supabase
-        .from('notificacoes')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
-      if (error) return null;
-      const rows = (data ?? []) as any[];
-      const mapped: Notificacao[] = rows.map(r => ({
-        id: r.id as string,
-        tipo: r.tipo as Notificacao['tipo'],
-        titulo: r.titulo as string,
-        mensagem: r.mensagem as string,
-        moduloOrigem: r.modulo_origem as string,
-        destinatarioPerfil: (r.destinatario_perfil ?? []) as string[],
-        lida: r.lida as boolean,
-        createdAt: r.created_at as string,
-        link: r.link as string | undefined,
-      }));
-      return mapped;
-    } catch (e) {
-      console.error('[Notifications] fetchFromDb failed', e);
-      return null;
-    }
-  };
+  // Referência estável: inline mapRow recriava a cada render e o useRealtimeTable
+  // re-corria o effect (fetch + subscribe) em loop.
+  const mapNotificacaoRow = useCallback((row: Record<string, unknown>) => {
+    const mapped = mapRowFromDb<Notificacao>('notificacoes', row);
+    return {
+      ...mapped,
+      link: mapped.link ?? undefined,
+    };
+  }, []);
+
+  const { rows: dbNotifications, isLoading: dbLoading } = useRealtimeTable<Notificacao>(
+    'notificacoes',
+    'id',
+    { mapRow: mapNotificacaoRow },
+  );
 
   const prevCountRef = useRef<number>(notifications.length);
+  const didInitRef = useRef(false);
 
   const playNotificationSound = () => {
     // Nota: alguns navegadores bloqueiam áudio sem interação do utilizador.
@@ -104,6 +98,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    if (realtimeEnabled && dbLoading) return;
+    if (!didInitRef.current) {
+      didInitRef.current = true;
+      prevCountRef.current = notifications.length;
+      return;
+    }
+
     if (notifications.length > prevCountRef.current) {
       playNotificationSound();
     }
@@ -111,31 +112,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifications.length]);
 
-  // Em Supabase: sincroniza notificações sem precisar recarregar a página.
+  // Quando Supabase está ligado, usamos o hook realtime como fonte de verdade.
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
-
-    let cancelled = false;
-    const sync = async () => {
-      const fromDb = await fetchFromDb();
-      if (!fromDb || cancelled) return;
-      setNotifications(fromDb);
-    };
-
-    // primeira carga
-    void sync();
-
-    // polling leve para actualizar em outros dispositivos
-    const t = window.setInterval(() => {
-      void sync();
-    }, 5000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(t);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!realtimeEnabled) return;
+    if (dbLoading) return;
+    setNotifications(dbNotifications);
+  }, [dbNotifications, dbLoading, realtimeEnabled]);
 
   useEffect(() => {
     try {
@@ -204,28 +186,30 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
       lida: false,
     };
-    setNotifications(prev => [newN, ...prev]);
-
-    if (isSupabaseConfigured() && supabase) {
-      void (async () => {
-        try {
-          await supabase.from('notificacoes').insert({
-            id: newN.id,
-            tipo: newN.tipo,
-            titulo: newN.titulo,
-            mensagem: newN.mensagem,
-            modulo_origem: newN.moduloOrigem,
-            destinatario_perfil: newN.destinatarioPerfil,
-            lida: newN.lida,
-            created_at: newN.createdAt,
-            link: newN.link ?? null,
-          });
-        } catch (e) {
-          console.error('[Notifications] addNotification insert failed', e);
-          // se falhar, mantém no client para não bloquear UI
-        }
-      })();
+    if (!realtimeEnabled || !supabase) {
+      setNotifications(prev => [newN, ...prev]);
+      return;
     }
+
+    // Em realtime (multi-utilizador), evitamos optimismo local:
+    // o hook vai actualizar automaticamente após INSERT no DB.
+    void (async () => {
+      try {
+        await supabase.from('notificacoes').insert({
+          id: newN.id,
+          tipo: newN.tipo,
+          titulo: newN.titulo,
+          mensagem: newN.mensagem,
+          modulo_origem: newN.moduloOrigem,
+          destinatario_perfil: newN.destinatarioPerfil,
+          lida: newN.lida,
+          created_at: newN.createdAt,
+          link: newN.link ?? null,
+        });
+      } catch (e) {
+        console.error('[Notifications] addNotification insert failed', e);
+      }
+    })();
   };
 
   return (

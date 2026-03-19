@@ -3,6 +3,7 @@ import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Re
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { loadAllTables, db } from '@/lib/supabaseData';
+import { useRealtimeTable } from '@/hooks/useRealtimeTable';
 
 interface DataContextType {
   dataLoading: boolean;
@@ -184,6 +185,88 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [processosDisciplinares, setProcessosDisciplinares] = useState<ProcessoDisciplinar[]>(emptyArrays.processosDisciplinares);
   const [rescissoesContrato, setRescissoesContrato] = useState<RescisaoContrato[]>(emptyArrays.rescissoesContrato);
 
+  // Realtime: mantém os arrays do DataContext sincronizados sem refresh/polling.
+  const empresasRT = useRealtimeTable<Empresa>('empresas', 'id');
+  const departamentosRT = useRealtimeTable<Departamento>('departamentos', 'id');
+  const colaboradoresRT = useRealtimeTable<Colaborador>('colaboradores', 'id');
+  const feriasRT = useRealtimeTable<Ferias>('ferias', 'id');
+  const faltasRT = useRealtimeTable<Falta>('faltas', 'id');
+  const recibosRT = useRealtimeTable<ReciboSalario>('recibos_salario', 'id');
+  const declaracoesRT = useRealtimeTable<Declaracao>('declaracoes', 'id');
+  const requisicoesRT = useRealtimeTable<Requisicao>('requisicoes', 'id');
+  const centrosCustoRT = useRealtimeTable<CentroCusto>('centros_custo', 'id');
+  const projectosRT = useRealtimeTable<Projecto>('projectos', 'id');
+  const reunioesRT = useRealtimeTable<Reuniao>('reunioes', 'id');
+  const actasRT = useRealtimeTable<Acta>('actas', 'id');
+  const contratosRT = useRealtimeTable<Contrato>('contratos', 'id');
+  const processosRT = useRealtimeTable<ProcessoJudicial>('processos_judiciais', 'id');
+  const prazosRT = useRealtimeTable<PrazoLegal>('prazos_legais', 'id');
+  const correspondenciasRT = useRealtimeTable<Correspondencia>('correspondencias', 'id');
+  const documentosOficiaisRT = useRealtimeTable<DocumentoOficial>('documentos_oficiais', 'id');
+  const riscosRT = useRealtimeTable<RiscoJuridico>('riscos_juridicos', 'id');
+  const pagamentosRT = useRealtimeTable<Pagamento>('pagamentos', 'id');
+  const pendenciasRT = useRealtimeTable<PendenciaDocumental>('pendencias_documentais', 'id');
+  const movimentosTesourariaRT = useRealtimeTable<MovimentoTesouraria>('movimentos_tesouraria', 'id');
+  const relatoriosPlaneamentoRT = useRealtimeTable<RelatorioMensalPlaneamento>('relatorios_planeamento', 'id');
+  const processosDisciplinaresRT = useRealtimeTable<ProcessoDisciplinar>('processos_disciplinares', 'id');
+  const rescissoesContratoRT = useRealtimeTable<RescisaoContrato>('rescisoes_contrato', 'id');
+
+  const realtimeLoading =
+    empresasRT.isLoading ||
+    departamentosRT.isLoading ||
+    colaboradoresRT.isLoading ||
+    feriasRT.isLoading ||
+    faltasRT.isLoading ||
+    recibosRT.isLoading ||
+    declaracoesRT.isLoading ||
+    requisicoesRT.isLoading ||
+    centrosCustoRT.isLoading ||
+    projectosRT.isLoading ||
+    reunioesRT.isLoading ||
+    actasRT.isLoading ||
+    contratosRT.isLoading ||
+    processosRT.isLoading ||
+    prazosRT.isLoading ||
+    correspondenciasRT.isLoading ||
+    documentosOficiaisRT.isLoading ||
+    riscosRT.isLoading ||
+    pagamentosRT.isLoading ||
+    pendenciasRT.isLoading ||
+    movimentosTesourariaRT.isLoading ||
+    relatoriosPlaneamentoRT.isLoading ||
+    processosDisciplinaresRT.isLoading ||
+    rescissoesContratoRT.isLoading;
+
+  useEffect(() => {
+    setDataLoading(realtimeLoading);
+    if (!realtimeLoading) setDataError(null);
+  }, [realtimeLoading]);
+
+  useEffect(() => setEmpresas(empresasRT.rows), [empresasRT.rows]);
+  useEffect(() => setDepartamentos(departamentosRT.rows), [departamentosRT.rows]);
+  useEffect(() => setColaboradores(colaboradoresRT.rows), [colaboradoresRT.rows]);
+  useEffect(() => setFerias(feriasRT.rows), [feriasRT.rows]);
+  useEffect(() => setFaltas(faltasRT.rows), [faltasRT.rows]);
+  useEffect(() => setRecibos(recibosRT.rows), [recibosRT.rows]);
+  useEffect(() => setDeclaracoes(declaracoesRT.rows), [declaracoesRT.rows]);
+  useEffect(() => setRequisicoes(requisicoesRT.rows), [requisicoesRT.rows]);
+  useEffect(() => setCentrosCusto(centrosCustoRT.rows), [centrosCustoRT.rows]);
+  useEffect(() => setProjectos(projectosRT.rows), [projectosRT.rows]);
+  useEffect(() => setReunioes(reunioesRT.rows), [reunioesRT.rows]);
+  useEffect(() => setActas(actasRT.rows), [actasRT.rows]);
+  useEffect(() => setContratos(contratosRT.rows), [contratosRT.rows]);
+  useEffect(() => setProcessos(processosRT.rows), [processosRT.rows]);
+  useEffect(() => setPrazos(prazosRT.rows), [prazosRT.rows]);
+  useEffect(() => setCorrespondencias(correspondenciasRT.rows), [correspondenciasRT.rows]);
+  useEffect(() => setDocumentosOficiais(documentosOficiaisRT.rows), [documentosOficiaisRT.rows]);
+  useEffect(() => setRiscos(riscosRT.rows), [riscosRT.rows]);
+  useEffect(() => setPagamentos(pagamentosRT.rows), [pagamentosRT.rows]);
+  useEffect(() => setPendencias(pendenciasRT.rows), [pendenciasRT.rows]);
+  useEffect(() => setMovimentosTesouraria(movimentosTesourariaRT.rows), [movimentosTesourariaRT.rows]);
+  useEffect(() => setRelatoriosPlaneamento(relatoriosPlaneamentoRT.rows), [relatoriosPlaneamentoRT.rows]);
+  useEffect(() => setProcessosDisciplinares(processosDisciplinaresRT.rows), [processosDisciplinaresRT.rows]);
+  useEffect(() => setRescissoesContrato(rescissoesContratoRT.rows), [rescissoesContratoRT.rows]);
+
   const refetch = useCallback(async () => {
     if (!supabase || !isSupabaseConfigured()) {
       setDataLoading(false);
@@ -223,10 +306,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setDataLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
 
   const filtered = useMemo(() => {
     const isConsolidado = currentEmpresaId === 'consolidado';

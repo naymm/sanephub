@@ -67,6 +67,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   documentos_oficiais: ['id', 'empresaId', 'colaboradorId'],
   pendencias_documentais: ['id', 'entidadeId'],
   relatorios_planeamento: ['id', 'empresaId', 'ebitda', 'margemBruta', 'margemEbitda'],
+  notificacoes: [],
 };
 
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {
