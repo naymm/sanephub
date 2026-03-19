@@ -7,13 +7,32 @@ import { mapRowFromDb } from '@/lib/supabaseMappers';
 
 const STORAGE_NOTIFICACOES = 'sanep_notifications_v1';
 
+/** Opções para filtrar notificações do portal (colaborador específico). */
+export type NotificationAudienceOptions = {
+  colaboradorId?: number | null;
+};
+
+function notificationVisibleForUser(
+  n: Notificacao,
+  perfil: string,
+  opts?: NotificationAudienceOptions,
+): boolean {
+  const inAudience =
+    n.destinatarioPerfil.includes(perfil) || n.destinatarioPerfil.includes('Admin');
+  if (!inAudience) return false;
+  if (perfil === 'Colaborador' && n.destinatarioColaboradorId != null) {
+    return opts?.colaboradorId != null && opts.colaboradorId === n.destinatarioColaboradorId;
+  }
+  return true;
+}
+
 interface NotificationContextType {
   notifications: Notificacao[];
-  unreadCount: (perfil: string) => number;
+  unreadCount: (perfil: string, opts?: NotificationAudienceOptions) => number;
   markAsRead: (id: string) => void;
-  markAllAsRead: (perfil: string) => void;
+  markAllAsRead: (perfil: string, opts?: NotificationAudienceOptions) => void;
   addNotification: (n: Omit<Notificacao, 'id' | 'createdAt' | 'lida'>) => void;
-  getForProfile: (perfil: string) => Notificacao[];
+  getForProfile: (perfil: string, opts?: NotificationAudienceOptions) => Notificacao[];
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -42,7 +61,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const stored = loadStored();
     // Em Supabase (produção / multi-utilizador), o DB é fonte de verdade.
     if (isSupabaseConfigured()) return [];
-    return stored ?? NOTIFICACOES_SEED;
+    const base = stored ?? NOTIFICACOES_SEED;
+    // Notificações lidas são eliminadas (não persistem na lista).
+    return base.filter(n => !n.lida);
   });
 
   // Referência estável: inline mapRow recriava a cada render e o useRealtimeTable
@@ -113,10 +134,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, [notifications.length]);
 
   // Quando Supabase está ligado, usamos o hook realtime como fonte de verdade.
+  // Notificações já lidas não ficam na lista — apagamos do DB para manter limpo.
   useEffect(() => {
     if (!realtimeEnabled) return;
     if (dbLoading) return;
-    setNotifications(dbNotifications);
+    const readIds = dbNotifications.filter(n => n.lida).map(n => n.id);
+    setNotifications(dbNotifications.filter(n => !n.lida));
+    if (readIds.length > 0 && supabase) {
+      void supabase.from('notificacoes').delete().in('id', readIds);
+    }
   }, [dbNotifications, dbLoading, realtimeEnabled]);
 
   useEffect(() => {
@@ -143,37 +169,25 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const getForProfile = (perfil: string) =>
-    notifications.filter(n => n.destinatarioPerfil.includes(perfil) || n.destinatarioPerfil.includes('Admin'));
+  const getForProfile = (perfil: string, opts?: NotificationAudienceOptions) =>
+    notifications.filter(n => !n.lida && notificationVisibleForUser(n, perfil, opts));
 
-  const unreadCount = (perfil: string) =>
-    getForProfile(perfil).filter(n => !n.lida).length;
+  const unreadCount = (perfil: string, opts?: NotificationAudienceOptions) =>
+    getForProfile(perfil, opts).length;
 
-  const markAsRead = (id: string) =>
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, lida: true } : n));
-
-  const markAsReadDb = async (id: string) => {
+  const deleteNotificacaoDb = async (id: string) => {
     if (!isSupabaseConfigured() || !supabase) return;
     try {
-      await supabase.from('notificacoes').update({ lida: true }).eq('id', id);
+      await supabase.from('notificacoes').delete().eq('id', id);
     } catch {
       // ignore
     }
   };
 
-  const markAllAsRead = (perfil: string) =>
-    setNotifications(prev => prev.map(n =>
-      (n.destinatarioPerfil.includes(perfil) || n.destinatarioPerfil.includes('Admin')) ? { ...n, lida: true } : n
-    ));
-
-  const markAllAsReadDb = async (perfil: string) => {
-    if (!isSupabaseConfigured() || !supabase) return;
+  const deleteNotificacoesDb = async (ids: string[]) => {
+    if (!isSupabaseConfigured() || !supabase || ids.length === 0) return;
     try {
-      // Para simplificar, usa IDs actuais no estado.
-      const ids = notifications
-        .filter(n => (n.destinatarioPerfil.includes(perfil) || n.destinatarioPerfil.includes('Admin')) && !n.lida)
-        .map(n => n.id);
-      await Promise.all(ids.map(id => supabase.from('notificacoes').update({ lida: true }).eq('id', id)));
+      await supabase.from('notificacoes').delete().in('id', ids);
     } catch {
       // ignore
     }
@@ -202,6 +216,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           mensagem: newN.mensagem,
           modulo_origem: newN.moduloOrigem,
           destinatario_perfil: newN.destinatarioPerfil,
+          destinatario_colaborador_id: newN.destinatarioColaboradorId ?? null,
           lida: newN.lida,
           created_at: newN.createdAt,
           link: newN.link ?? null,
@@ -218,14 +233,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         notifications,
         unreadCount,
         markAsRead: (id: string) => {
-          setNotifications(prev => prev.map(n => (n.id === id ? { ...n, lida: true } : n)));
-          void markAsReadDb(id);
+          setNotifications(prev => prev.filter(n => n.id !== id));
+          void deleteNotificacaoDb(id);
         },
-        markAllAsRead: (perfil: string) => {
-          setNotifications(prev => prev.map(n =>
-            (n.destinatarioPerfil.includes(perfil) || n.destinatarioPerfil.includes('Admin')) ? { ...n, lida: true } : n
-          ));
-          void markAllAsReadDb(perfil);
+        markAllAsRead: (perfil: string, opts?: NotificationAudienceOptions) => {
+          setNotifications(prev => {
+            const remove = new Set(
+              prev.filter(n => notificationVisibleForUser(n, perfil, opts)).map(n => n.id),
+            );
+            const ids = [...remove];
+            if (ids.length) void deleteNotificacoesDb(ids);
+            return prev.filter(n => !remove.has(n.id));
+          });
         },
         addNotification,
         getForProfile,

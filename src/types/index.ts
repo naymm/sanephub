@@ -365,6 +365,8 @@ export interface Notificacao {
   mensagem: string;
   moduloOrigem: string;
   destinatarioPerfil: string[];
+  /** Se definido, só este colaborador (portal) deve ver a notificação entre utilizadores com perfil Colaborador. */
+  destinatarioColaboradorId?: number | null;
   lida: boolean;
   createdAt: string;
   link?: string;

@@ -71,3 +71,13 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Tempo real (SSE) em todos os módulos
+
+Os dados em lista vêm de `useRealtimeTable` (`DataContext` + notificações). Com **`VITE_SSE_URL`** definido, o browser liga ao gateway SSE; o gateway subscreve o Realtime do Supabase para **todas** as tabelas da app e reenvia os eventos.
+
+1. Aplica as migrations Supabase (publicação `supabase_realtime` nas tabelas necessárias).
+2. `.env`: `VITE_SSE_URL=http://localhost:4000` (e opcionalmente `VITE_SSE_TOKEN` se usares segredo no gateway).
+3. `npm run sse:gateway` num terminal; `npm run dev` noutro.
+
+Detalhes: [`server/README.md`](server/README.md).

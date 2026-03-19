@@ -78,8 +78,10 @@ export function Topbar() {
 
   const title = routeTitles[location.pathname] || 'Dashboard';
   const breadcrumb = location.pathname.split('/').filter(Boolean);
-  const notifs = getForProfile(user.perfil);
-  const unread = unreadCount(user.perfil);
+  const notifAudience =
+    user.perfil === 'Colaborador' ? { colaboradorId: user.colaboradorId } : undefined;
+  const notifs = getForProfile(user.perfil, notifAudience);
+  const unread = unreadCount(user.perfil, notifAudience);
   const tenantLabel = currentEmpresaId === 'consolidado' ? 'Grupo (consolidado)' : empresas.find(e => e.id === currentEmpresaId)?.codigo ?? 'Empresa';
 
   return (
@@ -138,8 +140,8 @@ export function Topbar() {
             <div className="flex items-center justify-between p-3 border-b">
               <h3 className="font-semibold text-sm">Notificações</h3>
               {unread > 0 && (
-                <button onClick={() => markAllAsRead(user.perfil)} className="text-xs text-secondary hover:underline">
-                  Marcar todas como lidas
+                <button onClick={() => markAllAsRead(user.perfil, notifAudience)} className="text-xs text-secondary hover:underline">
+                  Limpar todas
                 </button>
               )}
             </div>

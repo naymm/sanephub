@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useNotifications } from '@/context/NotificationContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
@@ -52,6 +53,7 @@ const PAISES_EMBAIXADA = ['ESPANHA', 'PORTUGAL', 'CHINA', 'EUA', 'BRASIL'];
 export default function PortalDeclaracoesPage() {
   const colaboradorId = useColaboradorId();
   const { declaracoes, addDeclaracao, colaboradoresTodos } = useData();
+  const { addNotification } = useNotifications();
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -129,6 +131,15 @@ export default function PortalDeclaracoesPage() {
     }
     try {
       await addDeclaracao(form);
+      const col = colaboradoresTodos.find(c => c.id === form.colaboradorId);
+      addNotification({
+        tipo: 'info',
+        titulo: 'Novo pedido de declaração',
+        mensagem: `${col?.nome ?? 'Colaborador'} solicitou declaração (${form.tipo}).`,
+        moduloOrigem: 'capital-humano',
+        destinatarioPerfil: ['RH', 'Admin'],
+        link: '/capital-humano/declaracoes',
+      });
       setDialogOpen(false);
       toast.success('Pedido de declaração registado. Será processado pelos Recursos Humanos.');
     } catch (e) {

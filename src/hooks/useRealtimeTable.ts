@@ -85,10 +85,12 @@ export function useRealtimeTable<T>(
     // com VITE_SSE_URL definido, antes o hook fazia return cedo e a lista deixava
     // de receber postgres_changes (ex.: requisicoes sem eventos no SSE).
     const sseBaseUrl = import.meta.env.VITE_SSE_URL as string | undefined;
+    const sseToken = import.meta.env.VITE_SSE_TOKEN as string | undefined;
     if (sseBaseUrl) {
       try {
         const url = new URL('/realtime', sseBaseUrl);
         url.searchParams.set('table', String(table));
+        if (sseToken) url.searchParams.set('token', sseToken);
         const es = new EventSource(url.toString());
 
         es.onmessage = (event) => {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useNotifications } from '@/context/NotificationContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useAuth } from '@/context/AuthContext';
@@ -49,6 +50,7 @@ const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
 export default function DeclaracoesPage() {
   const { user } = useAuth();
   const { declaracoes, addDeclaracao, updateDeclaracao, deleteDeclaracao, colaboradores } = useData();
+  const { addNotification } = useNotifications();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -131,7 +133,19 @@ export default function DeclaracoesPage() {
     if (!form.colaboradorId || !form.dataPedido) return;
     try {
       if (editing) await updateDeclaracao(editing.id, form);
-      else await addDeclaracao(form);
+      else {
+        await addDeclaracao(form);
+        const nome = getColabName(form.colaboradorId);
+        addNotification({
+          tipo: 'info',
+          titulo: 'Declaração registada (RH)',
+          mensagem: `Foi criada uma declaração (${form.tipo}) para ${nome}.`,
+          moduloOrigem: 'capital-humano',
+          destinatarioPerfil: ['Colaborador'],
+          destinatarioColaboradorId: form.colaboradorId,
+          link: '/portal/declaracoes',
+        });
+      }
       setDialogOpen(false);
       setEditing(null);
     } catch (e) {
@@ -144,6 +158,15 @@ export default function DeclaracoesPage() {
     const emitidoPor = user?.nome;
     try {
       await updateDeclaracao(d.id, { status: 'Emitida', dataEmissao, emitidoPor });
+      addNotification({
+        tipo: 'sucesso',
+        titulo: 'Declaração emitida',
+        mensagem: `A sua declaração (${d.tipo}) foi emitida. Pode descarregar o PDF em «As minhas declarações».`,
+        moduloOrigem: 'capital-humano',
+        destinatarioPerfil: ['Colaborador'],
+        destinatarioColaboradorId: d.colaboradorId,
+        link: '/portal/declaracoes',
+      });
       const emitida = { ...d, status: 'Emitida' as const, dataEmissao, emitidoPor };
       handleImprimirPdf(emitida);
     } catch (e) {
@@ -154,6 +177,15 @@ export default function DeclaracoesPage() {
   const marcarEntregue = async (d: Declaracao) => {
     try {
       await updateDeclaracao(d.id, { status: 'Entregue', dataEntrega: new Date().toISOString().slice(0, 10) });
+      addNotification({
+        tipo: 'info',
+        titulo: 'Declaração entregue',
+        mensagem: `A declaração (${d.tipo}) foi registada como entregue.`,
+        moduloOrigem: 'capital-humano',
+        destinatarioPerfil: ['Colaborador'],
+        destinatarioColaboradorId: d.colaboradorId,
+        link: '/portal/declaracoes',
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao actualizar');
     }
