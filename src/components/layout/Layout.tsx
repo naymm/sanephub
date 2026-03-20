@@ -3,8 +3,8 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { getModulosAtivosForContext } from '@/utils/empresaModulos';
-import { Sidebar } from './Sidebar';
-import { Topbar } from './Topbar';
+import { IntranetTopbar } from './IntranetTopbar';
+import { HorizontalMenu } from './HorizontalMenu';
 
 const PATH_TO_MODULE: Record<string, string> = {
   '/portal': 'portal-colaborador',
@@ -45,14 +45,15 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
-        <main className="flex-1 p-5 lg:p-8 overflow-x-hidden bg-background">
-          <Outlet />
-        </main>
-      </div>
+    <div className="min-h-screen w-full bg-background flex flex-col">
+      <IntranetTopbar />
+      <HorizontalMenu />
+      <main className="flex-1 p-5 lg:p-8 overflow-x-hidden bg-background">
+        <Outlet />
+      </main>
+      <footer className="border-t border-border/80 px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-muted-foreground">
+        © {new Date().getFullYear()} GRUPO SANEP. Todos os direitos reservados.
+      </footer>
     </div>
   );
 }

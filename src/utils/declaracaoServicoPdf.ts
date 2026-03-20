@@ -452,7 +452,8 @@ export async function gerarPdfDeclaracaoServico(
   doc.setFontSize(10);
   doc.text(cargoAssinatura, pageW / 2, y, { align: 'center' });
 
-  // Devolver um blob URL para pré-visualização (por exemplo, num modal com <iframe />)
-  const blobUrl = doc.output('bloburl');
-  return typeof blobUrl === 'string' ? blobUrl : String(blobUrl);
+  // Devolver uma URL object (por exemplo, para num modal com <iframe />).
+  // `output('bloburl')` pode falhar dependendo do ambiente; `output('blob')` é mais consistente.
+  const blob = doc.output('blob') as Blob;
+  return URL.createObjectURL(blob);
 }
