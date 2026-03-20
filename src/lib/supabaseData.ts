@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
-import type { Empresa, Departamento, Colaborador, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento } from '@/types';
+import type { Empresa, Departamento, Colaborador, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento } from '@/types';
 
 const TABLE_NAMES = {
   empresas: 'empresas',
@@ -28,6 +28,8 @@ const TABLE_NAMES = {
   documentos_oficiais: 'documentos_oficiais',
   pendencias_documentais: 'pendencias_documentais',
   relatorios_planeamento: 'relatorios_planeamento',
+  noticias: 'noticias',
+  eventos: 'eventos',
 } as const;
 
 function num(id: number | string): number {
@@ -60,6 +62,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     { data: documentosOficiais },
     { data: pendencias },
     { data: relatoriosPlaneamento },
+    { data: noticias },
+    { data: eventos },
   ] = await Promise.all([
     supabase.from('empresas').select('*'),
     supabase.from('departamentos').select('*'),
@@ -85,6 +89,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     supabase.from('documentos_oficiais').select('*'),
     supabase.from('pendencias_documentais').select('*'),
     supabase.from('relatorios_planeamento').select('*'),
+    supabase.from('noticias').select('*'),
+    supabase.from('eventos').select('*'),
   ]);
 
   return {
@@ -112,6 +118,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     documentosOficiais: mapRowsFromDb<DocumentoOficial>('documentos_oficiais', documentosOficiais ?? []),
     pendencias: mapRowsFromDb<PendenciaDocumental>('pendencias_documentais', pendencias ?? []),
     relatoriosPlaneamento: mapRowsFromDb<RelatorioMensalPlaneamento>('relatorios_planeamento', relatoriosPlaneamento ?? []),
+    noticias: mapRowsFromDb<Noticia>('noticias', noticias ?? []),
+    eventos: mapRowsFromDb<Evento>('eventos', eventos ?? []),
   };
 }
 
@@ -394,5 +402,15 @@ export const db = {
     insert: (s: SupabaseClient, p: Partial<RelatorioMensalPlaneamento>) => insertOne<RelatorioMensalPlaneamento>(s, 'relatorios_planeamento', p as Record<string, unknown>, 'relatorios_planeamento'),
     update: (s: SupabaseClient, id: number, p: Partial<RelatorioMensalPlaneamento>) => updateOne<RelatorioMensalPlaneamento>(s, 'relatorios_planeamento', id, p as Record<string, unknown>, 'relatorios_planeamento'),
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'relatorios_planeamento', id),
+  },
+  noticias: {
+    insert: (s: SupabaseClient, p: Partial<Noticia>) => insertOne<Noticia>(s, 'noticias', p as Record<string, unknown>, 'noticias'),
+    update: (s: SupabaseClient, id: number, p: Partial<Noticia>) => updateOne<Noticia>(s, 'noticias', id, p as Record<string, unknown>, 'noticias'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'noticias', id),
+  },
+  eventos: {
+    insert: (s: SupabaseClient, p: Partial<Evento>) => insertOne<Evento>(s, 'eventos', p as Record<string, unknown>, 'eventos'),
+    update: (s: SupabaseClient, id: number, p: Partial<Evento>) => updateOne<Evento>(s, 'eventos', id, p as Record<string, unknown>, 'eventos'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'eventos', id),
   },
 };

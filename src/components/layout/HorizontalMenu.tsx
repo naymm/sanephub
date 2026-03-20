@@ -15,6 +15,9 @@ import {
   Stamp,
   Target,
   Crown,
+  Megaphone,
+  CalendarDays,
+  Cake,
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -99,12 +102,21 @@ const MODULE_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    label: 'Comunicação Interna',
+    module: 'comunicacao-interna',
+    icon: Megaphone,
+    children: [
+      { label: 'Notícias', path: '/comunicacao-interna/noticias', module: 'comunicacao-interna' },
+      { label: 'Eventos', path: '/comunicacao-interna/eventos', module: 'comunicacao-interna' },
+      { label: 'Aniversariantes', path: '/comunicacao-interna/aniversarios', module: 'comunicacao-interna' },
+    ],
+  },
+  {
     label: 'Conselho de Administração',
     module: 'conselho-administracao',
     icon: Crown,
     children: [
       { label: 'Painel Executivo', path: '/conselho-administracao', module: 'conselho-administracao' },
-      { label: 'Empresas do Grupo', path: '/conselho-administracao/empresas', module: 'conselho-administracao' },
       { label: 'Decisões Institucionais', path: '/conselho-administracao/decisoes', module: 'conselho-administracao' },
       { label: 'Assinatura de Actos', path: '/conselho-administracao/assinatura-actos', module: 'conselho-administracao' },
       { label: 'Saúde Financeira', path: '/conselho-administracao/saude-financeira', module: 'conselho-administracao' },
@@ -114,7 +126,6 @@ const MODULE_GROUPS: MenuGroup[] = [
 ];
 
 const PORTAL_ITEMS: MenuChild[] = [
-  { label: 'Os Meus Dados', path: '/portal/dados', module: 'portal-colaborador' },
   { label: 'As Minhas Férias', path: '/portal/ferias', module: 'portal-colaborador' },
   { label: 'As Minhas Faltas', path: '/portal/faltas', module: 'portal-colaborador' },
   { label: 'Os Meus Recibos', path: '/portal/recibos', module: 'portal-colaborador' },
@@ -135,12 +146,28 @@ export function HorizontalMenu() {
 
   const canShowModule = (moduleId?: string) => {
     if (!moduleId) return true;
+    // Colaborador: sempre permitir acesso ao Dashboard no menu (independente de `user.modulos` conter 'dashboard').
+    if (user.perfil === 'Colaborador' && moduleId === 'dashboard') return true;
+    // Colaborador: mostrar Comunicação Interna (Notícias/Eventos/Aniversariantes) em modo leitura.
+    // O acesso "read-only" é reforçado no backend (RLS CRUD restrito), mas o menu precisa aparecer.
+    if (user.perfil === 'Colaborador' && moduleId === 'comunicacao-interna') return true;
     if (!hasModuleAccess(user, moduleId)) return false;
+    // Para perfil Colaborador, a decisão de acesso vem do próprio `user.modulos`.
+    // Evita que uma configuração incompleta em `modulos_ativos` (multi-tenant) esconda o menu.
+    if (user.perfil === 'Colaborador') return true;
     if (modulosAtivos == null) return true;
     return modulosAtivos.includes(moduleId);
   };
 
   const isColaborador = user.perfil === 'Colaborador';
+  const hasPortalColaborador = isColaborador && Array.isArray(user.modulos) && user.modulos.includes('portal-colaborador');
+  const hasAnyNonPortalModule =
+    hasPortalColaborador && Array.isArray(user.modulos) && user.modulos.some(m => m !== 'portal-colaborador');
+
+  const canShowChild = (child: MenuChild) => {
+    if (!child.module) return true;
+    return canShowModule(child.module);
+  };
 
   const topItems = GENERAL_ITEMS.filter(i => canShowModule(i.module));
   const portalItems = PORTAL_ITEMS.filter(i => canShowModule(i.module));
@@ -153,6 +180,36 @@ export function HorizontalMenu() {
     '/notificacoes': <Bell className="h-4 w-4" />,
     '/portal/ferias': <Palmtree className="h-4 w-4" />,
     '/portal/declaracoes': <FileText className="h-4 w-4" />,
+    '/capital-humano/colaboradores': <Users className="h-4 w-4" />,
+    '/capital-humano/ferias': <Palmtree className="h-4 w-4" />,
+    '/capital-humano/faltas': <Target className="h-4 w-4" />,
+    '/capital-humano/recibos': <FileText className="h-4 w-4" />,
+    '/capital-humano/declaracoes': <FileText className="h-4 w-4" />,
+    '/financas/requisicoes': <DollarSign className="h-4 w-4" />,
+    '/financas/tesouraria': <DollarSign className="h-4 w-4" />,
+    '/financas/centros-custo': <DollarSign className="h-4 w-4" />,
+    '/financas/projectos': <DollarSign className="h-4 w-4" />,
+    '/financas/relatorios': <FileText className="h-4 w-4" />,
+    '/contabilidade/pagamentos': <FileText className="h-4 w-4" />,
+    '/contabilidade/pendencias': <Stamp className="h-4 w-4" />,
+    '/secretaria/reunioes': <Stamp className="h-4 w-4" />,
+    '/secretaria/actas': <FileText className="h-4 w-4" />,
+    '/secretaria/documentos': <FileText className="h-4 w-4" />,
+    '/secretaria/correspondencias': <MessageCircle className="h-4 w-4" />,
+    '/secretaria/arquivo': <Scale className="h-4 w-4" />,
+    '/juridico/contratos': <Scale className="h-4 w-4" />,
+    '/juridico/processos': <Scale className="h-4 w-4" />,
+    '/juridico/processos-disciplinares': <Scale className="h-4 w-4" />,
+    '/juridico/prazos': <Stamp className="h-4 w-4" />,
+    '/juridico/riscos': <Target className="h-4 w-4" />,
+    '/juridico/rescisoes': <Scale className="h-4 w-4" />,
+    '/juridico/arquivo': <Scale className="h-4 w-4" />,
+    '/planeamento/relatorios': <Target className="h-4 w-4" />,
+    '/planeamento/consolidacao': <Target className="h-4 w-4" />,
+    '/planeamento/dashboard': <Target className="h-4 w-4" />,
+    '/comunicacao-interna/noticias': <Megaphone className="h-4 w-4" />,
+    '/comunicacao-interna/eventos': <CalendarDays className="h-4 w-4" />,
+    '/comunicacao-interna/aniversarios': <Cake className="h-4 w-4" />,
   };
 
   const itemClass = (active: boolean) =>
@@ -164,60 +221,101 @@ export function HorizontalMenu() {
   return (
     <nav className="sticky z-20 top-16 bg-background/95 backdrop-blur-sm border-b border-border/80">
       <div className="mx-auto px-4 sm:px-6 lg:px-8 h-[52px] flex items-center gap-2 overflow-x-auto">
-        {/* Left: small general links */}
-        {topItems.map(item => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) => itemClass(isActive || location.pathname === item.path)}
-          >
-            {iconByPath[item.path] ? iconByPath[item.path] : <span>{item.label.split(' ')[0]}</span>}
-            <span className="hidden sm:inline">{item.label}</span>
-          </NavLink>
-        ))}
+        {hasPortalColaborador ? (
+          <>
+            {/* Colaborador + Portal + outro módulo:
+                - Mostrar Dashboard e TODOS os submenus acessíveis directamente no bar (sem dropdown). */}
+            <NavLink
+              to="/dashboard"
+              className={({ isActive }) => itemClass(isActive || location.pathname === '/dashboard')}
+            >
+              {iconByPath['/dashboard'] ? iconByPath['/dashboard'] : <span>D</span>}
+              <span className="hidden sm:inline">Dashboard</span>
+            </NavLink>
 
-        {/* Portal group for Colaborador */}
-        {isColaborador && portalItems.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
-                <span className="font-medium">Portal</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              {portalItems.map(i => (
-                <DropdownMenuItem key={i.path} onSelect={() => navigate(i.path)}>
-                  {i.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {/* Module groups */}
-        {groups.map(g => (
-          <DropdownMenu key={g.label}>
-            <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
-                {g.icon ? <g.icon className="h-4 w-4" /> : null}
-                <span className="font-medium">{g.label}</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">
-              {g.children.map(child => (
-                <DropdownMenuItem
+            {MODULE_GROUPS.flatMap(g => {
+              // Para Colaborador, mostramos Comunicação Interna como leitura
+              // para quem tem Portal (mesmo que 'comunicacao-interna' não esteja explicitamente na lista de módulos).
+              const shouldShowComunicacao =
+                isColaborador && hasPortalColaborador && g.module === 'comunicacao-interna';
+              const allowed = shouldShowComunicacao || canShowModule(g.module);
+              return allowed ? g.children.filter(canShowChild) : [];
+            }).map(child => (
+                <NavLink
                   key={child.path}
-                  onSelect={() => navigate(child.path)}
-                  className={cn(
-                    location.pathname.startsWith(child.path) && 'text-primary font-medium',
-                  )}
+                  to={child.path}
+                  className={({ isActive }) => itemClass(isActive || location.pathname === child.path)}
                 >
-                  {child.label}
-                </DropdownMenuItem>
+                  {iconByPath[child.path] ? iconByPath[child.path] : <span className="text-[11px] font-bold">{child.label.split(' ')[0].slice(0, 1)}</span>}
+                  <span className="hidden sm:inline">{child.label}</span>
+                  <span className="sm:hidden">{child.label.split(' ')[0]}</span>
+                </NavLink>
               ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ))}
+          </>
+        ) : (
+          <>
+            {/* Left: small general links */}
+            {topItems.map(item => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) => itemClass(isActive || location.pathname === item.path)}
+              >
+                {iconByPath[item.path] ? iconByPath[item.path] : <span>{item.label.split(' ')[0]}</span>}
+                <span className="hidden sm:inline">{item.label}</span>
+              </NavLink>
+            ))}
+
+            {/* Portal group for Colaborador */}
+            {isColaborador && portalItems.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
+                    <span className="font-medium">Portal</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  {portalItems.map(i => (
+                    <DropdownMenuItem key={i.path} onSelect={() => navigate(i.path)}>
+                  <span className="flex items-center gap-2">
+                    {iconByPath[i.path] ? iconByPath[i.path] : null}
+                    {i.label}
+                  </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
+            {/* Module groups */}
+            {groups.map(g => (
+              <DropdownMenu key={g.label}>
+                <DropdownMenuTrigger asChild>
+                  <button className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
+                    {g.icon ? <g.icon className="h-4 w-4" /> : null}
+                    <span className="font-medium">{g.label}</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-72">
+                  {g.children.filter(canShowChild).map(child => (
+                    <DropdownMenuItem
+                      key={child.path}
+                      onSelect={() => navigate(child.path)}
+                      className={cn(
+                        location.pathname.startsWith(child.path) && 'text-primary font-medium',
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        {iconByPath[child.path] ? iconByPath[child.path] : null}
+                        {child.label}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ))}
+          </>
+        )}
       </div>
     </nav>
   );

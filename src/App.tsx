@@ -55,6 +55,11 @@ import PlaneamentoRelatoriosPage from "@/modules/planeamento/PlaneamentoRelatori
 import PlaneamentoRelatorioFormPage from "@/modules/planeamento/PlaneamentoRelatorioFormPage";
 import PlaneamentoConsolidacaoPage from "@/modules/planeamento/PlaneamentoConsolidacaoPage";
 import PlaneamentoDashboardPage from "@/modules/planeamento/PlaneamentoDashboardPage";
+import NoticiasPage from "@/modules/comunicacao-interna/NoticiasPage";
+import NoticiaDetalhePage from "@/modules/comunicacao-interna/NoticiaDetalhePage";
+import EventosPage from "@/modules/comunicacao-interna/EventosPage";
+import EventoDetalhePage from "@/modules/comunicacao-interna/EventoDetalhePage";
+import AniversariosPage from "@/modules/comunicacao-interna/AniversariosPage";
 
 const queryClient = new QueryClient();
 
@@ -127,6 +132,12 @@ const App = () => (
                   <Route path="/portal/recibos" element={<PortalRecibosPage />} />
                   <Route path="/portal/declaracoes" element={<PortalDeclaracoesPage />} />
                   <Route path="/portal/requisicoes" element={<PortalRequisicoesPage />} />
+                  {/* Comunicação Interna */}
+                  <Route path="/comunicacao-interna/noticias" element={<NoticiasPage />} />
+                  <Route path="/comunicacao-interna/noticias/:id" element={<NoticiaDetalhePage />} />
+                  <Route path="/comunicacao-interna/eventos" element={<EventosPage />} />
+                  <Route path="/comunicacao-interna/eventos/:id" element={<EventoDetalhePage />} />
+                  <Route path="/comunicacao-interna/aniversarios" element={<AniversariosPage />} />
                   {/* Config */}
                   <Route path="/configuracoes" element={<GenericModulePage title="Configurações" module="config" />} />
                   <Route path="/configuracoes/utilizadores" element={<UtilizadoresPage />} />

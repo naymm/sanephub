@@ -18,6 +18,8 @@ export const REALTIME_TABLES = [
   'faltas',
   'recibos_salario',
   'declaracoes',
+  'noticias',
+  'eventos',
   'processos_judiciais',
   'prazos_legais',
   'riscos_juridicos',

@@ -3,7 +3,7 @@ import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Crown, DollarSign, FileText, LayoutGrid, LogOut, Palmtree, Search, Settings, Scale, Stamp, Target, Users, User, MessageCircle } from 'lucide-react';
+import { Bell, Crown, DollarSign, FileText, LayoutGrid, LogOut, Palmtree, Search, Settings, Scale, Stamp, Target, Users, User, MessageCircle, Megaphone, CalendarDays, Cake } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -33,6 +33,10 @@ export function IntranetTopbar() {
     user.perfil === 'Colaborador' ? { colaboradorId: user.colaboradorId } : undefined;
   const notifs = getForProfile(user.perfil, notifAudience);
   const unread = unreadCount(user.perfil, notifAudience);
+
+  const hasPortalColaborador = user.perfil === 'Colaborador' && Array.isArray(user.modulos) && user.modulos.includes('portal-colaborador');
+  const hasAnyNonPortalModule =
+    hasPortalColaborador && Array.isArray(user.modulos) && user.modulos.some(m => m !== 'portal-colaborador');
 
   const [appsOpen, setAppsOpen] = useState(false);
   const [selectedPrincipalModuleId, setSelectedPrincipalModuleId] = useState<string | null>(null);
@@ -338,6 +342,10 @@ export function IntranetTopbar() {
                 {user.perfil === 'Admin' && (
                   <>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => navigate('/conselho-administracao/empresas')}>
+                      <Crown className="mr-2 h-4 w-4" />
+                      Empresas do Grupo
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => navigate('/configuracoes/utilizadores')}>
                       <Users className="mr-2 h-4 w-4" />
                       Utilizadores
@@ -368,6 +376,46 @@ export function IntranetTopbar() {
                 <User className="mr-2 h-4 w-4" />
                 Ver Perfil
               </DropdownMenuItem>
+
+              {user.perfil === 'Colaborador' && hasModuleAccess(user, 'portal-colaborador') && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => navigate('/portal/ferias')}>
+                    <Palmtree className="mr-2 h-4 w-4" />Férias
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/portal/faltas')}>
+                    <User className="mr-2 h-4 w-4" />Faltas
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/portal/recibos')}>
+                    <FileText className="mr-2 h-4 w-4" />Recibos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/portal/declaracoes')}>
+                    <FileText className="mr-2 h-4 w-4" />Declarações
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/portal/requisicoes')}>
+                    <DollarSign className="mr-2 h-4 w-4" />
+                    {user.modulos?.includes('financas') ? 'Requisição Finanças' : 'Requisição à Área Financeira'}
+                  </DropdownMenuItem>
+
+                  {hasPortalColaborador && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/noticias')}>
+                        <Megaphone className="mr-2 h-4 w-4" />
+                        Notícias
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/eventos')}>
+                        <CalendarDays className="mr-2 h-4 w-4" />
+                        Eventos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/aniversarios')}>
+                        <Cake className="mr-2 h-4 w-4" />
+                        Aniversariantes
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </>
+              )}
               {user.perfil === 'Admin' && (
                 <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
                   <Settings className="mr-2 h-4 w-4" />

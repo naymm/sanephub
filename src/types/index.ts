@@ -362,6 +362,53 @@ export interface PrazoLegal {
   observacoes?: string;
 }
 
+export interface Noticia {
+  id: number;
+  empresaId: number;
+  titulo: string;
+  conteudo: string;
+  imagemUrl?: string | null;
+  featured: boolean;
+  publicado: boolean;
+  publicadoEm?: string | null;
+}
+
+export interface NoticiaComentario {
+  id: number;
+  empresaId: number;
+  noticiaId: number;
+  autorTexto: string;
+  autorColaboradorId?: number | null;
+  conteudo: string;
+  parentComentarioId?: number | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface NoticiaGosto {
+  id: number;
+  empresaId: number;
+  noticiaId: number;
+  /** Perfil (linha em `profiles`) que deu o gosto. */
+  autorPerfilId: number;
+  /** Mantido para compatibilidade (pode ser null para perfis sem colaborador). */
+  colaboradorId?: number | null;
+  createdAt: string;
+}
+
+export interface Evento {
+  id: number;
+  empresaId: number;
+  titulo: string;
+  descricao?: string;
+  local: string;
+  dataInicio: string;
+  imagemUrl?: string | null;
+  isInterno: boolean;
+  alertaAntesHoras?: number | null;
+  alertaEm?: string | null;
+}
+
 export interface Notificacao {
   id: string;
   tipo: 'info' | 'alerta' | 'urgente' | 'sucesso';

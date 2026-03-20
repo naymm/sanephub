@@ -1,25 +1,135 @@
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
+import { useTenant } from '@/context/TenantContext';
+import { useNotifications } from '@/context/NotificationContext';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getCurrentDatePT, formatKz, formatDate, diasRestantes, getGreeting } from '@/utils/formatters';
-import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Clock, AlertTriangle, FileText, Download } from 'lucide-react';
-import { useState } from 'react';
+import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Download, Star, Heart, MessageCircle, Cake } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar as UiCalendar } from '@/components/ui/calendar';
 import { hasModuleAccess } from '@/context/AuthContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
+
+type BirthdayPerson = {
+  id: number;
+  name: string;
+  birth_date: string;
+  company_id: number;
+  avatar?: string | null;
+};
 
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { colaboradores, requisicoes, contratos, reunioes, processos, prazos, centrosCusto, pagamentos, documentosOficiais } = useData();
+  const { colaboradores, requisicoes, contratos, reunioes, processos, prazos, centrosCusto, pagamentos, documentosOficiais, noticias, eventos } = useData();
+  const { currentEmpresaId } = useTenant();
+  const { addNotification } = useNotifications();
   const navigate = useNavigate();
   const [docQuery, setDocQuery] = useState('');
+  const [likesCountByNewsId, setLikesCountByNewsId] = useState<Record<number, number>>({});
+  const [commentsCountByNewsId, setCommentsCountByNewsId] = useState<Record<number, number>>({});
 
   if (!user) return null;
+
+  const [birthdaysToday, setBirthdaysToday] = useState<BirthdayPerson[]>([]);
+  const [birthdaysMonth, setBirthdaysMonth] = useState<BirthdayPerson[]>([]);
+  const [birthdaysLoading, setBirthdaysLoading] = useState(false);
+  const [birthdaysError, setBirthdaysError] = useState<string | null>(null);
+
+  const looksLikeUrl = (s?: string | null) => !!s && (s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/'));
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!isSupabaseConfigured() || !supabase) return;
+      setBirthdaysLoading(true);
+      setBirthdaysError(null);
+      try {
+        const company_id = currentEmpresaId === 'consolidado' ? null : currentEmpresaId;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+
+        if (!accessToken) throw new Error('Sessão não encontrada. Faça login novamente.');
+
+        const { data: invokeData, error } = await supabase.functions.invoke('birthdays', {
+          body: { company_id, nowISO: new Date().toISOString() },
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        } as any);
+        if (error) throw error;
+        const parsed = invokeData as { today_birthdays?: BirthdayPerson[]; month_birthdays?: BirthdayPerson[] };
+        if (!cancelled) {
+          setBirthdaysToday(parsed.today_birthdays ?? []);
+          setBirthdaysMonth(parsed.month_birthdays ?? []);
+        }
+      } catch (e) {
+        if (!cancelled) setBirthdaysError(e instanceof Error ? e.message : 'Erro ao carregar aniversários');
+      } finally {
+        if (!cancelled) setBirthdaysLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentEmpresaId]);
+
+  useEffect(() => {
+    if (!birthdaysToday.length) return;
+    try {
+      const key = `birthday_notified_${new Date().toISOString().slice(0, 10)}`;
+      const already = localStorage.getItem(key);
+      if (already) return;
+      localStorage.setItem(key, '1');
+      addNotification({
+        tipo: 'sucesso',
+        titulo: 'Aniversário(s) do dia',
+        mensagem: `Parabéns a ${birthdaysToday.map(b => b.name.split(' ')[0]).join(', ')}!`,
+        moduloOrigem: 'comunicacao-interna',
+        destinatarioPerfil: ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'],
+        link: '/comunicacao-interna/aniversarios',
+      });
+    } catch {
+      // ignore
+    }
+  }, [birthdaysToday, addNotification]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const candidates = eventos.filter(e => {
+      if (!e.alertaEm) return false;
+      const t = new Date(e.alertaEm).getTime();
+      // Janela de 60 min após o alerta
+      return t <= now && t >= now - 60 * 60 * 1000;
+    });
+    if (candidates.length === 0) return;
+
+    for (const e of candidates) {
+      const key = `event_alert_notified_${e.id}_${todayKey}`;
+      try {
+        const already = localStorage.getItem(key);
+        if (already) continue;
+        localStorage.setItem(key, '1');
+        addNotification({
+          tipo: 'info',
+          titulo: 'Lembrete de evento',
+          mensagem: `O evento "${e.titulo}" está prestes a acontecer.`,
+          moduloOrigem: 'comunicacao-interna',
+          destinatarioPerfil: ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'],
+          link: `/comunicacao-interna/eventos/${e.id}`,
+        });
+      } catch {
+        // ignore
+      }
+    }
+  }, [eventos, addNotification]);
 
   const activeClients = colaboradores.filter(c => c.status === 'Activo').length;
 
@@ -47,9 +157,41 @@ export default function Dashboard() {
   const scheduledMeetings = reunioes.filter(r => r.status === 'Agendada').length;
   const activeCases = processos.filter(p => p.status === 'Em curso').length;
   const criticalDeadlines = prazos.filter(p => p.status === 'Vencido' || (p.prioridade === 'Crítica' && p.status !== 'Concluído')).length;
+  const nowMs = Date.now();
+  const nextEvents = [...eventos]
+    .filter(e => new Date(e.dataInicio).getTime() >= nowMs)
+    .sort((a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime())
+    .slice(0, 2);
 
-  const latestReqs = requisicoes.slice(0, 5);
-  const nextMeetings = reunioes.filter(r => r.status === 'Agendada').slice(0, 3);
+  const eventCalendarDates = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const start = new Date(year, month, 1).getTime();
+    const end = new Date(year, month + 1, 0, 23, 59, 59).getTime();
+    const dates: Date[] = [];
+    for (const e of eventos) {
+      const t = new Date(e.dataInicio).getTime();
+      if (t < start || t > end) continue;
+      const d = new Date(e.dataInicio);
+      dates.push(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+    }
+    // Dedup por timestamp do dia
+    const unique = new Map<number, Date>();
+    for (const d of dates) unique.set(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), d);
+    return Array.from(unique.values());
+  }, [eventos]);
+
+  const birthdayCalendarDates = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    return birthdaysMonth.map(p => {
+      const bd = new Date(p.birth_date);
+      const m = bd.getUTCMonth();
+      const day = bd.getUTCDate();
+      return new Date(year, m, day);
+    });
+  }, [birthdaysMonth]);
 
   const docsFiltered = documentosOficiais
     .filter(d => {
@@ -61,41 +203,109 @@ export default function Dashboard() {
     .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
     .slice(0, 6);
 
-  // Feed de "Notícias & Atualizações" (reutiliza dados existentes)
-  const expiringContractsList = contratos
-    .filter(c => c.status === 'A Renovar' || c.status === 'Expirado')
-    .slice(0, 2);
+  // Feed de "Notícias & Atualizações" (cards consistentes com a imagem de referência)
+  const publishedNews = noticias
+    .filter(n => n.publicado)
+    .sort((a, b) => new Date(b.publicadoEm ?? '').getTime() - new Date(a.publicadoEm ?? '').getTime());
 
-  const criticalPrazosList = prazos
-    .filter(p => p.status === 'Vencido' || p.prioridade === 'Crítica')
-    .slice(0, 2);
+  const featuredNews = publishedNews.find(n => n.featured) ?? null;
+  const orderedNews = featuredNews
+    ? [featuredNews, ...publishedNews.filter(n => n.id !== featuredNews.id)]
+    : publishedNews;
 
-  const newsCards = [
-    ...latestReqs.slice(0, 2).map(r => ({
-      key: `req-${r.id}`,
-      title: `Nova requisição: ${r.num}`,
-      meta: `${r.fornecedor}`,
-      body: `Valor ${formatKz(r.valor)} • Status: ${r.status}`,
-    })),
-    ...nextMeetings.slice(0, 1).map(m => ({
-      key: `meet-${m.id}`,
-      title: `Reunião agendada: ${m.titulo}`,
-      meta: `${formatDate(m.data)} • ${m.hora} — ${m.local}`,
-      body: `Tipo/área: ${m.tipo}`,
-    })),
-    ...expiringContractsList.map(c => ({
-      key: `contract-${c.id}`,
-      title: `Atenção: contrato ${c.numero}`,
-      meta: `${c.parteB}`,
-      body: `Vence: ${formatDate(c.dataFim)} • Estado: ${c.status}`,
-    })),
-    ...criticalPrazosList.map(p => ({
-      key: `deadline-${p.id}`,
-      title: `Prazo crítico: ${p.titulo}`,
-      meta: `Limite ${p.dataLimite ? formatDate(p.dataLimite) : ''}`.trim(),
-      body: `Prioridade: ${p.prioridade} • Estado: ${p.status}`,
-    })),
-  ].slice(0, 5);
+  const newsCardIds = orderedNews.slice(0, 3).map(n => n.id);
+  const newsCardIdsKey = newsCardIds.join(',');
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!isSupabaseConfigured() || !supabase) return;
+      if (!newsCardIds.length) {
+        setLikesCountByNewsId({});
+        setCommentsCountByNewsId({});
+        return;
+      }
+
+      try {
+        const [likesResults, commentsResults] = await Promise.all([
+          Promise.all(
+            newsCardIds.map(async id => {
+              const { count, error } = await supabase
+                .from('noticias_gostos')
+                .select('id', { count: 'exact', head: true })
+                .eq('noticia_id', id);
+              if (error) throw error;
+              return { id, count: Number(count ?? 0) };
+            }),
+          ),
+          Promise.all(
+            newsCardIds.map(async id => {
+              const { count, error } = await supabase
+                .from('noticias_comentarios')
+                .select('id', { count: 'exact', head: true })
+                .eq('noticia_id', id);
+              if (error) throw error;
+              return { id, count: Number(count ?? 0) };
+            }),
+          ),
+        ]);
+
+        if (cancelled) return;
+        setLikesCountByNewsId(Object.fromEntries(likesResults.map(r => [r.id, r.count])));
+        setCommentsCountByNewsId(Object.fromEntries(commentsResults.map(r => [r.id, r.count])));
+      } catch {
+        // Silencioso: no dashboard é apenas informação extra.
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [newsCardIdsKey]);
+
+  const formatDateTimePT = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('pt-PT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  type NewsCard = {
+    key: string;
+    id: number;
+    title: string;
+    meta: string;
+    excerpt: string;
+    hasMore: boolean;
+    imageUrl?: string | null;
+    featured?: boolean;
+    readMorePath: string;
+  };
+
+  const newsCards: NewsCard[] = orderedNews.slice(0, 3).map(n => {
+    const content = (n.conteudo ?? '').trim();
+    const excerpt = content.slice(0, 220);
+    const hasMore = content.length > 220;
+
+    return {
+    key: `news-${n.id}`,
+    id: n.id,
+    title: n.titulo,
+    meta: `${n.featured ? 'Destaque' : 'Notícias'} • ${formatDateTimePT(n.publicadoEm)}`.trim(),
+    excerpt,
+    hasMore,
+    imageUrl: n.imagemUrl ?? null,
+    featured: n.featured,
+    readMorePath: `/comunicacao-interna/noticias/${n.id}`,
+    };
+  });
 
   const quickLinks = [
     { label: 'Requisições', path: '/financas/requisicoes', module: 'financas' },
@@ -162,7 +372,7 @@ export default function Dashboard() {
               <h2 className="text-base font-semibold text-foreground">Notícias & Atualizações</h2>
               <p className="text-sm text-muted-foreground mt-1">Resumo do que está a acontecer no sistema.</p>
             </div>
-            <Button variant="outline" onClick={() => navigate('/dashboard')}>
+            <Button variant="outline" onClick={() => navigate('/comunicacao-interna/noticias')}>
               Ver mais
             </Button>
           </div>
@@ -174,15 +384,63 @@ export default function Dashboard() {
                 className="bg-card rounded-xl border border-border/80 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">{n.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{n.meta}</p>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar className="h-10 w-10 ring-1 ring-border/50">
+                      <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                        {'C'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">Comunicação Interna</p>
+                      <p className="text-xs text-muted-foreground mt-1">{n.meta}</p>
+                    </div>
                   </div>
+
                   <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <FileText className="h-4 w-4" />
+                    {n.featured ? <Star className="h-4 w-4 text-[#a57e26]" /> : null}
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-3">{n.body}</p>
+
+                <p className="text-base font-semibold text-foreground mt-3">{n.title}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {n.excerpt}
+                  {n.hasMore ? '...' : ''}
+                </p>
+
+                <div className="mt-3 overflow-hidden rounded-xl border border-border/60">
+                  {n.imageUrl ? (
+                    <img
+                      src={n.imageUrl}
+                      alt={n.title}
+                      className="h-44 w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-44 w-full bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">
+                      Sem imagem
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-5 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Heart className="h-4 w-4 text-destructive" />
+                      <span>{likesCountByNewsId[n.id] ?? 0}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4" />
+                      <span>{commentsCountByNewsId[n.id] ?? 0}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => navigate(n.readMorePath)}
+                    className="text-sm font-medium text-[#a57e26] hover:underline"
+                    type="button"
+                  >
+                    Leia mais
+                  </button>
+                </div>
               </div>
             ))}
             {newsCards.length === 0 && (
@@ -228,41 +486,85 @@ export default function Dashboard() {
               <LucideCalendar className="h-5 w-5 text-muted-foreground" />
             </div>
             <div className="mt-3 overflow-hidden rounded-xl border border-border/80">
-              <UiCalendar />
+              <UiCalendar
+                modifiers={{
+                  eventos: eventCalendarDates,
+                  aniversarios: birthdayCalendarDates,
+                }}
+                modifiersClassNames={{
+                  eventos: 'bg-primary/10 text-primary',
+                  aniversarios: 'bg-primary/20 text-primary',
+                }}
+              />
             </div>
           </div>
 
           <div className="bg-card rounded-xl border border-border/80 p-5">
-            <h2 className="text-base font-semibold text-foreground">Eventos</h2>
-            <p className="text-sm text-muted-foreground mt-1">Próximas reuniões e prazos relevantes.</p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Aniversariantes do dia</h2>
+                <p className="text-sm text-muted-foreground mt-1">Destaque com foto de perfil.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate('/comunicacao-interna/aniversarios')}>
+                Ver
+              </Button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-3">
+              {birthdaysLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando...</p>
+              ) : birthdaysToday.length > 0 ? (
+                birthdaysToday.slice(0, 4).map(p => (
+                  <div key={p.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/30 px-3 py-2">
+                    <Avatar className="h-10 w-10 ring-1 ring-border/50">
+                      {looksLikeUrl(p.avatar) ? <AvatarImage src={p.avatar ?? undefined} /> : null}
+                      <AvatarFallback>
+                        {(p.name || '?')
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map(w => w[0]?.toUpperCase())
+                          .join('')}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{p.name}</div>
+                      <div className="text-xs text-muted-foreground">{formatDate(p.birth_date)}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">Sem aniversariantes hoje.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-card rounded-xl border border-border/80 p-5">
+            <h2 className="text-base font-semibold text-foreground">Próximos Eventos</h2>
+            <p className="text-sm text-muted-foreground mt-1">Eventos corporativos agendados.</p>
 
             <div className="divide-y divide-border/50 mt-4">
-              {[...nextMeetings].slice(0, 2).map(m => (
-                <div key={`ev-meet-${m.id}`} className="py-3 flex items-start justify-between gap-3">
+              {nextEvents.map(e => (
+                <div key={`ev-comms-${e.id}`} className="py-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{m.titulo}</p>
+                    <p className="text-sm font-medium truncate">{e.titulo}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {formatDate(m.data)} • {m.hora} — {m.local}
+                      {new Date(e.dataInicio).toLocaleString('pt-PT')} — {e.local}
                     </p>
                   </div>
-                  <StatusBadge status={m.tipo} variant="gold" />
+                  <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', e.isInterno ? 'border-primary/40 text-primary' : 'border-border/60 text-muted-foreground')}>
+                    {e.isInterno ? 'Interno' : 'Externo'}
+                  </span>
                 </div>
               ))}
-              {criticalPrazosList.length > 0 &&
-                criticalPrazosList.map(p => (
-                  <div key={`ev-prazo-${p.id}`} className="py-3 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{p.titulo}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Prazo {p.dataLimite ? formatDate(p.dataLimite) : '—'} • Prioridade {p.prioridade}
-                      </p>
-                    </div>
-                    <StatusBadge status={p.status} />
-                  </div>
-                ))}
-              {nextMeetings.length === 0 && criticalPrazosList.length === 0 && (
+              {nextEvents.length === 0 && (
                 <p className="py-3 text-sm text-muted-foreground">Sem eventos no momento.</p>
               )}
+            </div>
+            <div className="pt-3">
+              <Button variant="outline" size="sm" onClick={() => navigate('/comunicacao-interna/eventos')}>
+                Ver todos
+              </Button>
             </div>
           </div>
         </section>

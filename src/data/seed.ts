@@ -2,9 +2,9 @@ import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Decla
 
 /** Holding = principal; demais = unidades de negócio. */
 export const EMPRESAS_SEED: Empresa[] = [
-  { id: 1, codigo: 'SANEP-SGPS', nome: 'Sanep SGPS, S.A.', nif: '501234567', morada: 'Lisboa, Portugal', activo: true },
-  { id: 2, codigo: 'CREDIANGOLAR', nome: 'Crediangolar', nif: '501234568', morada: 'Lisboa, Portugal', activo: true, modulosAtivos: ['dashboard', 'financas', 'contabilidade', 'portal-colaborador'] },
-  { id: 3, codigo: 'NOVA-FIBREX', nome: 'Nova Fibrex', nif: '501234569', morada: 'Portugal', activo: true, modulosAtivos: ['dashboard', 'capital-humano', 'portal-colaborador'] },
+  { id: 1, codigo: 'SANEP-SGPS', nome: 'Sanep SGPS, S.A.', nif: '501234567', morada: 'Lisboa, Portugal', activo: true, modulosAtivos: ['dashboard', 'financas', 'contabilidade', 'portal-colaborador', 'comunicacao-interna'] },
+  { id: 2, codigo: 'CREDIANGOLAR', nome: 'Crediangolar', nif: '501234568', morada: 'Lisboa, Portugal', activo: true, modulosAtivos: ['dashboard', 'financas', 'contabilidade', 'portal-colaborador', 'comunicacao-interna'] },
+  { id: 3, codigo: 'NOVA-FIBREX', nome: 'Nova Fibrex', nif: '501234569', morada: 'Portugal', activo: true, modulosAtivos: ['dashboard', 'capital-humano', 'portal-colaborador', 'comunicacao-interna'] },
   { id: 4, codigo: 'SANEP-LDA', nome: 'Sanep LDA', nif: '5417626708', morada: 'Rua Direita da Samba, Ed. LGT, 1º Andar, Luanda', activo: true },
   { id: 5, codigo: 'SANEP-VIDA', nome: 'Sanep Vida', nif: '5417626710', morada: 'Luanda', activo: true },
 ];
@@ -31,8 +31,8 @@ export const USUARIOS_SEED: Usuario[] = [
   { id: 6, nome: "Isabel Lopes", email: "isabel@sanep.ao", senha: "jur123", perfil: "Juridico", cargo: "Directora Jurídica", departamento: "Jurídico", avatar: "IL", permissoes: ["JURIDICO_TOTAL", "DASHBOARD_READ"], empresaId: 1 },
   { id: 9, nome: "Luís Troso", email: "pca@sanep.ao", senha: "pca123", perfil: "PCA", cargo: "Presidente do Conselho de Administração", departamento: "Conselho de Administração", avatar: "NQ", permissoes: ["CONSELHO_ADMIN_TOTAL", "DASHBOARD_READ"], empresaId: null },
   { id: 10, nome: "Inês Ferreira", email: "ines@sanep.pt", senha: "pt123", perfil: "Financeiro", cargo: "Gestora Financeira", departamento: "Finanças", avatar: "IF", permissoes: ["FINANCAS_TOTAL", "DASHBOARD_READ"], empresaId: 2 },
-  { id: 7, nome: "Pedro Santos", email: "pedro@sanep.ao", senha: "colab123", perfil: "Colaborador", cargo: "Técnico de TI", departamento: "Tecnologia", avatar: "PS", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 7, modulos: ["portal-colaborador", "financas"], empresaId: 1 },
-  { id: 8, nome: "Rosa Neto", email: "rosa@sanep.ao", senha: "colab456", perfil: "Colaborador", cargo: "Assistente Administrativa", departamento: "Secretaria Geral", avatar: "RN", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 8, empresaId: 1 },
+  { id: 7, nome: "Pedro Santos", email: "pedro@sanep.ao", senha: "colab123", perfil: "Colaborador", cargo: "Técnico de TI", departamento: "Tecnologia", avatar: "PS", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 7, modulos: ["portal-colaborador", "financas", "comunicacao-interna"], empresaId: 1 },
+  { id: 8, nome: "Rosa Neto", email: "rosa@sanep.ao", senha: "colab456", perfil: "Colaborador", cargo: "Assistente Administrativa", departamento: "Secretaria Geral", avatar: "RN", permissoes: ["PORTAL_COLABORADOR"], colaboradorId: 8, modulos: ["portal-colaborador", "comunicacao-interna"], empresaId: 1 },
   { id: 12, nome: "António Fernandes", email: "antonio@sanep.ao", senha: "dir123", perfil: "Director", cargo: "Director Geral", departamento: "Direcção", avatar: "AF", permissoes: ["PLANEAMENTO_SUBMETER", "DASHBOARD_READ"], colaboradorId: 1, empresaId: 1 },
 ];
 

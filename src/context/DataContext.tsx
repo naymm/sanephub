@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, ReactNode } from 'react';
-import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato } from '@/types';
+import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento } from '@/types';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { loadAllTables, db } from '@/lib/supabaseData';
@@ -55,6 +55,10 @@ interface DataContextType {
   setMovimentosTesouraria: React.Dispatch<React.SetStateAction<MovimentoTesouraria[]>>;
   relatoriosPlaneamento: RelatorioMensalPlaneamento[];
   setRelatoriosPlaneamento: React.Dispatch<React.SetStateAction<RelatorioMensalPlaneamento[]>>;
+  noticias: Noticia[];
+  setNoticias: React.Dispatch<React.SetStateAction<Noticia[]>>;
+  eventos: Evento[];
+  setEventos: React.Dispatch<React.SetStateAction<Evento[]>>;
   processosDisciplinares: ProcessoDisciplinar[];
   setProcessosDisciplinares: React.Dispatch<React.SetStateAction<ProcessoDisciplinar[]>>;
   rescissoesContrato: RescisaoContrato[];
@@ -125,6 +129,12 @@ interface DataContextType {
   addRelatorioPlaneamento: (p: Partial<RelatorioMensalPlaneamento>) => Promise<RelatorioMensalPlaneamento>;
   updateRelatorioPlaneamento: (id: number, p: Partial<RelatorioMensalPlaneamento>) => Promise<RelatorioMensalPlaneamento>;
   deleteRelatorioPlaneamento: (id: number) => Promise<void>;
+  addNoticia: (p: Partial<Noticia>) => Promise<Noticia>;
+  updateNoticia: (id: number, p: Partial<Noticia>) => Promise<Noticia>;
+  deleteNoticia: (id: number) => Promise<void>;
+  addEvento: (p: Partial<Evento>) => Promise<Evento>;
+  updateEvento: (id: number, p: Partial<Evento>) => Promise<Evento>;
+  deleteEvento: (id: number) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -152,6 +162,8 @@ const emptyArrays = {
   pendencias: [] as PendenciaDocumental[],
   movimentosTesouraria: [] as MovimentoTesouraria[],
   relatoriosPlaneamento: [] as RelatorioMensalPlaneamento[],
+  noticias: [] as Noticia[],
+  eventos: [] as Evento[],
   processosDisciplinares: [] as ProcessoDisciplinar[],
   rescissoesContrato: [] as RescisaoContrato[],
 };
@@ -182,6 +194,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [pendencias, setPendencias] = useState<PendenciaDocumental[]>(emptyArrays.pendencias);
   const [movimentosTesouraria, setMovimentosTesouraria] = useState<MovimentoTesouraria[]>(emptyArrays.movimentosTesouraria);
   const [relatoriosPlaneamento, setRelatoriosPlaneamento] = useState<RelatorioMensalPlaneamento[]>(emptyArrays.relatoriosPlaneamento);
+  const [noticias, setNoticias] = useState<Noticia[]>(emptyArrays.noticias);
+  const [eventos, setEventos] = useState<Evento[]>(emptyArrays.eventos);
   const [processosDisciplinares, setProcessosDisciplinares] = useState<ProcessoDisciplinar[]>(emptyArrays.processosDisciplinares);
   const [rescissoesContrato, setRescissoesContrato] = useState<RescisaoContrato[]>(emptyArrays.rescissoesContrato);
 
@@ -193,6 +207,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const faltasRT = useRealtimeTable<Falta>('faltas', 'id');
   const recibosRT = useRealtimeTable<ReciboSalario>('recibos_salario', 'id');
   const declaracoesRT = useRealtimeTable<Declaracao>('declaracoes', 'id');
+  const noticiasRT = useRealtimeTable<Noticia>('noticias', 'id');
+  const eventosRT = useRealtimeTable<Evento>('eventos', 'id');
   const requisicoesRT = useRealtimeTable<Requisicao>('requisicoes', 'id');
   const centrosCustoRT = useRealtimeTable<CentroCusto>('centros_custo', 'id');
   const projectosRT = useRealtimeTable<Projecto>('projectos', 'id');
@@ -219,6 +235,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     faltasRT.isLoading ||
     recibosRT.isLoading ||
     declaracoesRT.isLoading ||
+    noticiasRT.isLoading ||
+    eventosRT.isLoading ||
     requisicoesRT.isLoading ||
     centrosCustoRT.isLoading ||
     projectosRT.isLoading ||
@@ -249,6 +267,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => setFaltas(faltasRT.rows), [faltasRT.rows]);
   useEffect(() => setRecibos(recibosRT.rows), [recibosRT.rows]);
   useEffect(() => setDeclaracoes(declaracoesRT.rows), [declaracoesRT.rows]);
+  useEffect(() => setNoticias(noticiasRT.rows), [noticiasRT.rows]);
+  useEffect(() => setEventos(eventosRT.rows), [eventosRT.rows]);
   useEffect(() => setRequisicoes(requisicoesRT.rows), [requisicoesRT.rows]);
   useEffect(() => setCentrosCusto(centrosCustoRT.rows), [centrosCustoRT.rows]);
   useEffect(() => setProjectos(projectosRT.rows), [projectosRT.rows]);
@@ -298,6 +318,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setPendencias(data.pendencias);
       setMovimentosTesouraria(data.movimentosTesouraria);
       setRelatoriosPlaneamento(data.relatoriosPlaneamento);
+      setNoticias(data.noticias);
+      setEventos(data.eventos);
       setProcessosDisciplinares(data.processosDisciplinares);
       setRescissoesContrato(data.rescissoesContrato);
     } catch (e) {
@@ -325,6 +347,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       pagamentos: isConsolidado ? pagamentos : pagamentos.filter(p => reqIds.has(p.requisicaoId)),
       movimentosTesouraria: isConsolidado ? movimentosTesouraria : movimentosTesouraria.filter(m => m.empresaId === currentEmpresaId),
       relatoriosPlaneamento: isConsolidado ? relatoriosPlaneamento : relatoriosPlaneamento.filter(r => r.empresaId === currentEmpresaId),
+      noticias: isConsolidado ? noticias : noticias.filter(n => n.empresaId === currentEmpresaId),
+      eventos: isConsolidado ? eventos : eventos.filter(e => e.empresaId === currentEmpresaId),
       processosDisciplinares: isConsolidado ? processosDisciplinares : processosDisciplinares.filter(p => p.empresaId === currentEmpresaId),
       rescissoesContrato: isConsolidado ? rescissoesContrato : rescissoesContrato.filter(r => r.empresaId === currentEmpresaId),
       contratos: isConsolidado ? contratos : contratos.filter(c => c.empresaId == null || c.empresaId === currentEmpresaId),
@@ -332,7 +356,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       prazos: isConsolidado ? prazos : prazos.filter(pr => pr.empresaId == null || pr.empresaId === currentEmpresaId),
       riscos: isConsolidado ? riscos : riscos.filter(r => r.empresaId == null || r.empresaId === currentEmpresaId),
     };
-  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, relatoriosPlaneamento, processosDisciplinares, rescissoesContrato, contratos, processos, prazos, riscos]);
+  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, relatoriosPlaneamento, noticias, eventos, processosDisciplinares, rescissoesContrato, contratos, processos, prazos, riscos]);
 
   function runMutation<T>(fn: () => Promise<T>, then?: (result: T) => void): Promise<T> {
     if (!supabase || !isSupabaseConfigured()) return Promise.reject(new Error('Supabase não configurado'));
@@ -696,6 +720,42 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [runMutation]
   );
 
+  const addNoticia = useCallback(
+    (p: Partial<Noticia>) =>
+      runMutation(() => db.noticias.insert(supabase!, p), row => setNoticias(prev => [...prev, row])),
+    [runMutation]
+  );
+
+  const updateNoticia = useCallback(
+    (id: number, p: Partial<Noticia>) =>
+      runMutation(() => db.noticias.update(supabase!, id, p), row => setNoticias(prev => prev.map(n => (n.id === id ? row : n)))),
+    [runMutation]
+  );
+
+  const deleteNoticia = useCallback(
+    (id: number) =>
+      runMutation(() => (db.noticias.delete(supabase!, id) as Promise<void>), () => setNoticias(prev => prev.filter(n => n.id !== id))),
+    [runMutation]
+  );
+
+  const addEvento = useCallback(
+    (p: Partial<Evento>) =>
+      runMutation(() => db.eventos.insert(supabase!, p), row => setEventos(prev => [...prev, row])),
+    [runMutation]
+  );
+
+  const updateEvento = useCallback(
+    (id: number, p: Partial<Evento>) =>
+      runMutation(() => db.eventos.update(supabase!, id, p), row => setEventos(prev => prev.map(e => (e.id === id ? row : e)))),
+    [runMutation]
+  );
+
+  const deleteEvento = useCallback(
+    (id: number) =>
+      runMutation(() => (db.eventos.delete(supabase!, id) as Promise<void>), () => setEventos(prev => prev.filter(e => e.id !== id))),
+    [runMutation]
+  );
+
   const value = useMemo<DataContextType>(
     () => ({
       dataLoading,
@@ -746,6 +806,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setMovimentosTesouraria,
       relatoriosPlaneamento: filtered.relatoriosPlaneamento,
       setRelatoriosPlaneamento,
+      noticias: filtered.noticias,
+      setNoticias,
+      eventos: filtered.eventos,
+      setEventos,
       processosDisciplinares: filtered.processosDisciplinares,
       setProcessosDisciplinares,
       rescissoesContrato: filtered.rescissoesContrato,
@@ -816,6 +880,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addRelatorioPlaneamento,
       updateRelatorioPlaneamento,
       deleteRelatorioPlaneamento,
+      addNoticia,
+      updateNoticia,
+      deleteNoticia,
+      addEvento,
+      updateEvento,
+      deleteEvento,
     }),
     [
       dataLoading,
@@ -896,6 +966,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addRelatorioPlaneamento,
       updateRelatorioPlaneamento,
       deleteRelatorioPlaneamento,
+      addNoticia,
+      updateNoticia,
+      deleteNoticia,
+      addEvento,
+      updateEvento,
+      deleteEvento,
     ]
   );
 

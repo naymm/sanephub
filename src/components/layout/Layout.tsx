@@ -34,6 +34,11 @@ export function Layout() {
   }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
+  // Bloqueio específico: “Empresas do Grupo” apenas para Admin (não PCA).
+  if (user?.perfil !== 'Admin' && pathname.startsWith('/conselho-administracao/empresas')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const pathPrefix = '/' + pathname.split('/')[1];
   const moduleForPath = PATH_TO_MODULE[pathPrefix];
   if (user && moduleForPath && !hasModuleAccess(user, moduleForPath)) {
