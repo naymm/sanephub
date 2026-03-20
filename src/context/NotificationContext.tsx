@@ -17,8 +17,12 @@ function notificationVisibleForUser(
   perfil: string,
   opts?: NotificationAudienceOptions,
 ): boolean {
+  // Só mostrar se o perfil do utilizador está na lista de destinatários.
+  // NUNCA usar só `n.destinatarioPerfil.includes('Admin')` — isso faria TODOS os users
+  // verem notificações marcadas para RH+Admin (ex.: pedido de declaração do portal).
+  const targetsAdmin = n.destinatarioPerfil.includes('Admin');
   const inAudience =
-    n.destinatarioPerfil.includes(perfil) || n.destinatarioPerfil.includes('Admin');
+    n.destinatarioPerfil.includes(perfil) || (perfil === 'Admin' && targetsAdmin);
   if (!inAudience) return false;
   if (perfil === 'Colaborador' && n.destinatarioColaboradorId != null) {
     return opts?.colaboradorId != null && opts.colaboradorId === n.destinatarioColaboradorId;

@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
-import { gerarPdfDeclaracaoServico } from '@/utils/declaracaoServicoPdf';
+import { gerarPdfDeclaracaoServico, assinaturaPdfFromDeclaracao } from '@/utils/declaracaoServicoPdf';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -80,11 +80,8 @@ export default function DeclaracoesPage() {
       return;
     }
     try {
-      const blobUrl = await gerarPdfDeclaracaoServico(d, col, {
-        linha: user?.assinaturaLinha || user?.nome,
-        cargo: user?.assinaturaCargo || user?.cargo,
-        imagemUrl: user?.assinaturaImagemUrl,
-      });
+      // Igual ao portal: assinatura gravada na declaração (emitente_assinatura_imagem_url, emitido_por, etc.)
+      const blobUrl = await gerarPdfDeclaracaoServico(d, col, assinaturaPdfFromDeclaracao(d));
       setPdfPreviewUrl(blobUrl);
       setPdfPreviewOpen(true);
     } catch (e) {
@@ -155,9 +152,15 @@ export default function DeclaracoesPage() {
 
   const marcarEmitida = async (d: Declaracao) => {
     const dataEmissao = new Date().toISOString().slice(0, 10);
-    const emitidoPor = user?.nome;
+    const emitidoPor = user?.assinaturaLinha?.trim() || user?.nome;
     try {
-      await updateDeclaracao(d.id, { status: 'Emitida', dataEmissao, emitidoPor });
+      const updated = await updateDeclaracao(d.id, {
+        status: 'Emitida',
+        dataEmissao,
+        emitidoPor,
+        emitenteAssinaturaCargo: user?.assinaturaCargo?.trim() || user?.cargo,
+        emitenteAssinaturaImagemUrl: user?.assinaturaImagemUrl?.trim() || undefined,
+      });
       addNotification({
         tipo: 'sucesso',
         titulo: 'Declaração emitida',
@@ -167,8 +170,8 @@ export default function DeclaracoesPage() {
         destinatarioColaboradorId: d.colaboradorId,
         link: '/portal/declaracoes',
       });
-      const emitida = { ...d, status: 'Emitida' as const, dataEmissao, emitidoPor };
-      handleImprimirPdf(emitida);
+      // PDF com os mesmos dados persistidos (emitente_assinatura_imagem_url, etc.)
+      void handleImprimirPdf(updated);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao actualizar');
     }
@@ -394,16 +397,24 @@ export default function DeclaracoesPage() {
         }}
       >
         <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          <DialogTitle className="sr-only">Pré-visualização da declaração de serviço (PDF)</DialogTitle>
           {pdfPreviewUrl ? (
-            <div className="w-full h-full">
-              <iframe
-                src={pdfPreviewUrl}
-                title="Pré-visualização da declaração de serviço"
-                className="w-full h-full border-0 rounded-md"
-              />
-            </div>
+            <>
+              <DialogDescription className="sr-only">
+                Documento PDF da declaração de serviço em pré-visualização.
+              </DialogDescription>
+              <div className="w-full h-full">
+                <iframe
+                  src={pdfPreviewUrl}
+                  title="Pré-visualização da declaração de serviço"
+                  className="w-full h-full border-0 rounded-md"
+                />
+              </div>
+            </>
           ) : (
-            <DialogDescription>Gerando pré-visualização...</DialogDescription>
+            <div className="p-6 pt-10">
+              <DialogDescription>Gerando pré-visualização...</DialogDescription>
+            </div>
           )}
         </DialogContent>
       </Dialog>

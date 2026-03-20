@@ -131,6 +131,10 @@ export interface Declaracao {
   dataEntrega?: string;
   status: StatusDeclaracao;
   emitidoPor?: string;
+  /** Cargo na assinatura do emitente (gravado na emissão). */
+  emitenteAssinaturaCargo?: string;
+  /** URL da imagem de assinatura do emitente (gravada na emissão). */
+  emitenteAssinaturaImagemUrl?: string;
   observacoes?: string;
 }
 

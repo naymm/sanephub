@@ -7,7 +7,7 @@ import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
-import { gerarPdfDeclaracaoServico } from '@/utils/declaracaoServicoPdf';
+import { gerarPdfDeclaracaoServico, assinaturaPdfFromDeclaracao } from '@/utils/declaracaoServicoPdf';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -90,7 +90,7 @@ export default function PortalDeclaracoesPage() {
       return;
     }
     try {
-      const blobUrl = await gerarPdfDeclaracaoServico(d, col, undefined);
+      const blobUrl = await gerarPdfDeclaracaoServico(d, col, assinaturaPdfFromDeclaracao(d));
       setPdfPreviewUrl(blobUrl);
       setPdfPreviewOpen(true);
     } catch (e) {
@@ -337,16 +337,24 @@ export default function PortalDeclaracoesPage() {
         }}
       >
         <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          <DialogTitle className="sr-only">Pré-visualização da declaração de serviço (PDF)</DialogTitle>
           {pdfPreviewUrl ? (
-            <div className="w-full h-full">
-              <iframe
-                src={pdfPreviewUrl}
-                title="Pré-visualização da declaração de serviço"
-                className="w-full h-full border-0 rounded-md"
-              />
-            </div>
+            <>
+              <DialogDescription className="sr-only">
+                Documento PDF da declaração de serviço em pré-visualização.
+              </DialogDescription>
+              <div className="w-full h-full">
+                <iframe
+                  src={pdfPreviewUrl}
+                  title="Pré-visualização da declaração de serviço"
+                  className="w-full h-full border-0 rounded-md"
+                />
+              </div>
+            </>
           ) : (
-            <DialogDescription>Gerando pré-visualização...</DialogDescription>
+            <div className="p-6 pt-10">
+              <DialogDescription>Gerando pré-visualização...</DialogDescription>
+            </div>
           )}
         </DialogContent>
       </Dialog>

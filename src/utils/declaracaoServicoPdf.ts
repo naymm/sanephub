@@ -10,9 +10,9 @@ function dataDeclaracao(dateStr: string): string {
     const mes = format(d, 'MMMM', { locale: pt });
     const ano = format(d, 'yyyy', { locale: pt });
     const mesCapitalized = mes.charAt(0).toUpperCase() + mes.slice(1);
-    return `Luanda aos, ${dia} de ${mesCapitalized} de ${ano}`;
+    return `Luanda, aos ${dia} de ${mesCapitalized} de ${ano}`;
   } catch {
-    return 'Luanda aos, ___ de ___________ de ______';
+    return 'Luanda, aos ___ de ___________ de ______';
   }
 }
 
@@ -220,25 +220,105 @@ function drawJustifiedParagraphWithBold(
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 
-/** Carrega uma imagem do servidor e devolve como data URL (base64) para usar no jsPDF. */
+/**
+ * URL para fetch no browser.
+ * Em dev, pedidos ao mesmo Supabase de VITE_SUPABASE_URL passam pelo proxy Vite `/__supabase`
+ * (evita CORS quando o API está noutro host, ex.: 172.x:54321).
+ */
+function resolvePublicImageUrl(url: string): string {
+  const u = url.trim();
+  if (!u) return u;
+
+  const base =
+    typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL
+      ? String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, '')
+      : '';
+  const dev = typeof import.meta !== 'undefined' && import.meta.env.DEV;
+
+  if (base && /^https?:\/\//i.test(u) && u.startsWith(base)) {
+    const pathAfterOrigin = u.slice(base.length);
+    if (dev && pathAfterOrigin.startsWith('/')) {
+      return `/__supabase${pathAfterOrigin}`;
+    }
+    return u;
+  }
+
+  if (/^https?:\/\//i.test(u)) return u;
+
+  if (u.startsWith('/') && base) {
+    if (dev) return `/__supabase${u}`;
+    return `${base}${u}`;
+  }
+  return u;
+}
+
+/** Carrega uma imagem (URL absoluta ou relativa à app) e devolve data URL para o jsPDF. */
 function loadImageAsDataUrl(url: string): Promise<string> {
-  return fetch(url)
-    .then((res) => res.blob())
+  return fetch(url, { mode: 'cors', credentials: 'omit' })
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status} ao carregar imagem`);
+      return res.blob();
+    })
     .then(
-      (blob) =>
+      blob =>
         new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
           reader.onerror = reject;
           reader.readAsDataURL(blob);
-        })
+        }),
     );
+}
+
+/** Formato para doc.addImage a partir do prefixo da data URL (Storage costuma ser JPEG). */
+function pdfImageFormatFromDataUrl(dataUrl: string): 'PNG' | 'JPEG' {
+  const lower = dataUrl.slice(0, 50).toLowerCase();
+  if (lower.includes('image/jpeg') || lower.includes('image/jpg')) return 'JPEG';
+  return 'PNG';
 }
 
 export interface AssinaturaDigitalInfo {
   linha?: string;
   cargo?: string;
   imagemUrl?: string;
+}
+
+/** Lê URL da assinatura do emitente mesmo se o row ainda vier em snake_case (realtime/API). */
+function pickEmitenteAssinaturaImagemUrl(d: Declaracao): string | undefined {
+  const raw = d as unknown as Record<string, unknown>;
+  const v =
+    d.emitenteAssinaturaImagemUrl ??
+    raw.emitente_assinatura_imagem_url ??
+    raw.emitenteAssinaturaImagemUrl;
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  return t || undefined;
+}
+
+function pickEmitenteAssinaturaCargo(d: Declaracao): string | undefined {
+  const raw = d as unknown as Record<string, unknown>;
+  const v =
+    d.emitenteAssinaturaCargo ?? raw.emitente_assinatura_cargo ?? raw.emitenteAssinaturaCargo;
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  return t || undefined;
+}
+
+function pickEmitidoPor(d: Declaracao): string | undefined {
+  const raw = d as unknown as Record<string, unknown>;
+  const v = d.emitidoPor ?? raw.emitido_por ?? raw.emitidoPor;
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  return t || undefined;
+}
+
+/** Assinatura gravada na declaração quando foi emitida (PDF no portal = mesmo emitente). */
+export function assinaturaPdfFromDeclaracao(d: Declaracao): AssinaturaDigitalInfo {
+  return {
+    linha: pickEmitidoPor(d),
+    cargo: pickEmitenteAssinaturaCargo(d),
+    imagemUrl: pickEmitenteAssinaturaImagemUrl(d),
+  };
 }
 
 export async function gerarPdfDeclaracaoServico(
@@ -259,11 +339,17 @@ export async function gerarPdfDeclaracaoServico(
   } catch {
     // Carimbo opcional
   }
-  const assinaturaUrl = assinatura?.imagemUrl?.trim() || '/assinatura-digital.png';
-  try {
-    assinaturaData = await loadImageAsDataUrl(assinaturaUrl);
-  } catch {
-    // Assinatura opcional
+  const customUrl = assinatura?.imagemUrl?.trim();
+  const fallbackUrl = '/assinatura-digital.png';
+  // Com URL do emitente na declaração: usar SÓ essa imagem (não cair para assinatura genérica).
+  const urlsToTry = customUrl ? [resolvePublicImageUrl(customUrl)] : [fallbackUrl];
+  for (const url of urlsToTry) {
+    try {
+      assinaturaData = await loadImageAsDataUrl(url);
+      break;
+    } catch {
+      // sem imagem se a URL do emitente falhar (CORS, 403, etc.)
+    }
   }
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -344,12 +430,18 @@ export async function gerarPdfDeclaracaoServico(
   if (assinaturaData) {
     const sigW = 50;
     const sigH = 34;
-    doc.addImage(assinaturaData, 'PNG', pageW / 2 - sigW / 2, lineSigY - sigH, sigW, sigH);
+    const fmt = pdfImageFormatFromDataUrl(assinaturaData);
+    // Sobrepõe a assinatura à linha: centra a imagem verticalmente na linha.
+    // Assim a linha fica "por dentro" da assinatura (como assinatura manuscrita).
+    const sigX = pageW / 2 - sigW / 2;
+    const margin = 5;
+    const sigY = (lineSigY - margin) - sigH / 2;
+    doc.addImage(assinaturaData, fmt, sigX, sigY, sigW, sigH);
   }
 
   y += 8;
   const nomeAssinatura = assinatura?.linha?.trim() || ASSINATURA_NOME_DEFAULT;
-  const cargoAssinatura = assinatura?.cargo?.trim() || ASSINATURA_CARGO_DEFAULT;
+  const cargoAssinatura = "Direcção de Capital Humano";
 
   doc.setFont('times', 'bold');
   doc.setFontSize(11);
