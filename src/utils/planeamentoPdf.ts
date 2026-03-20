@@ -28,7 +28,7 @@ const HEADER_HEIGHT = 32;
 const CONTENT_START_Y = 40;
 
 function drawHeader(doc: jsPDF, empresaNome: string, mesAno: string, status: string) {
-  doc.setFillColor(31, 78, 121); // azul escuro
+  doc.setFillColor(165, 126, 38); // Amarelo escuro
   doc.rect(0, 0, PAGE_WIDTH, HEADER_HEIGHT, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
@@ -47,7 +47,7 @@ function sectionTitle(doc: jsPDF, title: string, y: number): number {
   doc.rect(MARGIN, y - 5, CONTENT_WIDTH, 10, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.setTextColor(30, 58, 138);
+  doc.setTextColor(165, 126, 38);
   doc.text(title, MARGIN + 2, y + 2);
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'normal');
@@ -100,7 +100,7 @@ function tableWithAutoTable(
     columnStyles: Object.fromEntries(headers.map((_, i) => [i, { cellWidth: widths[i] ?? defaultW }])),
     theme: 'striped',
     headStyles: {
-      fillColor: [30, 64, 175],
+      fillColor: [165, 126, 38],
       textColor: 255,
       fontStyle: 'bold',
       fontSize: 9,
@@ -287,7 +287,7 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
       { label: 'Custo mercadorias vendidas', value: cmv, color: [239, 68, 68] },
       { label: 'Serviços externos', value: servExt, color: [249, 115, 22] },
       { label: 'Gastos com pessoal', value: gastosPess, color: [234, 179, 8] },
-      { label: 'EBITDA', value: ebitda, color: ebitda >= 0 ? [30, 64, 175] : [185, 28, 28] },
+      { label: 'EBITDA', value: ebitda, color: ebitda >= 0 ? [165, 126, 38] : [185, 28, 28] },
     ],
     y,
     Math.max(vendas, cmv, servExt, gastosPess, Math.abs(ebitda), 1)
@@ -300,7 +300,7 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
     doc,
     'Margens (%)',
     [
-      { label: 'Margem Bruta', percent: margemBruta * 100, color: [59, 130, 246] },
+      { label: 'Margem Bruta', percent: margemBruta * 100, color: [165, 126, 38] },
       { label: 'Margem EBITDA', percent: margemEbitda * 100, color: [16, 185, 129] },
     ],
     y

@@ -101,7 +101,7 @@ export default function ProcessosDisciplinaresPage() {
               <dt className="text-muted-foreground">Colaborador</dt><dd>{colaboradores.find(c => c.id === processo.colaboradorId)?.nome ?? '—'}</dd>
               <dt className="text-muted-foreground">Criado em</dt><dd>{formatDate(processo.criadoEm.slice(0, 10))}</dd>
               <dt className="text-muted-foreground">Criado por</dt><dd>{processo.criadoPor}</dd>
-              <dt className="text-muted-foreground">Status</dt><dd><span className="inline-flex items-center rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-medium">{processo.status}</span></dd>
+              <dt className="text-muted-foreground">Status</dt><dd><span className="inline-flex items-center rounded-full bg-[#d4a926]/10 text-[#a57e26] dark:text-[#d4a926] px-2 py-0.5 text-xs font-medium">{processo.status}</span></dd>
               {processo.encerradoEm && <><dt className="text-muted-foreground">Encerrado em</dt><dd>{formatDate(processo.encerradoEm)}</dd></>}
             </dl>
           </div>
@@ -276,7 +276,7 @@ export default function ProcessosDisciplinaresPage() {
                   <td className="p-3 font-medium">{colab ? colab.nome : `Colaborador #${p.colaboradorId}`}</td>
                   <td className="p-3 text-muted-foreground">{formatDate(p.criadoEm.slice(0, 10))}</td>
                   <td className="p-3">
-                    <span className="inline-flex items-center rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-medium">
+                    <span className="inline-flex items-center rounded-full bg-[#d4a926]/10 text-[#a57e26] dark:text-[#d4a926] px-2 py-0.5 text-xs font-medium">
                       {p.status}
                     </span>
                   </td>

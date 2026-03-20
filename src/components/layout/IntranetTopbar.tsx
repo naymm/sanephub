@@ -211,13 +211,23 @@ export function IntranetTopbar() {
             </PopoverContent>
           </Popover>
 
-          <div className="flex h-12 w-36 items-center justify-center rounded-xl bg-transparent shrink-0 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => {
+              setAppsOpen(false);
+              setSelectedPrincipalModuleId(null);
+              navigate('/dashboard');
+            }}
+            className="flex h-12 w-36 items-center justify-center rounded-xl bg-transparent shrink-0 overflow-hidden transition-colors"
+            aria-label="Ir para Dashboard"
+            title="Dashboard"
+          >
             <img
               src="/logo-white.png"
               alt="GRUPO SANEP"
               className="h-[40px] w-[160px] object-contain"
             />
-          </div>
+          </button>
         </div>
 
         {/* Center: Search */}

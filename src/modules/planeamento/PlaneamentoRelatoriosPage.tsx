@@ -129,7 +129,7 @@ export default function PlaneamentoRelatoriosPage() {
                 <td className="py-3 px-5">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                     r.status === 'Rascunho' ? 'bg-muted text-muted-foreground' :
-                    r.status === 'Submetido' ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400' :
+                    r.status === 'Submetido' ? 'bg-[#d4a926]/10 text-[#a57e26] dark:text-[#d4a926]' :
                     r.status === 'Em análise' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' :
                     'bg-green-500/10 text-green-700 dark:text-green-400'
                   }`}>

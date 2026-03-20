@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Calendar as UiCalendar } from '@/components/ui/calendar';
 import { hasModuleAccess } from '@/context/AuthContext';
 
-const COLORS = ['#2563eb', '#0EA5E9', '#14B8A6', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
+const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
 export default function Dashboard() {
   const { user } = useAuth();

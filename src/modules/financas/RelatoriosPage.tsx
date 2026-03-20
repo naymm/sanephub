@@ -16,7 +16,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import { Download, FileText } from 'lucide-react';
 
-const COLORS = ['#2563eb', '#0EA5E9', '#14B8A6', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
+const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
 function exportCSV(headers: string[], rows: (string | number)[][], filename: string) {
   const line = (arr: (string | number)[]) => arr.map(c => (typeof c === 'string' && c.includes(',') ? `"${c}"` : c)).join(',');
@@ -167,7 +167,7 @@ export default function RelatoriosPage() {
               <XAxis dataKey="mes" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v: number) => formatKz(v)} contentStyle={{ borderRadius: 8 }} />
-              <Bar dataKey="valor" fill="#2563eb" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="valor" fill="#d4a926" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -196,7 +196,7 @@ export default function RelatoriosPage() {
               <XAxis type="number" tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={75} />
               <Tooltip formatter={(v: number) => formatKz(v)} />
-              <Bar dataKey="value" fill="#14B8A6" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="value" fill="#a57e26" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
