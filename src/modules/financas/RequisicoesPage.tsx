@@ -163,6 +163,10 @@ export default function RequisicoesPage() {
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const openCreate = () => {
+    if (!canAccessFinancas) {
+      toast.error('Sem permissão para criar requisições.');
+      return;
+    }
     setEditing(null);
     setForm({
       ...emptyRequisicao,
@@ -394,7 +398,7 @@ export default function RequisicoesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h1 className="page-header">Requisições</h1>
-        <Button onClick={openCreate} className="bg-primary text-primary-foreground">
+        <Button onClick={openCreate} className="bg-primary text-primary-foreground" disabled={!canAccessFinancas}>
           <Plus className="h-4 w-4 mr-2" /> Nova Requisição
         </Button>
       </div>
@@ -470,19 +474,19 @@ export default function RequisicoesPage() {
                       <DropdownMenuItem onSelect={() => openView(r)}>
                         Ver
                       </DropdownMenuItem>
-                      {(user?.perfil === 'Admin' || user?.perfil === 'Financeiro') && (
+                      {canAccessFinancas && (
                         <DropdownMenuItem onSelect={() => openEdit(r)}>
                           Editar
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem
-                        disabled={!(r.status === 'Pendente' && (user?.perfil === 'Admin' || user?.perfil === 'Financeiro'))}
+                        disabled={!(r.status === 'Pendente' && canAccessFinancas)}
                         onSelect={() => aprovar(r)}
                       >
                         Aceitar
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={!(r.status === 'Pendente' && (user?.perfil === 'Admin' || user?.perfil === 'Financeiro'))}
+                        disabled={!(r.status === 'Pendente' && canAccessFinancas)}
                         onSelect={() => {
                           setRejectReq(r);
                           setRejectOpen(true);
@@ -515,7 +519,7 @@ export default function RequisicoesPage() {
                       >
                         Proforma
                       </DropdownMenuItem>
-                      {(user?.perfil === 'Admin' || user?.perfil === 'Financeiro') && r.status === 'Aprovado' && (
+                      {canAccessFinancas && r.status === 'Aprovado' && (
                         <DropdownMenuItem
                           onSelect={() => openPagoDialog(r)}
                           disabled={(r.comprovativoAnexos?.length ?? 0) > 0}

@@ -4,6 +4,7 @@ import { NOTIFICACOES_SEED } from '@/data/seed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
+import { useTenant } from '@/context/TenantContext';
 
 const STORAGE_NOTIFICACOES = 'sanep_notifications_v1';
 
@@ -15,7 +16,8 @@ export type NotificationAudienceOptions = {
 function notificationVisibleForUser(
   n: Notificacao,
   perfil: string,
-  opts?: NotificationAudienceOptions,
+  opts: NotificationAudienceOptions | undefined,
+  currentEmpresaId: number | 'consolidado',
 ): boolean {
   // Só mostrar se o perfil do utilizador está na lista de destinatários.
   // NUNCA usar só `n.destinatarioPerfil.includes('Admin')` — isso faria TODOS os users
@@ -25,8 +27,18 @@ function notificationVisibleForUser(
     n.destinatarioPerfil.includes(perfil) || (perfil === 'Admin' && targetsAdmin);
   if (!inAudience) return false;
   if (perfil === 'Colaborador' && n.destinatarioColaboradorId != null) {
-    return opts?.colaboradorId != null && opts.colaboradorId === n.destinatarioColaboradorId;
+    // Se não conseguimos identificar o colaborador do utilizador logado,
+    // não bloqueamos a notificação (falha segura).
+    if (opts?.colaboradorId == null) return true;
+    return opts.colaboradorId === n.destinatarioColaboradorId;
   }
+
+  // Multi-tenant: filtra pela empresa alvo quando existe.
+  // Regra: se n.empresaId for null/undefined => legado ou grupo, fica visível em qualquer empresa.
+  if (n.empresaId != null && currentEmpresaId !== 'consolidado') {
+    return n.empresaId === currentEmpresaId;
+  }
+
   return true;
 }
 
@@ -43,6 +55,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const realtimeEnabled = isSupabaseConfigured() && !!supabase;
+  const { currentEmpresaId } = useTenant();
 
   // Em ambiente com Supabase ligado, evita mostrar notificações seed/mocked.
   // Neste projecto as notificações são ainda em estado client-side (sem persistência em DB).
@@ -174,7 +187,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const getForProfile = (perfil: string, opts?: NotificationAudienceOptions) =>
-    notifications.filter(n => !n.lida && notificationVisibleForUser(n, perfil, opts));
+    notifications.filter(n => !n.lida && notificationVisibleForUser(n, perfil, opts, currentEmpresaId));
 
   const unreadCount = (perfil: string, opts?: NotificationAudienceOptions) =>
     getForProfile(perfil, opts).length;
@@ -198,11 +211,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   };
 
   const addNotification = (n: Omit<Notificacao, 'id' | 'createdAt' | 'lida'>) => {
+    const targetEmpresaId = currentEmpresaId === 'consolidado' ? null : currentEmpresaId;
     const newN: Notificacao = {
       ...n,
       id: 'n' + Date.now(),
       createdAt: new Date().toISOString(),
       lida: false,
+      empresaId: n.empresaId ?? targetEmpresaId,
     };
     if (!realtimeEnabled || !supabase) {
       setNotifications(prev => [newN, ...prev]);
@@ -221,6 +236,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           modulo_origem: newN.moduloOrigem,
           destinatario_perfil: newN.destinatarioPerfil,
           destinatario_colaborador_id: newN.destinatarioColaboradorId ?? null,
+          empresa_id: newN.empresaId ?? null,
           lida: newN.lida,
           created_at: newN.createdAt,
           link: newN.link ?? null,
@@ -243,7 +259,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         markAllAsRead: (perfil: string, opts?: NotificationAudienceOptions) => {
           setNotifications(prev => {
             const remove = new Set(
-              prev.filter(n => notificationVisibleForUser(n, perfil, opts)).map(n => n.id),
+              prev
+                .filter(n => notificationVisibleForUser(n, perfil, opts, currentEmpresaId))
+                .map(n => n.id),
             );
             const ids = [...remove];
             if (ids.length) void deleteNotificacoesDb(ids);

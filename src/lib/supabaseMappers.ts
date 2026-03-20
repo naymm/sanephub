@@ -67,10 +67,10 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   documentos_oficiais: ['id', 'empresaId', 'colaboradorId'],
   pendencias_documentais: ['id', 'entidadeId'],
   relatorios_planeamento: ['id', 'empresaId', 'ebitda', 'margemBruta', 'margemEbitda'],
-  notificacoes: ['destinatarioColaboradorId'],
+  notificacoes: ['destinatarioColaboradorId', 'empresaId'],
   noticias: ['id', 'empresaId'],
   eventos: ['id', 'empresaId', 'alertarAntesHoras'],
-  noticias_comentarios: ['id', 'empresaId', 'noticiaId', 'autorColaboradorId', 'parentComentarioId'],
+  noticias_comentarios: ['id', 'empresaId', 'noticiaId', 'autorColaboradorId', 'autorPerfilId', 'parentComentarioId'],
   noticias_gostos: ['id', 'empresaId', 'noticiaId', 'autorPerfilId', 'colaboradorId'],
 };
 

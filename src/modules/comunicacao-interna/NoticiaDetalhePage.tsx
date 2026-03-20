@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Eye, ArrowLeft, Star, Heart, MessageCircle, Reply } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
+import { useNotifications } from '@/context/NotificationContext';
 import type { Noticia, NoticiaComentario } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ export default function NoticiaDetalhePage() {
   const noticiaId = id ? Number(id) : null;
 
   const { noticias } = useData();
+  const { addNotification } = useNotifications();
   const [comentarios, setComentarios] = useState<NoticiaComentario[]>([]);
   const [comentariosLoading, setComentariosLoading] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
@@ -122,12 +124,43 @@ export default function NoticiaDetalhePage() {
       const text = opts.text.trim();
       if (!text) return;
 
+      // Se este comentário for uma resposta, antes de inserir vamos identificar
+      // o autor do comentário pai para o notificar.
+      let replyTarget: { perfil?: string; colaboradorId?: number | null; autorPerfilId?: number | null } | null = null;
+      if (opts.parentId != null) {
+        const { data: parentRow, error: parentErr } = await supabase
+          .from('noticias_comentarios')
+          .select('*')
+          .eq('id', opts.parentId)
+          .maybeSingle();
+
+        if (parentErr) throw parentErr;
+
+        const parentAutorPerfil = (parentRow as any)?.autor_perfil as string | null | undefined;
+        const parentAutorPerfilId = (parentRow as any)?.autor_perfil_id as number | null | undefined;
+        const parentAutorColaboradorId = (parentRow as any)?.autor_colaborador_id as number | null | undefined;
+
+        const perfil =
+          parentAutorPerfil ??
+          (parentAutorColaboradorId != null ? 'Colaborador' : undefined);
+
+        if (perfil) {
+          replyTarget = {
+            perfil,
+            colaboradorId: parentAutorColaboradorId ?? null,
+            autorPerfilId: parentAutorPerfilId ?? null,
+          };
+        }
+      }
+
       setComentariosLoading(true);
       try {
         await supabase.from('noticias_comentarios').insert({
           empresa_id: noticia.empresaId,
           noticia_id: noticia.id,
           autor_texto: user.nome,
+          autor_perfil: user.perfil,
+          autor_perfil_id: user.id,
           autor_colaborador_id: user.colaboradorId ?? null,
           conteudo: text,
           parent_comentario_id: opts.parentId,
@@ -136,13 +169,35 @@ export default function NoticiaDetalhePage() {
         setReplyText('');
         setReplyToId(null);
         await loadCommentsAndLikes();
+
+        // Notifica o autor do comentário pai (se aplicável e se não for o próprio autor).
+        if (opts.parentId != null && replyTarget?.perfil) {
+          const parentWasSelf =
+            replyTarget.autorPerfilId != null
+              ? replyTarget.autorPerfilId === user.id
+              : replyTarget.perfil === 'Colaborador' && replyTarget.colaboradorId != null && replyTarget.colaboradorId === user.colaboradorId;
+
+          if (!parentWasSelf) {
+            const recipientPerfil = replyTarget.perfil === 'Colaborador' ? 'Colaborador' : replyTarget.perfil;
+            addNotification({
+              tipo: 'alerta',
+              titulo: 'Comentário respondido',
+              mensagem: `${user.nome} respondeu o teu comentário na notícia "${noticia.titulo}".`,
+              moduloOrigem: 'comunicacao-interna',
+              destinatarioPerfil: [recipientPerfil],
+              destinatarioColaboradorId:
+                recipientPerfil === 'Colaborador' ? (replyTarget.colaboradorId ?? null) : undefined,
+              link: `/comunicacao-interna/noticias/${noticia.id}`,
+            });
+          }
+        }
       } catch (e) {
         console.error('[NoticiaDetalhePage] submitComment failed', e);
       } finally {
         setComentariosLoading(false);
       }
     },
-    [loadCommentsAndLikes, noticia, user],
+    [loadCommentsAndLikes, noticia, user, addNotification],
   );
 
   const toggleLike = useCallback(async () => {

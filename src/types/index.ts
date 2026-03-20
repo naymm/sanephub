@@ -379,6 +379,10 @@ export interface NoticiaComentario {
   noticiaId: number;
   autorTexto: string;
   autorColaboradorId?: number | null;
+  /** Perfil do autor (linha em `profiles`) para permitir notificações. */
+  autorPerfilId?: number | null;
+  /** Perfil do autor no momento em que comentou (evita depender de SELECT em `profiles`). */
+  autorPerfil?: string | null;
   conteudo: string;
   parentComentarioId?: number | null;
   createdAt: string;
@@ -416,6 +420,8 @@ export interface Notificacao {
   mensagem: string;
   moduloOrigem: string;
   destinatarioPerfil: string[];
+  /** Empresa alvo da notificação (multi-tenant). null => visível em qualquer empresa (grupo/consolidado/legacy). */
+  empresaId?: number | null;
   /** Se definido, só este colaborador (portal) deve ver a notificação entre utilizadores com perfil Colaborador. */
   destinatarioColaboradorId?: number | null;
   lida: boolean;

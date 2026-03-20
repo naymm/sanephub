@@ -127,6 +127,11 @@ export default function PortalRequisicoesPage() {
     return diffMs >= 0 && diffMs <= 48 * 60 * 60 * 1000;
   };
 
+  const podeAnexarFacturaFinal = (r: Requisicao) =>
+    (r.comprovativoAnexos?.length ?? 0) > 0 &&
+    (r.facturaFinalAnexos?.length ?? 0) === 0 &&
+    prazoParaFacturaFinalValido(r);
+
   const openCreate = () => {
     const dept = departamentos.find(d => d.nome === user?.departamento)?.nome ?? departamentos[0]?.nome ?? '';
     setForm({
@@ -292,6 +297,15 @@ export default function PortalRequisicoesPage() {
                         }}
                       >
                         Factura Final
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!podeAnexarFacturaFinal(r)}
+                        onSelect={() => {
+                          setViewReq(r);
+                          setViewOpen(true);
+                        }}
+                      >
+                        Anexar Factura Final
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
