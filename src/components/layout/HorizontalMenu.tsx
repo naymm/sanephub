@@ -22,7 +22,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
-type MenuChild = { label: string; path: string; module?: string };
+type MenuChild = { label: string; path: string; module?: string; adminOnly?: boolean };
 type MenuGroup = { label: string; module?: string; children: MenuChild[]; icon?: React.ComponentType<{ className?: string }> };
 
 const GENERAL_ITEMS: MenuChild[] = [
@@ -50,6 +50,8 @@ const MODULE_GROUPS: MenuGroup[] = [
     icon: DollarSign,
     children: [
       { label: 'Requisições', path: '/financas/requisicoes', module: 'financas' },
+      { label: 'Bancos', path: '/financas/bancos', module: 'financas', adminOnly: true },
+      { label: 'Contas bancárias', path: '/financas/contas-bancarias', module: 'financas' },
       { label: 'Tesouraria', path: '/financas/tesouraria', module: 'financas' },
       { label: 'Centros de Custo', path: '/financas/centros-custo', module: 'financas' },
       { label: 'Projectos', path: '/financas/projectos', module: 'financas' },
@@ -165,6 +167,7 @@ export function HorizontalMenu() {
     hasPortalColaborador && Array.isArray(user.modulos) && user.modulos.some(m => m !== 'portal-colaborador');
 
   const canShowChild = (child: MenuChild) => {
+    if (child.adminOnly && user.perfil !== 'Admin') return false;
     if (!child.module) return true;
     return canShowModule(child.module);
   };
@@ -186,6 +189,8 @@ export function HorizontalMenu() {
     '/capital-humano/recibos': <FileText className="h-4 w-4" />,
     '/capital-humano/declaracoes': <FileText className="h-4 w-4" />,
     '/financas/requisicoes': <DollarSign className="h-4 w-4" />,
+    '/financas/bancos': <DollarSign className="h-4 w-4" />,
+    '/financas/contas-bancarias': <DollarSign className="h-4 w-4" />,
     '/financas/tesouraria': <DollarSign className="h-4 w-4" />,
     '/financas/centros-custo': <DollarSign className="h-4 w-4" />,
     '/financas/projectos': <DollarSign className="h-4 w-4" />,

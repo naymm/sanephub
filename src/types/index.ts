@@ -550,6 +550,31 @@ export type MetodoPagamentoTesouraria = 'Transferência' | 'Cheque' | 'Numerári
 /** Tesouraria: categoria de saída */
 export type CategoriaSaidaTesouraria = 'fornecedor' | 'servicos' | 'despesas_operacionais' | 'impostos' | 'salarios';
 
+/** Catálogo de bancos (registo exclusivo Admin) */
+export interface Banco {
+  id: number;
+  nome: string;
+  codigo?: string;
+  activo: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Conta bancária por empresa. O mesmo banco (`bancoId`) pode ter várias contas na mesma empresa
+ * desde que `numeroConta` seja distinto (único em conjunto empresa + banco + número).
+ */
+export interface ContaBancaria {
+  id: number;
+  empresaId: number;
+  bancoId: number;
+  numeroConta: string;
+  saldoActual: number;
+  descricao?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** Movimento de tesouraria (entrada ou saída de dinheiro) */
 export interface MovimentoTesouraria {
   id: number;
@@ -568,6 +593,8 @@ export interface MovimentoTesouraria {
   beneficiario?: string;
   centroCustoId?: number;
   projectoId?: number;
+  /** Conta onde o movimento incide (actualiza saldo_actual via trigger) */
+  contaBancariaId?: number;
   comprovativoAnexos?: string[];
   requisicaoId?: number;
   registadoPor?: string;

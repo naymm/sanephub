@@ -37,6 +37,7 @@ import {
   DOCUMENTOS_OFICIAIS_SEED,
   PENDENCIAS_SEED,
   RELATORIOS_PLANEAMENTO_SEED,
+  BANCOS_SEED,
 } from '../src/data/seed';
 
 function loadEnv(): void {
@@ -74,7 +75,7 @@ async function clearTables(): Promise<void> {
   const tables = [
     'relatorios_planeamento', 'pendencias_documentais', 'documentos_oficiais', 'correspondencias',
     'rescisoes_contrato', 'processos_disciplinares', 'riscos_juridicos', 'prazos_legais', 'processos_judiciais',
-    'declaracoes', 'recibos_salario', 'faltas', 'ferias', 'movimentos_tesouraria', 'pagamentos', 'requisicoes',
+    'declaracoes', 'recibos_salario', 'faltas', 'ferias', 'movimentos_tesouraria', 'contas_bancarias', 'bancos', 'pagamentos', 'requisicoes',
     'contratos', 'actas', 'reunioes', 'projectos', 'centros_custo', 'colaboradores', 'departamentos', 'empresas',
   ];
   for (const table of tables) {
@@ -104,6 +105,11 @@ async function run(): Promise<void> {
     await db.empresas.insert(supabase, omitId(row));
   }
   console.log('  Empresas:', EMPRESAS_SEED.length);
+
+  for (const row of BANCOS_SEED) {
+    await db.bancos.insert(supabase, row);
+  }
+  console.log('  Bancos:', BANCOS_SEED.length);
 
   for (const row of DEPARTAMENTOS_SEED) {
     await db.departamentos.insert(supabase, omitId(row));

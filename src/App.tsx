@@ -19,6 +19,8 @@ import RecibosPage from "@/modules/capital-humano/RecibosPage";
 import DeclaracoesPage from "@/modules/capital-humano/DeclaracoesPage";
 import RequisicoesPage from "@/modules/financas/RequisicoesPage";
 import TesourariaPage from "@/modules/financas/TesourariaPage";
+import BancosPage from "@/modules/financas/BancosPage";
+import ContasBancariasPage from "@/modules/financas/ContasBancariasPage";
 import CentrosCustoPage from "@/modules/financas/CentrosCustoPage";
 import ProjectosPage from "@/modules/financas/ProjectosPage";
 import RelatoriosPage from "@/modules/financas/RelatoriosPage";
@@ -103,6 +105,8 @@ const App = () => (
                   <Route path="/capital-humano/declaracoes" element={<DeclaracoesPage />} />
                   {/* Finanças */}
                   <Route path="/financas/requisicoes" element={<RequisicoesPage />} />
+                  <Route path="/financas/bancos" element={<BancosPage />} />
+                  <Route path="/financas/contas-bancarias" element={<ContasBancariasPage />} />
                   <Route path="/financas/tesouraria" element={<TesourariaPage />} />
                   <Route path="/financas/centros-custo" element={<CentrosCustoPage />} />
                   <Route path="/financas/projectos" element={<ProjectosPage />} />

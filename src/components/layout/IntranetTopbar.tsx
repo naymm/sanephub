@@ -87,6 +87,8 @@ export function IntranetTopbar() {
       ],
       financas: [
         { key: 'financas-requisicoes', label: 'Requisições', path: '/financas/requisicoes' },
+        ...(user.perfil === 'Admin' ? [{ key: 'financas-bancos', label: 'Bancos', path: '/financas/bancos' }] : []),
+        { key: 'financas-contas-bancarias', label: 'Contas bancárias', path: '/financas/contas-bancarias' },
         { key: 'financas-tesouraria', label: 'Tesouraria', path: '/financas/tesouraria' },
         { key: 'financas-centros-custo', label: 'Centros de Custo', path: '/financas/centros-custo' },
         { key: 'financas-projectos', label: 'Projectos', path: '/financas/projectos' },
@@ -120,7 +122,7 @@ export function IntranetTopbar() {
     };
 
     return items;
-  }, []);
+  }, [user.perfil]);
 
   const selectedPrincipalModuleLabel = useMemo(() => {
     if (!selectedPrincipalModuleId) return '';

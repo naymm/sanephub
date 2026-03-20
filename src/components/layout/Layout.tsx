@@ -39,6 +39,11 @@ export function Layout() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  // Catálogo de bancos: apenas Admin.
+  if (user?.perfil !== 'Admin' && pathname.startsWith('/financas/bancos')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const pathPrefix = '/' + pathname.split('/')[1];
   const moduleForPath = PATH_TO_MODULE[pathPrefix];
   if (user && moduleForPath && !hasModuleAccess(user, moduleForPath)) {

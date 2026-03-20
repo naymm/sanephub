@@ -1,4 +1,12 @@
-import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Notificacao, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato } from '@/types';
+import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Notificacao, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Banco } from '@/types';
+
+/** Bancos de exemplo (catálogo global); inserir após empresas no seed. */
+export const BANCOS_SEED: Pick<Banco, 'nome' | 'codigo' | 'activo'>[] = [
+  { nome: 'Banco BAI', codigo: 'BAI', activo: true },
+  { nome: 'Banco BFA', codigo: 'BFA', activo: true },
+  { nome: 'Banco BIC', codigo: 'BIC', activo: true },
+  { nome: 'Banco Keve', codigo: 'KEVE', activo: true },
+];
 
 /** Holding = principal; demais = unidades de negócio. */
 export const EMPRESAS_SEED: Empresa[] = [

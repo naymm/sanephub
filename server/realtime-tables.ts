@@ -14,6 +14,8 @@ export const REALTIME_TABLES = [
   'requisicoes',
   'pagamentos',
   'movimentos_tesouraria',
+  'bancos',
+  'contas_bancarias',
   'ferias',
   'faltas',
   'recibos_salario',

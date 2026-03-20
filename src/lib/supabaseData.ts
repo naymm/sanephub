@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
-import type { Empresa, Departamento, Colaborador, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento } from '@/types';
+import type { Empresa, Departamento, Colaborador, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria } from '@/types';
 
 const TABLE_NAMES = {
   empresas: 'empresas',
@@ -30,6 +30,8 @@ const TABLE_NAMES = {
   relatorios_planeamento: 'relatorios_planeamento',
   noticias: 'noticias',
   eventos: 'eventos',
+  bancos: 'bancos',
+  contas_bancarias: 'contas_bancarias',
 } as const;
 
 function num(id: number | string): number {
@@ -64,6 +66,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     { data: relatoriosPlaneamento },
     { data: noticias },
     { data: eventos },
+    { data: bancos },
+    { data: contasBancarias },
   ] = await Promise.all([
     supabase.from('empresas').select('*'),
     supabase.from('departamentos').select('*'),
@@ -91,6 +95,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     supabase.from('relatorios_planeamento').select('*'),
     supabase.from('noticias').select('*'),
     supabase.from('eventos').select('*'),
+    supabase.from('bancos').select('*'),
+    supabase.from('contas_bancarias').select('*'),
   ]);
 
   return {
@@ -120,6 +126,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     relatoriosPlaneamento: mapRowsFromDb<RelatorioMensalPlaneamento>('relatorios_planeamento', relatoriosPlaneamento ?? []),
     noticias: mapRowsFromDb<Noticia>('noticias', noticias ?? []),
     eventos: mapRowsFromDb<Evento>('eventos', eventos ?? []),
+    bancos: mapRowsFromDb<Banco>('bancos', bancos ?? []),
+    contasBancarias: mapRowsFromDb<ContaBancaria>('contas_bancarias', contasBancarias ?? []),
   };
 }
 
@@ -412,5 +420,17 @@ export const db = {
     insert: (s: SupabaseClient, p: Partial<Evento>) => insertOne<Evento>(s, 'eventos', p as Record<string, unknown>, 'eventos'),
     update: (s: SupabaseClient, id: number, p: Partial<Evento>) => updateOne<Evento>(s, 'eventos', id, p as Record<string, unknown>, 'eventos'),
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'eventos', id),
+  },
+  bancos: {
+    insert: (s: SupabaseClient, p: Partial<Banco>) => insertOne<Banco>(s, 'bancos', p as Record<string, unknown>, 'bancos'),
+    update: (s: SupabaseClient, id: number, p: Partial<Banco>) => updateOne<Banco>(s, 'bancos', id, p as Record<string, unknown>, 'bancos'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'bancos', id),
+  },
+  contas_bancarias: {
+    insert: (s: SupabaseClient, p: Partial<ContaBancaria>) =>
+      insertOne<ContaBancaria>(s, 'contas_bancarias', p as Record<string, unknown>, 'contas_bancarias'),
+    update: (s: SupabaseClient, id: number, p: Partial<ContaBancaria>) =>
+      updateOne<ContaBancaria>(s, 'contas_bancarias', id, p as Record<string, unknown>, 'contas_bancarias'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'contas_bancarias', id),
   },
 };

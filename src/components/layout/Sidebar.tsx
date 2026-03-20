@@ -18,7 +18,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   path?: string;
   module?: string;
-  children?: { label: string; path: string }[];
+  children?: { label: string; path: string; adminOnly?: boolean }[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -39,6 +39,8 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Finanças', icon: DollarSign, module: 'financas',
     children: [
       { label: 'Requisições', path: '/financas/requisicoes' },
+      { label: 'Bancos', path: '/financas/bancos', adminOnly: true },
+      { label: 'Contas bancárias', path: '/financas/contas-bancarias' },
       { label: 'Tesouraria', path: '/financas/tesouraria' },
       { label: 'Centros de Custo', path: '/financas/centros-custo' },
       { label: 'Projectos', path: '/financas/projectos' },
@@ -185,7 +187,7 @@ export function Sidebar() {
           </button>
           {expanded && (
             <div className="ml-7 mt-1 space-y-0.5 border-l border-sidebar-border pl-3">
-              {item.children.map(child => (
+              {item.children.filter(child => !child.adminOnly || user.perfil === 'Admin').map(child => (
                 <NavLink
                   key={child.path}
                   to={child.path}

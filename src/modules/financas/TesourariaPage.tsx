@@ -3,10 +3,13 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { inferBucketFromStoragePublicUrl, resolveComprovativoPublicUrl } from '@/utils/storageComprovativo';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { MovimentoTesouraria, CategoriaSaidaTesouraria, MetodoPagamentoTesouraria } from '@/types';
 import { formatKz, formatDate } from '@/utils/formatters';
+import { nextReferenciaTesouraria } from '@/utils/tesourariaReferencia';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -48,23 +51,21 @@ const emptyForm = (empresaId: number, tipo: 'entrada' | 'saida'): FormState => (
   metodoPagamento: 'Transferência',
   descricao: '',
   comprovativoAnexos: [],
+  contaBancariaId: undefined,
 });
-
-function nextReferencia(prev: MovimentoTesouraria[], empresaId: number, tipo: 'entrada' | 'saida'): string {
-  const year = new Date().getFullYear();
-  const prefix = `TES-${year}-${tipo === 'entrada' ? 'E' : 'S'}-`;
-  const same = prev.filter(m => m.empresaId === empresaId && m.tipo === tipo && m.referencia.startsWith(`TES-${year}`));
-  const nums = same.map(m => {
-    const parts = m.referencia.split('-');
-    return parseInt(parts[parts.length - 1], 10) || 0;
-  });
-  const next = (nums.length ? Math.max(...nums) : 0) + 1;
-  return `${prefix}${String(next).padStart(4, '0')}`;
-}
 
 export default function TesourariaPage() {
   const { user } = useAuth();
-  const { movimentosTesouraria, addMovimentoTesouraria, updateMovimentoTesouraria, empresas, centrosCusto, projectos } = useData();
+  const {
+    movimentosTesouraria,
+    addMovimentoTesouraria,
+    updateMovimentoTesouraria,
+    empresas,
+    centrosCusto,
+    projectos,
+    bancos,
+    contasBancarias,
+  } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
 
@@ -78,7 +79,8 @@ export default function TesourariaPage() {
   const [viewMov, setViewMov] = useState<MovimentoTesouraria | null>(null);
   const [formTipo, setFormTipo] = useState<'entrada' | 'saida'>('entrada');
   const [form, setForm] = useState<FormState>(() => emptyForm(empresaIdForNew, 'entrada'));
-  const [novoAnexoNome, setNovoAnexoNome] = useState('');
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
 
   const filtered = movimentosTesouraria.filter(m => {
     const matchTipo = tipoFilter === 'todos' || m.tipo === tipoFilter;
@@ -86,12 +88,21 @@ export default function TesourariaPage() {
     if (dataInicio) matchDate = matchDate && m.data >= dataInicio;
     if (dataFim) matchDate = matchDate && m.data <= dataFim;
     const searchLower = search.toLowerCase();
+    const contaTxt = m.contaBancariaId
+      ? (() => {
+          const c = contasBancarias.find(x => x.id === m.contaBancariaId);
+          if (!c) return '';
+          const bn = bancos.find(b => b.id === c.bancoId)?.nome ?? '';
+          return `${bn} ${c.numeroConta}`.toLowerCase();
+        })()
+      : '';
     const matchSearch =
       !searchLower ||
       m.referencia.toLowerCase().includes(searchLower) ||
       m.descricao.toLowerCase().includes(searchLower) ||
       (m.origem ?? '').toLowerCase().includes(searchLower) ||
-      (m.beneficiario ?? '').toLowerCase().includes(searchLower);
+      (m.beneficiario ?? '').toLowerCase().includes(searchLower) ||
+      contaTxt.includes(searchLower);
     return matchTipo && matchDate && matchSearch;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
@@ -118,20 +129,34 @@ export default function TesourariaPage() {
     setViewOpen(true);
   };
 
-  const addAnexo = () => {
-    if (!novoAnexoNome.trim()) return;
-    setForm(f => ({
-      ...f,
-      comprovativoAnexos: [...(f.comprovativoAnexos ?? []), novoAnexoNome.trim()],
-    }));
-    setNovoAnexoNome('');
-  };
-
   const removeAnexo = (index: number) => {
     setForm(f => ({
       ...f,
       comprovativoAnexos: (f.comprovativoAnexos ?? []).filter((_, i) => i !== index),
     }));
+  };
+
+  const uploadComprovativoTesourariaFile = async (file: File, tipoMov: 'entrada' | 'saida') => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Upload de comprovativo requer Supabase configurado.');
+      return;
+    }
+    try {
+      const ext = file.name.split('.').pop() || 'pdf';
+      const movKey = editing?.id ?? `new-${Date.now()}`;
+      const prefix = tipoMov === 'entrada' ? 'entrada' : 'saida';
+      const path = `tesouraria/comprovativos/${prefix}-${movKey}-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('comprovativos').upload(path, file, { upsert: true });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar comprovativo');
+      const { data: pub } = supabase.storage.from('comprovativos').getPublicUrl(data.path);
+      setForm(f => ({
+        ...f,
+        comprovativoAnexos: [...(f.comprovativoAnexos ?? []), pub.publicUrl],
+      }));
+      toast.success('Comprovativo anexado com sucesso.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível carregar o comprovativo.');
+    }
   };
 
   const save = async () => {
@@ -150,9 +175,10 @@ export default function TesourariaPage() {
           categoriaSaida: form.categoriaSaida,
           centroCustoId: form.centroCustoId,
           projectoId: form.projectoId,
+          contaBancariaId: form.contaBancariaId,
         });
       } else {
-        const referencia = nextReferencia(movimentosTesouraria, form.empresaId, form.tipo);
+        const referencia = nextReferenciaTesouraria(movimentosTesouraria, form.empresaId, form.tipo);
         const registadoEm = new Date().toISOString().slice(0, 19).replace('T', ' ');
         await addMovimentoTesouraria({
           ...form,
@@ -176,6 +202,16 @@ export default function TesourariaPage() {
   const centroNome = (id?: number) => (id ? centrosCusto.find(c => c.id === id)?.nome : null) ?? '—';
   const projectoNome = (id?: number) => (id ? projectos.find(p => p.id === id)?.nome : null) ?? '—';
   const categoriaLabel = (v?: CategoriaSaidaTesouraria) => (v ? CATEGORIAS_SAIDA.find(c => c.value === v)?.label : '—');
+  const contaLabel = (contaId?: number) => {
+    if (!contaId) return '—';
+    const c = contasBancarias.find(x => x.id === contaId);
+    if (!c) return '—';
+    const bn = bancos.find(b => b.id === c.bancoId)?.nome ?? '?';
+    return `${bn} · ${c.numeroConta}`;
+  };
+
+  const contasForEmpresa = (empresaId: number) =>
+    contasBancarias.filter(c => c.empresaId === empresaId).sort((a, b) => a.numeroConta.localeCompare(b.numeroConta));
 
   return (
     <div className="space-y-6">
@@ -238,6 +274,7 @@ export default function TesourariaPage() {
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valor</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Método</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Conta</th>
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
             </tr>
           </thead>
@@ -259,6 +296,9 @@ export default function TesourariaPage() {
                 </td>
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(m.data)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{m.metodoPagamento}</td>
+                <td className="py-3 px-5 text-muted-foreground text-xs max-w-[200px] truncate" title={contaLabel(m.contaBancariaId)}>
+                  {contaLabel(m.contaBancariaId)}
+                </td>
                 <td className="py-3 px-5 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openView(m)}><Eye className="h-4 w-4" /></Button>
@@ -292,7 +332,14 @@ export default function TesourariaPage() {
               <Label>Empresa</Label>
               <Select
                 value={String(form.empresaId)}
-                onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
+                onValueChange={v => {
+                  const nextEmp = Number(v);
+                  setForm(f => ({
+                    ...f,
+                    empresaId: nextEmp,
+                    contaBancariaId: undefined,
+                  }));
+                }}
                 disabled={!!editing}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -323,6 +370,31 @@ export default function TesourariaPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Conta bancária (opcional)</Label>
+              <Select
+                value={form.contaBancariaId ? String(form.contaBancariaId) : 'nenhum'}
+                onValueChange={v =>
+                  setForm(f => ({
+                    ...f,
+                    contaBancariaId: v === 'nenhum' ? undefined : Number(v),
+                  }))
+                }
+              >
+                <SelectTrigger><SelectValue placeholder="Sem conta seleccionada" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nenhum">— Não associar</SelectItem>
+                  {contasForEmpresa(form.empresaId).map(c => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {(bancos.find(b => b.id === c.bancoId)?.nome ?? 'Banco')} · {c.numeroConta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Se seleccionar uma conta, o saldo em <strong className="text-foreground">Contas bancárias</strong> reflecte este movimento (entrada aumenta, saída diminui), em sincronia com a base de dados.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
@@ -380,21 +452,73 @@ export default function TesourariaPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label className="flex items-center gap-2"><Paperclip className="h-4 w-4" /> Comprovativo(s)</Label>
+              <Label className="flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                {formTipo === 'saida' ? 'Comprovativo de pagamento e conclusão' : 'Comprovativo de recebimento'}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {formTipo === 'saida'
+                  ? 'Igual às requisições: anexe PDF; o ficheiro fica no armazenamento Supabase (bucket comprovativos).'
+                  : 'Anexe PDF (recibo, transferência, etc.); o ficheiro fica no mesmo bucket comprovativos, como nas saídas.'}
+              </p>
               {(form.comprovativoAnexos ?? []).length > 0 && (
                 <ul className="space-y-1.5">
-                  {(form.comprovativoAnexos ?? []).map((nome, i) => (
-                    <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
-                      <span className="truncate">{nome}</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive" onClick={() => removeAnexo(i)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                    </li>
-                  ))}
+                  {(form.comprovativoAnexos ?? []).map((urlOuNome, i) => {
+                    const displayName = urlOuNome.startsWith('http')
+                      ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome
+                      : urlOuNome;
+                    return (
+                      <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                        {urlOuNome.startsWith('http') ? (
+                          <button
+                            type="button"
+                            className="truncate text-left text-primary underline hover:no-underline"
+                            onClick={() => {
+                              void (async () => {
+                                if (!supabase) return;
+                                const bucket = inferBucketFromStoragePublicUrl(urlOuNome);
+                                const resolved = await resolveComprovativoPublicUrl(supabase, bucket, urlOuNome);
+                                if (resolved) {
+                                  setPdfPreviewUrl(resolved);
+                                  setPdfPreviewOpen(true);
+                                } else {
+                                  toast.error('Não foi possível pré-visualizar o documento.');
+                                }
+                              })();
+                            }}
+                          >
+                            {displayName}
+                          </button>
+                        ) : (
+                          <span className="truncate">{displayName}</span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                          onClick={() => removeAnexo(i)}
+                          aria-label="Remover anexo"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
-              <div className="flex gap-2">
-                <Input placeholder="Nome do ficheiro" value={novoAnexoNome} onChange={e => setNovoAnexoNome(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addAnexo())} className="flex-1" />
-                <Button type="button" variant="outline" size="sm" onClick={addAnexo}>Adicionar</Button>
-              </div>
+              <Input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void uploadComprovativoTesourariaFile(file, formTipo);
+                    e.target.value = '';
+                  }
+                }}
+              />
             </div>
             <div className="space-y-2">
               <Label>Observações</Label>
@@ -422,6 +546,7 @@ export default function TesourariaPage() {
               <p><span className="text-muted-foreground">Valor:</span> <span className={viewMov.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}>{viewMov.tipo === 'entrada' ? '+' : '-'}{formatKz(viewMov.valor)}</span></p>
               <p><span className="text-muted-foreground">Data:</span> {formatDate(viewMov.data)}</p>
               <p><span className="text-muted-foreground">Método:</span> {viewMov.metodoPagamento}</p>
+              <p><span className="text-muted-foreground">Conta bancária:</span> {contaLabel(viewMov.contaBancariaId)}</p>
               <p><span className="text-muted-foreground">Descrição:</span> {viewMov.descricao}</p>
               {viewMov.tipo === 'entrada' && viewMov.origem && <p><span className="text-muted-foreground">Origem:</span> {viewMov.origem}</p>}
               {viewMov.tipo === 'saida' && (viewMov.categoriaSaida || viewMov.beneficiario) && (
@@ -430,11 +555,64 @@ export default function TesourariaPage() {
               <p><span className="text-muted-foreground">Centro de custo:</span> {centroNome(viewMov.centroCustoId)}</p>
               <p><span className="text-muted-foreground">Projecto:</span> {projectoNome(viewMov.projectoId)}</p>
               {(viewMov.comprovativoAnexos?.length ?? 0) > 0 && (
-                <p><span className="text-muted-foreground">Comprovativos:</span> {(viewMov.comprovativoAnexos ?? []).join(', ')}</p>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Comprovativos:</p>
+                  <ul className="space-y-1 pl-1">
+                    {(viewMov.comprovativoAnexos ?? []).map((urlOuNome, i) => {
+                      const displayName = urlOuNome.startsWith('http')
+                        ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome
+                        : urlOuNome;
+                      return (
+                        <li key={i}>
+                          {urlOuNome.startsWith('http') ? (
+                            <button
+                              type="button"
+                              className="text-primary underline hover:no-underline text-sm"
+                              onClick={() => {
+                                void (async () => {
+                                  if (!supabase) return;
+                                  const bucket = inferBucketFromStoragePublicUrl(urlOuNome);
+                                  const resolved = await resolveComprovativoPublicUrl(supabase, bucket, urlOuNome);
+                                  if (resolved) {
+                                    setPdfPreviewUrl(resolved);
+                                    setViewOpen(false);
+                                    setTimeout(() => setPdfPreviewOpen(true), 0);
+                                  } else {
+                                    toast.error('Não foi possível pré-visualizar o documento.');
+                                  }
+                                })();
+                              }}
+                            >
+                              {displayName}
+                            </button>
+                          ) : (
+                            <span className="text-sm">{displayName}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
               {viewMov.registadoPor && <p><span className="text-muted-foreground">Registado por:</span> {viewMov.registadoPor}</p>}
               {viewMov.observacoes && <p><span className="text-muted-foreground">Observações:</span> {viewMov.observacoes}</p>}
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) setPdfPreviewUrl(null);
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {pdfPreviewUrl ? (
+            <iframe src={pdfPreviewUrl} title="Pré-visualização do comprovativo" className="w-full h-full min-h-[80vh] border-0 rounded-md" />
+          ) : (
+            <DialogDescription className="p-4">A carregar pré-visualização…</DialogDescription>
           )}
         </DialogContent>
       </Dialog>

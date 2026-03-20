@@ -59,6 +59,16 @@ export interface Database {
           updated_at?: string;
         };
       };
+      bancos: {
+        Row: Record<string, unknown>;
+        Insert: Record<string, unknown>;
+        Update: Record<string, unknown>;
+      };
+      contas_bancarias: {
+        Row: Record<string, unknown>;
+        Insert: Record<string, unknown>;
+        Update: Record<string, unknown>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

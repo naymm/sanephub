@@ -6,7 +6,9 @@ import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useTenant } from '@/context/TenantContext';
 import { hasModuleAccess, useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { inferBucketFromStoragePublicUrl, resolveComprovativoPublicUrl } from '@/utils/storageComprovativo';
 import type { Requisicao, StatusRequisicao, Pagamento } from '@/types';
+import { nextReferenciaTesouraria } from '@/utils/tesourariaReferencia';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
@@ -83,7 +85,21 @@ function nextNum(requisicoes: Requisicao[]): string {
 
 export default function RequisicoesPage() {
   const { user } = useAuth();
-  const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, empresas, departamentos, addPagamento, colaboradoresTodos } = useData();
+  const {
+    requisicoes,
+    addRequisicao,
+    updateRequisicao,
+    centrosCusto,
+    empresas,
+    departamentos,
+    addPagamento,
+    colaboradoresTodos,
+    movimentosTesouraria,
+    addMovimentoTesouraria,
+    contasBancarias,
+    bancos,
+    projectos,
+  } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const canAccessFinancas = hasModuleAccess(user, 'financas');
@@ -113,34 +129,9 @@ export default function RequisicoesPage() {
   const [facturaFinalAnexos, setFacturaFinalAnexos] = useState<string[]>([]);
   const [comprovativoDialogFromApprove, setComprovativoDialogFromApprove] = useState(false);
   const [novoFacturaFinalNome, setNovoFacturaFinalNome] = useState('');
-
-  const resolvePublicUrl = async (
-    bucket: 'proformas' | 'comprovativos',
-    value: string,
-  ): Promise<string | null> => {
-    if (!value) return null;
-    if (!isSupabaseConfigured() || !supabase) return null;
-
-    // Caso o DB tenha guardado um publicUrl com "localhost" (outro dispositivo), tenta re-resolver
-    // extraindo o path dentro do bucket.
-    let objectPath = value;
-    if (value.startsWith('http')) {
-      const re = new RegExp(`storage\\/v1\\/object\\/public\\/${bucket}\\/(.+)$`);
-      const m = value.match(re);
-      if (m?.[1]) objectPath = m[1];
-      else return value; // não conseguimos extrair path do bucket
-    }
-
-    const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath);
-    return data?.publicUrl ?? null;
-  };
-
-  const inferBucketFromPublicUrl = (value: string): 'proformas' | 'comprovativos' => {
-    const m = value.match(/storage\/v1\/object\/public\/([^/]+)\//);
-    const b = m?.[1];
-    if (b === 'comprovativos' || b === 'proformas') return b;
-    return 'proformas';
-  };
+  /** Conta de onde sai o valor ao processar pagamento (requisição Aprovada). */
+  const [pagoContaBancariaId, setPagoContaBancariaId] = useState('');
+  const [pagoSubmitting, setPagoSubmitting] = useState(false);
 
   const getFirstTruthy = (arr?: string[]) => (arr ?? []).find(v => !!v) ?? null;
   const getLastTruthy = (arr?: string[]) => {
@@ -248,8 +239,14 @@ export default function RequisicoesPage() {
     // Guardamos os URLs em comprovativoAnexos (no estado reutilizamos facturaFinalAnexos para evitar refactor grande).
     setFacturaFinalAnexos(r.comprovativoAnexos ?? []);
     setNovoFacturaFinalNome('');
+    setPagoContaBancariaId('');
     setPagoDialogOpen(true);
   };
+
+  const contasPagamentoParaEmpresa = (empresaId: number) =>
+    contasBancarias
+      .filter(c => c.empresaId === empresaId)
+      .sort((a, b) => a.numeroConta.localeCompare(b.numeroConta));
 
   const uploadComprovativoFile = async (file: File) => {
     if (!isSupabaseConfigured() || !supabase) {
@@ -289,8 +286,93 @@ export default function RequisicoesPage() {
     }));
   };
 
+  /** Fluxo comprovativo + pagamento (requisição Aprovada): exige conta bancária e cria saída na tesouraria. */
   const guardarComprovativo = async () => {
-    if (!reqParaPago || facturaFinalAnexos.length === 0) return;
+    if (!reqParaPago || facturaFinalAnexos.length === 0 || pagoSubmitting) return;
+
+    const isPagamentoCompleto =
+      comprovativoDialogFromApprove || reqParaPago.status === 'Aprovado';
+
+    if (isPagamentoCompleto) {
+      const contaId = Number(pagoContaBancariaId);
+      if (!pagoContaBancariaId || !Number.isFinite(contaId)) {
+        toast.error('Seleccione o banco e a conta de onde sai o pagamento.');
+        return;
+      }
+      const conta = contasBancarias.find(c => c.id === contaId);
+      if (!conta || conta.empresaId !== reqParaPago.empresaId) {
+        toast.error('A conta seleccionada não pertence à empresa desta requisição.');
+        return;
+      }
+      setPagoSubmitting(true);
+      try {
+        const hoje = new Date().toISOString().slice(0, 10);
+        const agoraIso = new Date().toISOString();
+        const registadoEm = agoraIso.slice(0, 19).replace('T', ' ');
+
+        await updateRequisicao(reqParaPago.id, {
+          status: 'Pago',
+          comprovante: true,
+          comprovativoAnexos: facturaFinalAnexos,
+          comprovativoAnexadoEm: agoraIso,
+          dataPagamento: hoje,
+          factura: reqParaPago.factura,
+        });
+
+        const referenciaAuto = `PAG-${new Date().getFullYear()}-${String(reqParaPago.id).padStart(4, '0')}`;
+        await addPagamento({
+          requisicaoId: reqParaPago.id,
+          referencia: referenciaAuto,
+          beneficiario: reqParaPago.fornecedor,
+          valor: reqParaPago.valor,
+          dataPagamento: hoje,
+          metodoPagamento: 'Transferência' as Pagamento['metodoPagamento'],
+          status: 'Recebido',
+          registadoPor: user?.nome ?? '',
+          registadoEm: hoje,
+        });
+
+        const referenciaTes = nextReferenciaTesouraria(movimentosTesouraria, reqParaPago.empresaId, 'saida');
+        const centroCustoId = centrosCusto.find(
+          cc => cc.codigo === reqParaPago.centroCusto && cc.empresaId === reqParaPago.empresaId,
+        )?.id;
+        const projectoMatch = reqParaPago.projecto?.trim()
+          ? projectos.find(p => p.nome === reqParaPago.projecto && p.empresaId === reqParaPago.empresaId)
+          : undefined;
+
+        await addMovimentoTesouraria({
+          empresaId: reqParaPago.empresaId,
+          tipo: 'saida',
+          referencia: referenciaTes,
+          valor: reqParaPago.valor,
+          data: hoje,
+          metodoPagamento: 'Transferência',
+          descricao: `Pagamento requisição ${reqParaPago.num} — ${reqParaPago.descricao}`,
+          categoriaSaida: 'fornecedor',
+          beneficiario: reqParaPago.fornecedor,
+          comprovativoAnexos: [...facturaFinalAnexos],
+          contaBancariaId: contaId,
+          requisicaoId: reqParaPago.id,
+          centroCustoId,
+          projectoId: projectoMatch?.id,
+          registadoPor: user?.nome,
+          registadoEm,
+        });
+
+        toast.success('Pagamento registado. Saída criada na tesouraria com o valor da requisição.');
+        setPagoDialogOpen(false);
+        setReqParaPago(null);
+        setFacturaFinalAnexos([]);
+        setPagoContaBancariaId('');
+        setComprovativoDialogFromApprove(false);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Erro ao registar pagamento');
+      } finally {
+        setPagoSubmitting(false);
+      }
+      return;
+    }
+
     try {
       await updateRequisicao(reqParaPago.id, {
         comprovante: true,
@@ -301,45 +383,10 @@ export default function RequisicoesPage() {
       setPagoDialogOpen(false);
       setReqParaPago(null);
       setFacturaFinalAnexos([]);
+      setPagoContaBancariaId('');
       setComprovativoDialogFromApprove(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar comprovativo');
-    }
-  };
-
-  const confirmarPago = async () => {
-    if (!reqParaPago || facturaFinalAnexos.length === 0) return;
-    try {
-      const hoje = new Date().toISOString().slice(0, 10);
-
-      // 1) Actualizar requisição para Pago (mantendo a lógica de factura/comprovante)
-      await updateRequisicao(reqParaPago.id, {
-        status: 'Pago',
-        factura: true,
-        facturaFinalAnexos,
-        comprovante: true,
-        dataPagamento: hoje,
-      });
-
-      // 2) Criar automaticamente um registo em Pagamentos (Pagamentos Recebidos)
-      const referenciaAuto = `PAG-${new Date().getFullYear()}-${String(reqParaPago.id).padStart(4, '0')}`;
-      await addPagamento({
-        requisicaoId: reqParaPago.id,
-        referencia: referenciaAuto,
-        beneficiario: reqParaPago.fornecedor,
-        valor: reqParaPago.valor,
-        dataPagamento: hoje,
-        metodoPagamento: 'Transferência' as Pagamento['metodoPagamento'],
-        status: 'Recebido',
-        registadoPor: user?.nome ?? '',
-        registadoEm: hoje,
-      });
-      setPagoDialogOpen(false);
-      setReqParaPago(null);
-      setFacturaFinalAnexos([]);
-      setComprovativoDialogFromApprove(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao registar pagamento');
     }
   };
 
@@ -504,7 +551,7 @@ export default function RequisicoesPage() {
                           }
                           void (async () => {
                             try {
-                              const url = await resolvePublicUrl('proformas', candidate);
+                              const url = await resolveComprovativoPublicUrl(supabase!, 'proformas', candidate);
                               if (!url) {
                                 toast.error('Não foi possível resolver a pré-visualização da proforma.');
                                 return;
@@ -543,7 +590,7 @@ export default function RequisicoesPage() {
                           }
                           void (async () => {
                             try {
-                              const url = await resolvePublicUrl(bucket, candidate);
+                              const url = await resolveComprovativoPublicUrl(supabase!, bucket, candidate);
                               if (!url) {
                                 toast.error('Não foi possível resolver a pré-visualização do comprovativo.');
                                 return;
@@ -568,7 +615,7 @@ export default function RequisicoesPage() {
                           }
                           void (async () => {
                             try {
-                              const url = await resolvePublicUrl('proformas', candidate);
+                              const url = await resolveComprovativoPublicUrl(supabase!, 'proformas', candidate);
                               if (!url) {
                                 toast.error('Não foi possível resolver a pré-visualização da factura final.');
                                 return;
@@ -913,7 +960,7 @@ export default function RequisicoesPage() {
                             className="text-primary underline hover:no-underline"
                             onClick={() => {
                               void (async () => {
-                                const resolved = await resolvePublicUrl('proformas', urlOuNome);
+                                const resolved = await resolveComprovativoPublicUrl(supabase!, 'proformas', urlOuNome);
                                 if (resolved) setViewInlinePdfUrl(resolved);
                                 else toast.error('Não foi possível pré-visualizar a proforma.');
                               })();
@@ -940,7 +987,7 @@ export default function RequisicoesPage() {
                             className="text-primary underline hover:no-underline"
                             onClick={() => {
                               void (async () => {
-                                const resolved = await resolvePublicUrl('comprovativos', urlOuNome);
+                                const resolved = await resolveComprovativoPublicUrl(supabase!, 'comprovativos', urlOuNome);
                                 if (resolved) setViewInlinePdfUrl(resolved);
                                 else toast.error('Não foi possível pré-visualizar o comprovativo.');
                               })();
@@ -967,7 +1014,7 @@ export default function RequisicoesPage() {
                             className="text-primary underline hover:no-underline"
                             onClick={() => {
                               void (async () => {
-                                const resolved = await resolvePublicUrl('proformas', urlOuNome);
+                                const resolved = await resolveComprovativoPublicUrl(supabase!, 'proformas', urlOuNome);
                                 if (resolved) setViewInlinePdfUrl(resolved);
                                 else toast.error('Não foi possível pré-visualizar a factura final.');
                               })();
@@ -1012,7 +1059,19 @@ export default function RequisicoesPage() {
       </Dialog>
 
       {/* Dialog Marcar como Pago / Anexar factura final / Comprovativo */}
-      <Dialog open={pagoDialogOpen} onOpenChange={open => { if (!open) { setReqParaPago(null); setFacturaFinalAnexos([]); setComprovativoDialogFromApprove(false); } setPagoDialogOpen(open); }}>
+      <Dialog
+        open={pagoDialogOpen}
+        onOpenChange={open => {
+          if (!open) {
+            setReqParaPago(null);
+            setFacturaFinalAnexos([]);
+            setComprovativoDialogFromApprove(false);
+            setPagoContaBancariaId('');
+            setPagoSubmitting(false);
+          }
+          setPagoDialogOpen(open);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -1026,11 +1085,47 @@ export default function RequisicoesPage() {
               {reqParaPago?.status === 'Pago'
                 ? 'Anexe a factura final desta requisição já paga.'
                 : comprovativoDialogFromApprove || reqParaPago?.status === 'Aprovado'
-                ? 'Anexe o comprovativo de pagamento e conclusão. Pode guardar agora e marcar como pago mais tarde.'
+                ? 'Anexe o comprovativo em PDF, indique a conta bancária de origem e confirme: o valor da requisição será registado como saída na tesouraria e o estado passará a Pago.'
                 : 'Anexe pelo menos um ficheiro da factura final para confirmar o pagamento.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-4">
+            {(comprovativoDialogFromApprove || reqParaPago?.status === 'Aprovado') && reqParaPago && (
+              <>
+                <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                  <p>
+                    <span className="text-muted-foreground">Valor a movimentar (requisição):</span>{' '}
+                    <strong className="font-mono">{formatKz(reqParaPago.valor)}</strong>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Este montante será registado como <strong className="text-foreground">saída</strong> na tesouraria na conta seleccionada.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Banco e conta de origem do pagamento</Label>
+                  {contasPagamentoParaEmpresa(reqParaPago.empresaId).length === 0 ? (
+                    <p className="text-sm text-muted-foreground rounded-md border border-dashed border-border px-3 py-2">
+                      Nenhuma conta bancária para esta empresa. Registe contas em Finanças → Contas bancárias.
+                    </p>
+                  ) : (
+                    <Select value={pagoContaBancariaId || undefined} onValueChange={setPagoContaBancariaId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione banco e conta…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {contasPagamentoParaEmpresa(reqParaPago.empresaId).map(c => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {(bancos.find(b => b.id === c.bancoId)?.nome ?? 'Banco')} · {c.numeroConta}
+                            {c.descricao ? ` (${c.descricao})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </>
+            )}
+            <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <Paperclip className="h-4 w-4" />
               {reqParaPago?.status === 'Pago'
@@ -1051,8 +1146,8 @@ export default function RequisicoesPage() {
                           className="truncate text-primary underline hover:no-underline"
                           onClick={() => {
                             void (async () => {
-                              const bucket = inferBucketFromPublicUrl(urlOuNome);
-                              const resolved = await resolvePublicUrl(bucket, urlOuNome);
+                              const bucket = inferBucketFromStoragePublicUrl(urlOuNome);
+                              const resolved = await resolveComprovativoPublicUrl(supabase!, bucket, urlOuNome);
                               if (resolved) {
                                 setPdfPreviewUrl(resolved);
                                 setPagoDialogOpen(false);
@@ -1088,12 +1183,24 @@ export default function RequisicoesPage() {
                 }
               }}
             />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPagoDialogOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setPagoDialogOpen(false)} disabled={pagoSubmitting}>
+              Cancelar
+            </Button>
             {(comprovativoDialogFromApprove || reqParaPago?.status === 'Aprovado') && (
-              <Button variant="secondary" onClick={guardarComprovativo} disabled={facturaFinalAnexos.length === 0}>
-                Processar pagamento
+              <Button
+                variant="secondary"
+                onClick={() => void guardarComprovativo()}
+                disabled={
+                  facturaFinalAnexos.length === 0 ||
+                  !pagoContaBancariaId ||
+                  pagoSubmitting ||
+                  (reqParaPago ? contasPagamentoParaEmpresa(reqParaPago.empresaId).length === 0 : true)
+                }
+              >
+                {pagoSubmitting ? 'A processar…' : 'Processar pagamento'}
               </Button>
             )}
           </DialogFooter>

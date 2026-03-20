@@ -1,9 +1,28 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, ReactNode } from 'react';
-import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento } from '@/types';
+import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria } from '@/types';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { loadAllTables, db } from '@/lib/supabaseData';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
+import { nextReferenciaTesouraria } from '@/utils/tesourariaReferencia';
+
+/** Variação do saldo da conta quando o movimento é aplicado (entrada +valor, saída −valor). */
+function saldoDeltaFromMovimento(m: Pick<MovimentoTesouraria, 'tipo' | 'valor'>): number {
+  return m.tipo === 'entrada' ? m.valor : -m.valor;
+}
+
+function patchContaBancariaSaldo(
+  setContasBancarias: React.Dispatch<React.SetStateAction<ContaBancaria[]>>,
+  contaId: number | undefined,
+  delta: number,
+) {
+  if (contaId == null || delta === 0 || Number.isNaN(delta)) return;
+  setContasBancarias(prev =>
+    prev.map(c =>
+      c.id === contaId ? { ...c, saldoActual: Number(c.saldoActual) + delta } : c,
+    ),
+  );
+}
 
 interface DataContextType {
   dataLoading: boolean;
@@ -53,6 +72,12 @@ interface DataContextType {
   setPendencias: React.Dispatch<React.SetStateAction<PendenciaDocumental[]>>;
   movimentosTesouraria: MovimentoTesouraria[];
   setMovimentosTesouraria: React.Dispatch<React.SetStateAction<MovimentoTesouraria[]>>;
+  /** Catálogo global de bancos */
+  bancos: Banco[];
+  setBancos: React.Dispatch<React.SetStateAction<Banco[]>>;
+  /** Contas filtradas pelo tenant actual */
+  contasBancarias: ContaBancaria[];
+  setContasBancarias: React.Dispatch<React.SetStateAction<ContaBancaria[]>>;
   relatoriosPlaneamento: RelatorioMensalPlaneamento[];
   setRelatoriosPlaneamento: React.Dispatch<React.SetStateAction<RelatorioMensalPlaneamento[]>>;
   noticias: Noticia[];
@@ -117,6 +142,12 @@ interface DataContextType {
   addMovimentoTesouraria: (p: Partial<MovimentoTesouraria>) => Promise<MovimentoTesouraria>;
   updateMovimentoTesouraria: (id: number, p: Partial<MovimentoTesouraria>) => Promise<MovimentoTesouraria>;
   deleteMovimentoTesouraria: (id: number) => Promise<void>;
+  addBanco: (p: Partial<Banco>) => Promise<Banco>;
+  updateBanco: (id: number, p: Partial<Banco>) => Promise<Banco>;
+  deleteBanco: (id: number) => Promise<void>;
+  addContaBancaria: (p: Partial<ContaBancaria>) => Promise<ContaBancaria>;
+  updateContaBancaria: (id: number, p: Partial<ContaBancaria>) => Promise<ContaBancaria>;
+  deleteContaBancaria: (id: number) => Promise<void>;
   addCorrespondencia: (p: Partial<Correspondencia>) => Promise<Correspondencia>;
   updateCorrespondencia: (id: number, p: Partial<Correspondencia>) => Promise<Correspondencia>;
   deleteCorrespondencia: (id: number) => Promise<void>;
@@ -161,6 +192,8 @@ const emptyArrays = {
   pagamentos: [] as Pagamento[],
   pendencias: [] as PendenciaDocumental[],
   movimentosTesouraria: [] as MovimentoTesouraria[],
+  bancos: [] as Banco[],
+  contasBancarias: [] as ContaBancaria[],
   relatoriosPlaneamento: [] as RelatorioMensalPlaneamento[],
   noticias: [] as Noticia[],
   eventos: [] as Evento[],
@@ -193,6 +226,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [pagamentos, setPagamentos] = useState<Pagamento[]>(emptyArrays.pagamentos);
   const [pendencias, setPendencias] = useState<PendenciaDocumental[]>(emptyArrays.pendencias);
   const [movimentosTesouraria, setMovimentosTesouraria] = useState<MovimentoTesouraria[]>(emptyArrays.movimentosTesouraria);
+  const [bancos, setBancos] = useState<Banco[]>(emptyArrays.bancos);
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>(emptyArrays.contasBancarias);
   const [relatoriosPlaneamento, setRelatoriosPlaneamento] = useState<RelatorioMensalPlaneamento[]>(emptyArrays.relatoriosPlaneamento);
   const [noticias, setNoticias] = useState<Noticia[]>(emptyArrays.noticias);
   const [eventos, setEventos] = useState<Evento[]>(emptyArrays.eventos);
@@ -223,6 +258,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const pagamentosRT = useRealtimeTable<Pagamento>('pagamentos', 'id');
   const pendenciasRT = useRealtimeTable<PendenciaDocumental>('pendencias_documentais', 'id');
   const movimentosTesourariaRT = useRealtimeTable<MovimentoTesouraria>('movimentos_tesouraria', 'id');
+  const bancosRT = useRealtimeTable<Banco>('bancos', 'id');
+  const contasBancariasRT = useRealtimeTable<ContaBancaria>('contas_bancarias', 'id');
   const relatoriosPlaneamentoRT = useRealtimeTable<RelatorioMensalPlaneamento>('relatorios_planeamento', 'id');
   const processosDisciplinaresRT = useRealtimeTable<ProcessoDisciplinar>('processos_disciplinares', 'id');
   const rescissoesContratoRT = useRealtimeTable<RescisaoContrato>('rescisoes_contrato', 'id');
@@ -251,6 +288,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     pagamentosRT.isLoading ||
     pendenciasRT.isLoading ||
     movimentosTesourariaRT.isLoading ||
+    bancosRT.isLoading ||
+    contasBancariasRT.isLoading ||
     relatoriosPlaneamentoRT.isLoading ||
     processosDisciplinaresRT.isLoading ||
     rescissoesContratoRT.isLoading;
@@ -283,6 +322,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => setPagamentos(pagamentosRT.rows), [pagamentosRT.rows]);
   useEffect(() => setPendencias(pendenciasRT.rows), [pendenciasRT.rows]);
   useEffect(() => setMovimentosTesouraria(movimentosTesourariaRT.rows), [movimentosTesourariaRT.rows]);
+  useEffect(() => setBancos(bancosRT.rows), [bancosRT.rows]);
+  useEffect(() => setContasBancarias(contasBancariasRT.rows), [contasBancariasRT.rows]);
   useEffect(() => setRelatoriosPlaneamento(relatoriosPlaneamentoRT.rows), [relatoriosPlaneamentoRT.rows]);
   useEffect(() => setProcessosDisciplinares(processosDisciplinaresRT.rows), [processosDisciplinaresRT.rows]);
   useEffect(() => setRescissoesContrato(rescissoesContratoRT.rows), [rescissoesContratoRT.rows]);
@@ -317,6 +358,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setPagamentos(data.pagamentos);
       setPendencias(data.pendencias);
       setMovimentosTesouraria(data.movimentosTesouraria);
+      setBancos(data.bancos);
+      setContasBancarias(data.contasBancarias);
       setRelatoriosPlaneamento(data.relatoriosPlaneamento);
       setNoticias(data.noticias);
       setEventos(data.eventos);
@@ -346,6 +389,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       declaracoes: isConsolidado ? declaracoes : declaracoes.filter(d => colabIds.has(d.colaboradorId)),
       pagamentos: isConsolidado ? pagamentos : pagamentos.filter(p => reqIds.has(p.requisicaoId)),
       movimentosTesouraria: isConsolidado ? movimentosTesouraria : movimentosTesouraria.filter(m => m.empresaId === currentEmpresaId),
+      contasBancarias: isConsolidado ? contasBancarias : contasBancarias.filter(c => c.empresaId === currentEmpresaId),
       relatoriosPlaneamento: isConsolidado ? relatoriosPlaneamento : relatoriosPlaneamento.filter(r => r.empresaId === currentEmpresaId),
       noticias: isConsolidado ? noticias : noticias.filter(n => n.empresaId === currentEmpresaId),
       eventos: isConsolidado ? eventos : eventos.filter(e => e.empresaId === currentEmpresaId),
@@ -356,7 +400,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       prazos: isConsolidado ? prazos : prazos.filter(pr => pr.empresaId == null || pr.empresaId === currentEmpresaId),
       riscos: isConsolidado ? riscos : riscos.filter(r => r.empresaId == null || r.empresaId === currentEmpresaId),
     };
-  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, relatoriosPlaneamento, noticias, eventos, processosDisciplinares, rescissoesContrato, contratos, processos, prazos, riscos]);
+  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, contasBancarias, relatoriosPlaneamento, noticias, eventos, processosDisciplinares, rescissoesContrato, contratos, processos, prazos, riscos]);
 
   function runMutation<T>(fn: () => Promise<T>, then?: (result: T) => void): Promise<T> {
     if (!supabase || !isSupabaseConfigured()) return Promise.reject(new Error('Supabase não configurado'));
@@ -642,17 +686,94 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const addMovimentoTesouraria = useCallback(
     (p: Partial<MovimentoTesouraria>) =>
-      runMutation(() => db.movimentos_tesouraria.insert(supabase!, p), row => setMovimentosTesouraria(prev => [...prev, row])),
+      runMutation(() => db.movimentos_tesouraria.insert(supabase!, p), row => {
+        setMovimentosTesouraria(prev => [...prev, row]);
+        if (row.contaBancariaId) {
+          patchContaBancariaSaldo(setContasBancarias, row.contaBancariaId, saldoDeltaFromMovimento(row));
+        }
+      }),
     [runMutation]
   );
   const updateMovimentoTesouraria = useCallback(
-    (id: number, p: Partial<MovimentoTesouraria>) =>
-      runMutation(() => db.movimentos_tesouraria.update(supabase!, id, p), row => setMovimentosTesouraria(prev => prev.map(m => (m.id === id ? row : m)))),
-    [runMutation]
+    (id: number, p: Partial<MovimentoTesouraria>) => {
+      const oldMov = movimentosTesouraria.find(m => m.id === id);
+      return runMutation(() => db.movimentos_tesouraria.update(supabase!, id, p), row => {
+        setMovimentosTesouraria(prev => prev.map(m => (m.id === id ? row : m)));
+        if (oldMov?.contaBancariaId) {
+          patchContaBancariaSaldo(setContasBancarias, oldMov.contaBancariaId, -saldoDeltaFromMovimento(oldMov));
+        }
+        if (row.contaBancariaId) {
+          patchContaBancariaSaldo(setContasBancarias, row.contaBancariaId, saldoDeltaFromMovimento(row));
+        }
+      });
+    },
+    [runMutation, movimentosTesouraria]
   );
   const deleteMovimentoTesouraria = useCallback(
+    (id: number) => {
+      const oldMov = movimentosTesouraria.find(m => m.id === id);
+      return runMutation(
+        () => db.movimentos_tesouraria.delete(supabase!, id) as Promise<void>,
+        () => {
+          setMovimentosTesouraria(prev => prev.filter(m => m.id !== id));
+          if (oldMov?.contaBancariaId) {
+            patchContaBancariaSaldo(setContasBancarias, oldMov.contaBancariaId, -saldoDeltaFromMovimento(oldMov));
+          }
+        },
+      );
+    },
+    [runMutation, movimentosTesouraria]
+  );
+
+  const addBanco = useCallback(
+    (p: Partial<Banco>) => runMutation(() => db.bancos.insert(supabase!, p), row => setBancos(prev => [...prev, row])),
+    [runMutation]
+  );
+  const updateBanco = useCallback(
+    (id: number, p: Partial<Banco>) =>
+      runMutation(() => db.bancos.update(supabase!, id, p), row => setBancos(prev => prev.map(b => (b.id === id ? row : b)))),
+    [runMutation]
+  );
+  const deleteBanco = useCallback(
+    (id: number) => runMutation(() => (db.bancos.delete(supabase!, id) as Promise<void>), () => setBancos(prev => prev.filter(b => b.id !== id))),
+    [runMutation]
+  );
+
+  const addContaBancaria = useCallback(
+    (p: Partial<ContaBancaria>) =>
+      runMutation(async () => {
+        const opening = Math.max(0, Number(p.saldoActual) || 0);
+        const row = await db.contas_bancarias.insert(supabase!, { ...p, saldoActual: 0 });
+        if (opening > 0) {
+          const referencia = nextReferenciaTesouraria(movimentosTesouraria, row.empresaId, 'entrada');
+          const registadoEm = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const hoje = new Date().toISOString().slice(0, 10);
+          const mov = await db.movimentos_tesouraria.insert(supabase!, {
+            empresaId: row.empresaId,
+            tipo: 'entrada',
+            referencia,
+            valor: opening,
+            data: hoje,
+            metodoPagamento: 'Transferência',
+            descricao: `Saldo inicial — conta bancária n.º ${row.numeroConta}`,
+            origem: 'Abertura de conta',
+            contaBancariaId: row.id,
+            registadoEm,
+          });
+          setMovimentosTesouraria(prev => [...prev, mov]);
+        }
+        return opening > 0 ? { ...row, saldoActual: opening } : row;
+      }, row => setContasBancarias(prev => [...prev, row])),
+    [runMutation, movimentosTesouraria],
+  );
+  const updateContaBancaria = useCallback(
+    (id: number, p: Partial<ContaBancaria>) =>
+      runMutation(() => db.contas_bancarias.update(supabase!, id, p), row => setContasBancarias(prev => prev.map(c => (c.id === id ? row : c)))),
+    [runMutation]
+  );
+  const deleteContaBancaria = useCallback(
     (id: number) =>
-      runMutation(() => (db.movimentos_tesouraria.delete(supabase!, id) as Promise<void>), () => setMovimentosTesouraria(prev => prev.filter(m => m.id !== id))),
+      runMutation(() => (db.contas_bancarias.delete(supabase!, id) as Promise<void>), () => setContasBancarias(prev => prev.filter(c => c.id !== id))),
     [runMutation]
   );
 
@@ -804,6 +925,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setPendencias,
       movimentosTesouraria: filtered.movimentosTesouraria,
       setMovimentosTesouraria,
+      bancos,
+      setBancos,
+      contasBancarias: filtered.contasBancarias,
+      setContasBancarias,
       relatoriosPlaneamento: filtered.relatoriosPlaneamento,
       setRelatoriosPlaneamento,
       noticias: filtered.noticias,
@@ -868,6 +993,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addMovimentoTesouraria,
       updateMovimentoTesouraria,
       deleteMovimentoTesouraria,
+      addBanco,
+      updateBanco,
+      deleteBanco,
+      addContaBancaria,
+      updateContaBancaria,
+      deleteContaBancaria,
       addCorrespondencia,
       updateCorrespondencia,
       deleteCorrespondencia,
@@ -893,6 +1024,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       refetch,
       departamentos,
       empresas,
+      bancos,
       filtered,
       colaboradores,
       reunioes,
@@ -954,6 +1086,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addMovimentoTesouraria,
       updateMovimentoTesouraria,
       deleteMovimentoTesouraria,
+      addBanco,
+      updateBanco,
+      deleteBanco,
+      addContaBancaria,
+      updateContaBancaria,
+      deleteContaBancaria,
       addCorrespondencia,
       updateCorrespondencia,
       deleteCorrespondencia,
