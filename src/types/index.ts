@@ -448,6 +448,10 @@ export interface GestaoDocumentoPasta {
   parentId: number | null;
   nome: string;
   ordem: number;
+  /** Vazio = sem restrição extra por módulo na pasta. */
+  modulosAcesso: string[];
+  /** Vazio = qualquer sector. */
+  sectoresAcesso: string[];
   createdAt: string;
 }
 
@@ -475,7 +479,7 @@ export interface GestaoDocumentoAuditoria {
   id: number;
   arquivoId: number;
   profileId: number | null;
-  accao: 'upload' | 'view' | 'download' | 'delete';
+  accao: 'upload' | 'view' | 'download' | 'delete' | 'move';
   detalhe: Record<string, unknown>;
   createdAt: string;
 }

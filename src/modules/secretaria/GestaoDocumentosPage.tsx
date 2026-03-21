@@ -49,6 +49,8 @@ import {
   List,
   SlidersHorizontal,
   MoreVertical,
+  Pencil,
+  Move,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pt } from 'date-fns/locale';
@@ -87,6 +89,8 @@ function mapPasta(r: Record<string, unknown>): GestaoDocumentoPasta {
     parentId: (r.parent_id as number | null) ?? null,
     nome: r.nome as string,
     ordem: (r.ordem as number) ?? 0,
+    modulosAcesso: (r.modulos_acesso as string[]) ?? [],
+    sectoresAcesso: (r.sectores_acesso as string[]) ?? [],
     createdAt: r.created_at as string,
   };
 }
@@ -121,6 +125,17 @@ function mapAudit(r: Record<string, unknown>): GestaoDocumentoAuditoria {
     detalhe: (r.detalhe as Record<string, unknown>) ?? {},
     createdAt: r.created_at as string,
   };
+}
+
+function labelAccaoGestao(accao: string): string {
+  const map: Record<string, string> = {
+    upload: 'Carregamento',
+    view: 'Visualização',
+    download: 'Descarga',
+    delete: 'Eliminação',
+    move: 'Movido',
+  };
+  return map[accao] ?? accao;
 }
 
 function extensaoDeNome(nome: string): string {
@@ -279,8 +294,22 @@ export default function GestaoDocumentosPage() {
 
   const [novaPastaNome, setNovaPastaNome] = useState('');
   const [novaPastaParentId, setNovaPastaParentId] = useState<number | null>(null);
+  const [novaPastaModulos, setNovaPastaModulos] = useState<string[]>([]);
+  const [novaPastaSectores, setNovaPastaSectores] = useState<string[]>([]);
   const [deletingPasta, setDeletingPasta] = useState(false);
+
+  const [editPastaOpen, setEditPastaOpen] = useState(false);
+  const [editPastaId, setEditPastaId] = useState<number | null>(null);
+  const [editPastaNome, setEditPastaNome] = useState('');
+  const [editPastaModulos, setEditPastaModulos] = useState<string[]>([]);
+  const [editPastaSectores, setEditPastaSectores] = useState<string[]>([]);
+  const [savingPastaEdit, setSavingPastaEdit] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  const [moverOpen, setMoverOpen] = useState(false);
+  const [moverArquivo, setMoverArquivo] = useState<GestaoDocumentoArquivo | null>(null);
+  const [moverDestinoPastaId, setMoverDestinoPastaId] = useState<number | null>(null);
+  const [savingMover, setSavingMover] = useState(false);
 
   const tree = useMemo(() => buildTree(pastas), [pastas]);
 
@@ -398,14 +427,19 @@ export default function GestaoDocumentosPage() {
     return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [arquivos, selectedPastaId, qTitulo, filtroTipo, filtroModulo, filtroSector, dataDe, dataAte]);
 
-  const logAudit = async (arquivoId: number, accao: GestaoDocumentoAuditoria['accao'], detalhe: Record<string, unknown> = {}) => {
-    if (!supabase || !user?.id) return;
-    await supabase.from('gestao_documentos_auditoria').insert({
+  const logAudit = async (
+    arquivoId: number,
+    accao: GestaoDocumentoAuditoria['accao'],
+    detalhe: Record<string, unknown> = {},
+  ) => {
+    if (!supabase || !user?.id) return null;
+    const { error } = await supabase.from('gestao_documentos_auditoria').insert({
       arquivo_id: arquivoId,
       profile_id: user.id,
       accao,
       detalhe,
     });
+    return error;
   };
 
   const publicUrl = (path: string) => {
@@ -465,6 +499,72 @@ export default function GestaoDocumentosPage() {
       void loadAll();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao eliminar');
+    }
+  };
+
+  const openMover = (a: GestaoDocumentoArquivo) => {
+    setMoverArquivo(a);
+    const alt = pastas.find(p => p.id !== a.pastaId);
+    setMoverDestinoPastaId(alt?.id ?? null);
+    setMoverOpen(true);
+  };
+
+  const executarMover = async () => {
+    if (!supabase || !moverArquivo || moverDestinoPastaId == null || empresaIdNum == null) {
+      toast.error('Seleccione a pasta de destino.');
+      return;
+    }
+    if (moverDestinoPastaId === moverArquivo.pastaId) {
+      toast.error('Escolha uma pasta diferente da actual.');
+      return;
+    }
+    const destPasta = pastas.find(p => p.id === moverDestinoPastaId);
+    if (!destPasta || destPasta.empresaId !== moverArquivo.empresaId) {
+      toast.error('Pasta de destino inválida.');
+      return;
+    }
+    setSavingMover(true);
+    try {
+      const fromPath = pastaPathById.get(moverArquivo.pastaId) ?? '';
+      const toPath = pastaPathById.get(moverDestinoPastaId) ?? '';
+      const { data, error } = await supabase
+        .from('gestao_documentos_arquivos')
+        .update({ pasta_id: moverDestinoPastaId, updated_at: new Date().toISOString() })
+        .eq('id', moverArquivo.id)
+        .eq('empresa_id', empresaIdNum)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (data == null) {
+        toast.error(
+          'Não foi possível mover (0 linhas). Confirme permissões de gestão documental e políticas RLS.',
+        );
+        return;
+      }
+      const auditErr = await logAudit(moverArquivo.id, 'move', {
+        de_pasta_id: moverArquivo.pastaId,
+        de_pasta_caminho: fromPath,
+        para_pasta_id: moverDestinoPastaId,
+        para_pasta_caminho: toPath,
+        titulo: moverArquivo.titulo,
+      });
+      if (auditErr) {
+        console.warn(auditErr);
+        toast.success('Documento movido.', {
+          description:
+            'O registo de auditoria não foi gravado. Execute a migração 20260320000024_gestao_documentos_auditoria_accao_move.sql no Supabase (acção "move").',
+          duration: 12_000,
+        });
+      } else {
+        toast.success('Documento movido.');
+      }
+      setMoverOpen(false);
+      setMoverArquivo(null);
+      void loadAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao mover o documento');
+    } finally {
+      setSavingMover(false);
     }
   };
 
@@ -545,11 +645,15 @@ export default function GestaoDocumentosPage() {
         parent_id: novaPastaParentId,
         nome: novaPastaNome.trim(),
         ordem: 99,
+        modulos_acesso: novaPastaModulos,
+        sectores_acesso: novaPastaSectores,
       });
       if (error) throw error;
       toast.success('Pasta criada.');
       setNovaPastaOpen(false);
       setNovaPastaNome('');
+      setNovaPastaModulos([]);
+      setNovaPastaSectores([]);
       void loadAll();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao criar pasta');
@@ -611,6 +715,118 @@ export default function GestaoDocumentosPage() {
     setFormSectores(prev => (prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]));
   };
 
+  const toggleNovaPastaModulo = (v: string) => {
+    setNovaPastaModulos(prev => (prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]));
+  };
+  const toggleNovaPastaSector = (v: string) => {
+    setNovaPastaSectores(prev => (prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]));
+  };
+  const toggleEditPastaModulo = (v: string) => {
+    setEditPastaModulos(prev => (prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]));
+  };
+  const toggleEditPastaSector = (v: string) => {
+    setEditPastaSectores(prev => (prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]));
+  };
+
+  const openEditPasta = (p: GestaoDocumentoPasta) => {
+    setEditPastaId(p.id);
+    setEditPastaNome(p.nome);
+    setEditPastaModulos([...p.modulosAcesso]);
+    setEditPastaSectores([...p.sectoresAcesso]);
+    setEditPastaOpen(true);
+  };
+
+  const isGestaoPastasPermColumnsMissing = (msg: string) =>
+    /modulos_acesso|sectores_acesso|column.*does not exist|Could not find the/i.test(msg);
+
+  const salvarEdicaoPasta = async () => {
+    if (!supabase || editPastaId == null || !editPastaNome.trim()) return;
+    setSavingPastaEdit(true);
+    try {
+      const nomeTrim = editPastaNome.trim();
+      const payloadFull = {
+        nome: nomeTrim,
+        modulos_acesso: editPastaModulos,
+        sectores_acesso: editPastaSectores,
+      };
+      let { data, error } = await supabase
+        .from('gestao_documentos_pastas')
+        .update(payloadFull)
+        .eq('id', editPastaId)
+        .select('id')
+        .maybeSingle();
+
+      // Sem migração 22: colunas inexistentes — tentar guardar só o nome para o Admin não ficar bloqueado.
+      if (error) {
+        const msg =
+          typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as { message?: string }).message)
+            : 'Erro desconhecido';
+        if (isGestaoPastasPermColumnsMissing(msg)) {
+          const retry = await supabase
+            .from('gestao_documentos_pastas')
+            .update({ nome: nomeTrim })
+            .eq('id', editPastaId)
+            .select('id')
+            .maybeSingle();
+          data = retry.data;
+          error = retry.error;
+          if (!error && data != null) {
+            toast.success('Nome da pasta actualizado.', {
+              description:
+                'As permissões por módulo/sector não foram gravadas: execute no Supabase o ficheiro supabase/migrations/20260320000022_gestao_documentos_pastas_permissoes.sql (SQL Editor ou supabase db push).',
+              duration: 12_000,
+            });
+            setEditPastaOpen(false);
+            setEditPastaId(null);
+            void loadAll();
+            return;
+          }
+        }
+      }
+
+      if (error) {
+        const msg =
+          typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as { message?: string }).message)
+            : 'Erro desconhecido';
+        const hint =
+          typeof error === 'object' && error !== null && 'hint' in error && (error as { hint?: string }).hint
+            ? ` ${(error as { hint: string }).hint}`
+            : '';
+        const details =
+          typeof error === 'object' && error !== null && 'details' in error && (error as { details?: string }).details
+            ? ` (${(error as { details: string }).details})`
+            : '';
+        if (isGestaoPastasPermColumnsMissing(msg)) {
+          toast.error(
+            'Aplique a migração de permissões nas pastas: ficheiro 20260320000022_gestao_documentos_pastas_permissoes.sql (colunas modulos_acesso / sectores_acesso). SQL Editor ou: supabase db push.',
+            { duration: 14_000 },
+          );
+        } else if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('23505')) {
+          toast.error('Já existe uma pasta com este nome no mesmo nível. Escolha outro nome.');
+        } else {
+          toast.error(`${msg}${details}${hint}`);
+        }
+        return;
+      }
+      if (data == null) {
+        toast.error(
+          'Não foi possível guardar (0 linhas actualizadas). Confirme que é Admin/PCA na mesma empresa da pasta e que as políticas RLS permitem UPDATE.',
+        );
+        return;
+      }
+      toast.success('Pasta actualizada.');
+      setEditPastaOpen(false);
+      setEditPastaId(null);
+      void loadAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar a pasta');
+    } finally {
+      setSavingPastaEdit(false);
+    }
+  };
+
   const openUploadDialog = () => {
     setFormPastaId(selectedPastaId ?? pastas[0]?.id ?? null);
     setFormTitulo('');
@@ -641,8 +857,12 @@ export default function GestaoDocumentosPage() {
 
   const manage = canManageFolders(user.perfil, user.empresaId);
   const uploadOk = canUpload(user.perfil, user.empresaId);
+  /** Quem vê documentos nesta empresa pode mover entre pastas (RLS: migração `20260320000025_gestao_arquivos_update_leitores_mover.sql`). */
+  const canMoverArquivos = empresaIdNum != null;
   /** Quem pode criar pastas (Admin / PCA / Secretaria) pode também eliminá-las — coerente com RLS `gestao_documentos_pode_gerir`. */
   const canEliminarPastas = manage;
+  /** Editar nome e permissões da pasta (RLS: update já permitido a quem gere pastas; UI só Admin). */
+  const canEditPastaAdmin = user.perfil === 'Admin';
 
   const limparFiltros = () => {
     setQTitulo('');
@@ -806,12 +1026,28 @@ export default function GestaoDocumentosPage() {
                   className="h-8 text-xs font-normal"
                   onClick={() => {
                     setNovaPastaParentId(selectedPastaId);
+                    setNovaPastaModulos([]);
+                    setNovaPastaSectores([]);
                     setNovaPastaOpen(true);
                   }}
                 >
                   <Folder className="mr-1.5 h-3.5 w-3.5" />
                   Nova pasta
                 </Button>
+                {canEditPastaAdmin && selectedPastaId != null ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs font-normal"
+                    onClick={() => {
+                      const p = pastas.find(x => x.id === selectedPastaId);
+                      if (p) openEditPasta(p);
+                    }}
+                  >
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                    Editar pasta
+                  </Button>
+                ) : null}
                 {canEliminarPastas && selectedPastaId != null ? (
                   <Button
                     variant="outline"
@@ -854,6 +1090,21 @@ export default function GestaoDocumentosPage() {
                         <Folder className="mb-1.5 h-8 w-8 text-muted-foreground" />
                         <span className="line-clamp-2 text-xs leading-tight text-foreground">{folder.nome}</span>
                       </button>
+                      {canEditPastaAdmin ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute left-0 top-0 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                          title="Editar pasta"
+                          onClick={e => {
+                            e.stopPropagation();
+                            openEditPasta(folder);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      ) : null}
                       {canEliminarPastas ? (
                         <Button
                           type="button"
@@ -937,9 +1188,15 @@ export default function GestaoDocumentosPage() {
                               <History className="mr-2 h-3.5 w-3.5" />
                               Auditoria
                             </DropdownMenuItem>
+                            {canMoverArquivos ? (
+                              <DropdownMenuItem onClick={() => openMover(a)}>
+                                <Move className="mr-2 h-3.5 w-3.5" />
+                                Mover para…
+                              </DropdownMenuItem>
+                            ) : null}
                             {manage ? (
                               <>
-                                <DropdownMenuSeparator />
+                                {canMoverArquivos ? <DropdownMenuSeparator /> : null}
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => void eliminarArquivo(a)}
@@ -1006,9 +1263,15 @@ export default function GestaoDocumentosPage() {
                                 <History className="mr-2 h-3.5 w-3.5" />
                                 Auditoria
                               </DropdownMenuItem>
+                              {canMoverArquivos ? (
+                                <DropdownMenuItem onClick={() => openMover(a)}>
+                                  <Move className="mr-2 h-3.5 w-3.5" />
+                                  Mover para…
+                                </DropdownMenuItem>
+                              ) : null}
                               {manage ? (
                                 <>
-                                  <DropdownMenuSeparator />
+                                  {canMoverArquivos ? <DropdownMenuSeparator /> : null}
                                   <DropdownMenuItem
                                     className="text-destructive focus:text-destructive"
                                     onClick={() => void eliminarArquivo(a)}
@@ -1132,11 +1395,20 @@ export default function GestaoDocumentosPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={novaPastaOpen} onOpenChange={setNovaPastaOpen}>
-        <DialogContent>
+      <Dialog
+        open={novaPastaOpen}
+        onOpenChange={o => {
+          setNovaPastaOpen(o);
+          if (!o) {
+            setNovaPastaModulos([]);
+            setNovaPastaSectores([]);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Nova pasta</DialogTitle>
-            <DialogDescription>Crie uma subpasta ou pasta raiz (sem pai seleccionado).</DialogDescription>
+            <DialogDescription>Subpasta ou raiz. Permissões vazias = visível a quem já acede ao tenant.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -1162,12 +1434,168 @@ export default function GestaoDocumentosPage() {
               <Label>Nome da pasta</Label>
               <Input value={novaPastaNome} onChange={e => setNovaPastaNome(e.target.value)} placeholder="Ex.: Orçamentos" />
             </div>
+            <div className="space-y-2">
+              <Label>Módulos com acesso à pasta</Label>
+              <p className="text-xs text-muted-foreground">Vazio = sem filtro extra por módulo nesta pasta.</p>
+              <div className="max-h-32 space-y-2 overflow-y-auto rounded-md border p-2">
+                {MODULO_OPTIONS.map(m => (
+                  <label key={m.value} className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={novaPastaModulos.includes(m.value)} onCheckedChange={() => toggleNovaPastaModulo(m.value)} />
+                    {m.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Sectores (departamento)</Label>
+              <p className="text-xs text-muted-foreground">Vazio = todos os sectores.</p>
+              <div className="max-h-28 space-y-2 overflow-y-auto rounded-md border p-2">
+                {nomesDepartamentos.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">Sem departamentos configurados.</span>
+                ) : (
+                  nomesDepartamentos.map(n => (
+                    <label key={n} className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={novaPastaSectores.includes(n)} onCheckedChange={() => toggleNovaPastaSector(n)} />
+                      {n}
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNovaPastaOpen(false)}>
               Cancelar
             </Button>
             <Button onClick={() => void criarPasta()}>Criar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editPastaOpen} onOpenChange={setEditPastaOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar pasta</DialogTitle>
+            <DialogDescription>
+              Nome e permissões aplicam-se a esta pasta e restringem a visibilidade dos ficheiros nela (além das permissões
+              de cada documento).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input value={editPastaNome} onChange={e => setEditPastaNome(e.target.value)} placeholder="Nome da pasta" />
+            </div>
+            <div className="space-y-2">
+              <Label>Módulos com acesso</Label>
+              <p className="text-xs text-muted-foreground">Vazio = sem filtro extra por módulo.</p>
+              <div className="max-h-32 space-y-2 overflow-y-auto rounded-md border p-2">
+                {MODULO_OPTIONS.map(m => (
+                  <label key={m.value} className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={editPastaModulos.includes(m.value)} onCheckedChange={() => toggleEditPastaModulo(m.value)} />
+                    {m.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Sectores</Label>
+              <p className="text-xs text-muted-foreground">Vazio = todos.</p>
+              <div className="max-h-28 space-y-2 overflow-y-auto rounded-md border p-2">
+                {nomesDepartamentos.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">Sem departamentos configurados.</span>
+                ) : (
+                  nomesDepartamentos.map(n => (
+                    <label key={n} className="flex items-center gap-2 text-sm">
+                      <Checkbox checked={editPastaSectores.includes(n)} onCheckedChange={() => toggleEditPastaSector(n)} />
+                      {n}
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPastaOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void salvarEdicaoPasta()} disabled={savingPastaEdit || !editPastaNome.trim()}>
+              {savingPastaEdit ? 'A guardar…' : 'Guardar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={moverOpen}
+        onOpenChange={o => {
+          setMoverOpen(o);
+          if (!o) {
+            setMoverArquivo(null);
+            setMoverDestinoPastaId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mover documento</DialogTitle>
+            <DialogDescription>
+              {moverArquivo ? (
+                <>
+                  <span className="font-medium text-foreground">{moverArquivo.titulo}</span>
+                  <span className="block mt-1 text-xs">
+                    Origem: {pastaPathById.get(moverArquivo.pastaId) ?? '—'}
+                  </span>
+                </>
+              ) : (
+                'Seleccione a pasta de destino na mesma empresa.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-2">
+              <Label>Pasta de destino</Label>
+              {pastas.filter(p => moverArquivo == null || p.id !== moverArquivo.pastaId).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Crie outra pasta para poder mover o documento.
+                </p>
+              ) : (
+                <Select
+                  value={moverDestinoPastaId != null ? String(moverDestinoPastaId) : ''}
+                  onValueChange={v => setMoverDestinoPastaId(Number(v))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar pasta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pastas
+                      .filter(p => moverArquivo == null || p.id !== moverArquivo.pastaId)
+                      .map(p => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {pastaPathById.get(p.id) ?? p.nome}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoverOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void executarMover()}
+              disabled={
+                savingMover ||
+                moverArquivo == null ||
+                moverDestinoPastaId == null ||
+                moverDestinoPastaId === moverArquivo.pastaId ||
+                pastas.filter(p => moverArquivo == null || p.id !== moverArquivo.pastaId).length === 0
+              }
+            >
+              {savingMover ? 'A mover…' : 'Mover'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1186,11 +1614,18 @@ export default function GestaoDocumentosPage() {
                 auditRows.map(r => (
                   <li key={r.id} className="rounded-md border border-border/60 px-3 py-2">
                     <div className="flex justify-between gap-2">
-                      <Badge variant="outline">{r.accao}</Badge>
+                      <Badge variant="outline">{labelAccaoGestao(r.accao)}</Badge>
                       <span className="text-xs text-muted-foreground">
                         {format(new Date(r.createdAt), "d MMM yyyy HH:mm:ss", { locale: pt })}
                       </span>
                     </div>
+                    {r.accao === 'move' &&
+                    typeof r.detalhe.para_pasta_caminho === 'string' &&
+                    r.detalhe.para_pasta_caminho ? (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        De: {String(r.detalhe.de_pasta_caminho ?? '—')} → Para: {r.detalhe.para_pasta_caminho}
+                      </p>
+                    ) : null}
                     {r.profileId != null ? (
                       <p className="text-xs text-muted-foreground mt-1">Perfil #{r.profileId}</p>
                     ) : null}
