@@ -5,12 +5,17 @@ import { useNotifications } from '@/context/NotificationContext';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getCurrentDatePT, formatKz, formatDate, diasRestantes, getGreeting } from '@/utils/formatters';
-import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Download, Star, Heart, MessageCircle, Cake } from 'lucide-react';
+import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Download, Star, Heart, MessageCircle, MapPin, Clock, Cake } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar as UiCalendar } from '@/components/ui/calendar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DayContent, type DayContentProps } from 'react-day-picker';
+import { format } from 'date-fns';
+import { pt } from 'date-fns/locale';
+import type { Evento } from '@/types';
 import { hasModuleAccess } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -24,6 +29,27 @@ type BirthdayPerson = {
   avatar?: string | null;
 };
 
+/** Mês/dia do aniversário no calendário local (alinhado com o que o utilizador considera «hoje»). */
+function isBirthdayAnniversaryToday(birthDateIso: string): boolean {
+  const part = String(birthDateIso).slice(0, 10);
+  const m = part.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return false;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const now = new Date();
+  return month === now.getMonth() + 1 && day === now.getDate();
+}
+
+function filterBirthdaysInLocalMonth(all: BirthdayPerson[], ref: Date): BirthdayPerson[] {
+  const mm = ref.getMonth() + 1;
+  return all.filter(p => {
+    const part = String(p.birth_date).slice(0, 10);
+    const m = part.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return false;
+    return Number(m[2]) === mm;
+  });
+}
+
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
 export default function Dashboard() {
@@ -35,9 +61,7 @@ export default function Dashboard() {
   const [docQuery, setDocQuery] = useState('');
   const [likesCountByNewsId, setLikesCountByNewsId] = useState<Record<number, number>>({});
   const [commentsCountByNewsId, setCommentsCountByNewsId] = useState<Record<number, number>>({});
-
-  if (!user) return null;
-
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [birthdaysToday, setBirthdaysToday] = useState<BirthdayPerson[]>([]);
   const [birthdaysMonth, setBirthdaysMonth] = useState<BirthdayPerson[]>([]);
   const [birthdaysLoading, setBirthdaysLoading] = useState(false);
@@ -63,10 +87,21 @@ export default function Dashboard() {
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         } as any);
         if (error) throw error;
-        const parsed = invokeData as { today_birthdays?: BirthdayPerson[]; month_birthdays?: BirthdayPerson[] };
+        const parsed = invokeData as {
+          today_birthdays?: BirthdayPerson[];
+          month_birthdays?: BirthdayPerson[];
+          all_birthdays?: BirthdayPerson[];
+        };
         if (!cancelled) {
-          setBirthdaysToday(parsed.today_birthdays ?? []);
-          setBirthdaysMonth(parsed.month_birthdays ?? []);
+          const all = parsed.all_birthdays;
+          if (Array.isArray(all)) {
+            const todayLocal = all.filter(p => isBirthdayAnniversaryToday(p.birth_date));
+            setBirthdaysToday(todayLocal);
+            setBirthdaysMonth(filterBirthdaysInLocalMonth(all, new Date()));
+          } else {
+            setBirthdaysToday(parsed.today_birthdays ?? []);
+            setBirthdaysMonth(parsed.month_birthdays ?? []);
+          }
         }
       } catch (e) {
         if (!cancelled) setBirthdaysError(e instanceof Error ? e.message : 'Erro ao carregar aniversários');
@@ -157,16 +192,27 @@ export default function Dashboard() {
   const scheduledMeetings = reunioes.filter(r => r.status === 'Agendada').length;
   const activeCases = processos.filter(p => p.status === 'Em curso').length;
   const criticalDeadlines = prazos.filter(p => p.status === 'Vencido' || (p.prioridade === 'Crítica' && p.status !== 'Concluído')).length;
-  const nowMs = Date.now();
-  const nextEvents = [...eventos]
-    .filter(e => new Date(e.dataInicio).getTime() >= nowMs)
-    .sort((a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime())
-    .slice(0, 2);
+
+  /** Eventos agrupados por dia (YYYY-MM-DD) para tooltips e lista. */
+  const eventsByDay = useMemo(() => {
+    const m = new Map<string, Evento[]>();
+    for (const e of eventos) {
+      const dt = new Date(e.dataInicio);
+      if (Number.isNaN(dt.getTime())) continue;
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      const list = m.get(key) ?? [];
+      list.push(e);
+      m.set(key, list);
+    }
+    for (const [, list] of m) {
+      list.sort((a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime());
+    }
+    return m;
+  }, [eventos]);
 
   const eventCalendarDates = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
     const start = new Date(year, month, 1).getTime();
     const end = new Date(year, month + 1, 0, 23, 59, 59).getTime();
     const dates: Date[] = [];
@@ -176,22 +222,99 @@ export default function Dashboard() {
       const d = new Date(e.dataInicio);
       dates.push(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
     }
-    // Dedup por timestamp do dia
     const unique = new Map<number, Date>();
     for (const d of dates) unique.set(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), d);
     return Array.from(unique.values());
-  }, [eventos]);
+  }, [eventos, calendarMonth]);
+
+  const viewingCurrentMonthYear =
+    calendarMonth.getFullYear() === new Date().getFullYear() && calendarMonth.getMonth() === new Date().getMonth();
 
   const birthdayCalendarDates = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
+    if (!viewingCurrentMonthYear) return [];
+    const year = calendarMonth.getFullYear();
     return birthdaysMonth.map(p => {
       const bd = new Date(p.birth_date);
       const m = bd.getUTCMonth();
       const day = bd.getUTCDate();
       return new Date(year, m, day);
     });
-  }, [birthdaysMonth]);
+  }, [birthdaysMonth, calendarMonth, viewingCurrentMonthYear]);
+
+  /** Eventos do mês visível no calendário (lista à direita). */
+  const eventsInCalendarMonth = useMemo(() => {
+    const y = calendarMonth.getFullYear();
+    const m = calendarMonth.getMonth();
+    const start = new Date(y, m, 1).getTime();
+    const end = new Date(y, m + 1, 0, 23, 59, 59).getTime();
+    return [...eventos]
+      .filter(e => {
+        const t = new Date(e.dataInicio).getTime();
+        return t >= start && t <= end;
+      })
+      .sort((a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime());
+  }, [eventos, calendarMonth]);
+
+  const renderDayContentWithEventTooltips = useMemo(() => {
+    return function DashboardDayContent(props: DayContentProps) {
+      const y = props.date.getFullYear();
+      const mo = String(props.date.getMonth() + 1).padStart(2, '0');
+      const da = String(props.date.getDate()).padStart(2, '0');
+      const key = `${y}-${mo}-${da}`;
+      const dayEvents = eventsByDay.get(key) ?? [];
+      if (dayEvents.length === 0) {
+        return <DayContent {...props} />;
+      }
+      return (
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <span className="relative inline-flex h-full w-full items-center justify-center">
+              <DayContent {...props} />
+              <span
+                className="pointer-events-none absolute bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-[#a57e26] ring-2 ring-background"
+                aria-hidden
+              />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="center" className="max-w-[min(280px,calc(100vw-2rem))] p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              {dayEvents.length === 1 ? 'Evento' : `${dayEvents.length} eventos`}
+            </p>
+            <ul className="space-y-2">
+              {dayEvents.map(ev => (
+                <li key={ev.id} className="text-xs border-t border-border/60 pt-2 first:border-0 first:pt-0">
+                  <p className="font-semibold text-foreground leading-snug">{ev.titulo}</p>
+                  <p className="text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    {new Date(ev.dataInicio).toLocaleString('pt-PT', {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                  {ev.local ? (
+                    <p className="text-muted-foreground mt-0.5 flex items-start gap-1">
+                      <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span className="line-clamp-2">{ev.local}</span>
+                    </p>
+                  ) : null}
+                  <span
+                    className={cn(
+                      'inline-block mt-1 text-[10px] px-1.5 py-0 rounded border',
+                      ev.isInterno ? 'border-primary/40 text-primary' : 'border-border text-muted-foreground',
+                    )}
+                  >
+                    {ev.isInterno ? 'Interno' : 'Externo'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </TooltipContent>
+        </Tooltip>
+      );
+    };
+  }, [eventsByDay]);
 
   const docsFiltered = documentosOficiais
     .filter(d => {
@@ -307,6 +430,8 @@ export default function Dashboard() {
     };
   });
 
+  if (!user) return null;
+
   const quickLinks = [
     { label: 'Requisições', path: '/financas/requisicoes', module: 'financas' },
     { label: 'Declarações', path: '/capital-humano/declaracoes', module: 'capital-humano' },
@@ -333,6 +458,60 @@ export default function Dashboard() {
           <p className="text-white/80 text-xs mt-2 capitalize">{getCurrentDatePT()}</p>
         </div>
       </div>
+
+      {/* Destaque: aniversariantes do dia (visível logo abaixo do hero) */}
+      {birthdaysLoading ? (
+        <div className="rounded-2xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          A carregar aniversariantes…
+        </div>
+      ) : birthdaysToday.length > 0 ? (
+        <div
+          className="rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50 to-amber-100/80 dark:from-amber-950/50 dark:to-amber-900/30 dark:border-amber-800/60 px-4 py-4 sm:px-6"
+          role="region"
+          aria-label="Aniversariantes do dia"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-200/80 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100">
+                <Cake className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Aniversariantes de hoje</p>
+                <p className="text-xs text-muted-foreground">
+                  {birthdaysToday.length === 1 ? '1 pessoa' : `${birthdaysToday.length} pessoas`} · Parabéns!
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 min-w-0 flex-1">
+              {birthdaysToday.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => navigate('/comunicacao-interna/aniversarios')}
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-300/60 bg-background/70 dark:border-amber-700/50 px-2.5 py-1.5 text-left hover:bg-background transition-colors"
+                >
+                  <Avatar className="h-8 w-8 ring-1 ring-border/50">
+                    {looksLikeUrl(p.avatar) ? <AvatarImage src={p.avatar ?? undefined} /> : null}
+                    <AvatarFallback className="text-xs">
+                      {(p.name || '?')
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map(w => w[0]?.toUpperCase())
+                        .join('')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium truncate max-w-[140px]">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : birthdaysError ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {birthdaysError}
+        </div>
+      ) : null}
 
       {/* KPI Grid (corporativo) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -478,24 +657,91 @@ export default function Dashboard() {
           </div>
 
           <div className="bg-card rounded-xl border border-border/80 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Calendário</h2>
-                <p className="text-sm text-muted-foreground mt-1">Visão mensal (informativa).</p>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <LucideCalendar className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Calendário</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Passe o rato sobre os dias com ponto dourado para ver os eventos. À direita, a lista do mês seleccionado.
+                  </p>
+                </div>
               </div>
-              <LucideCalendar className="h-5 w-5 text-muted-foreground" />
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => navigate('/comunicacao-interna/eventos')}>
+                Ver todos os eventos
+              </Button>
             </div>
-            <div className="mt-3 overflow-hidden rounded-xl border border-border/80">
-              <UiCalendar
-                modifiers={{
-                  eventos: eventCalendarDates,
-                  aniversarios: birthdayCalendarDates,
-                }}
-                modifiersClassNames={{
-                  eventos: 'bg-primary/10 text-primary',
-                  aniversarios: 'bg-primary/20 text-primary',
-                }}
-              />
+
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] gap-4 items-start">
+              <TooltipProvider delayDuration={250}>
+                <div className="overflow-hidden rounded-xl border border-border/80">
+                  <UiCalendar
+                    month={calendarMonth}
+                    onMonthChange={m => m && setCalendarMonth(m)}
+                    locale={pt}
+                    modifiers={{
+                      eventos: eventCalendarDates,
+                      aniversarios: birthdayCalendarDates,
+                    }}
+                    modifiersClassNames={{
+                      eventos: 'bg-primary/10 text-primary font-medium relative',
+                      aniversarios: 'bg-amber-100/80 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100',
+                    }}
+                    components={{
+                      DayContent: renderDayContentWithEventTooltips,
+                    }}
+                  />
+                </div>
+              </TooltipProvider>
+
+              <div className="rounded-xl border border-border/80 bg-muted/20 flex flex-col min-h-[260px] max-h-[360px] lg:max-h-[420px]">
+                <div className="px-3 py-2.5 border-b border-border/80 bg-card/80 rounded-t-xl">
+                  <h3 className="text-sm font-semibold text-foreground capitalize">
+                    Eventos em {format(calendarMonth, 'MMMM yyyy', { locale: pt })}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {eventsInCalendarMonth.length === 0
+                      ? 'Nenhum evento neste mês.'
+                      : `${eventsInCalendarMonth.length} evento(s) agendado(s)`}
+                  </p>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                  {eventsInCalendarMonth.map(ev => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      onClick={() => navigate(`/comunicacao-interna/eventos/${ev.id}`)}
+                      className="w-full text-left rounded-lg border border-border/60 bg-card px-3 py-2.5 hover:bg-muted/50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    >
+                      <p className="text-sm font-medium text-foreground line-clamp-2">{ev.titulo}</p>
+                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        {new Date(ev.dataInicio).toLocaleString('pt-PT', {
+                          weekday: 'short',
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                      {ev.local ? (
+                        <p className="text-xs text-muted-foreground mt-1 flex items-start gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span className="line-clamp-2">{ev.local}</span>
+                        </p>
+                      ) : null}
+                      <span
+                        className={cn(
+                          'inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded-md border',
+                          ev.isInterno ? 'border-primary/40 text-primary bg-primary/5' : 'border-border text-muted-foreground',
+                        )}
+                      >
+                        {ev.isInterno ? 'Interno' : 'Externo'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -514,7 +760,7 @@ export default function Dashboard() {
               {birthdaysLoading ? (
                 <p className="text-sm text-muted-foreground">Carregando...</p>
               ) : birthdaysToday.length > 0 ? (
-                birthdaysToday.slice(0, 4).map(p => (
+                birthdaysToday.map(p => (
                   <div key={p.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/30 px-3 py-2">
                     <Avatar className="h-10 w-10 ring-1 ring-border/50">
                       {looksLikeUrl(p.avatar) ? <AvatarImage src={p.avatar ?? undefined} /> : null}
@@ -539,34 +785,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-card rounded-xl border border-border/80 p-5">
-            <h2 className="text-base font-semibold text-foreground">Próximos Eventos</h2>
-            <p className="text-sm text-muted-foreground mt-1">Eventos corporativos agendados.</p>
-
-            <div className="divide-y divide-border/50 mt-4">
-              {nextEvents.map(e => (
-                <div key={`ev-comms-${e.id}`} className="py-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{e.titulo}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(e.dataInicio).toLocaleString('pt-PT')} — {e.local}
-                    </p>
-                  </div>
-                  <span className={cn('text-[11px] px-2 py-0.5 rounded-full border', e.isInterno ? 'border-primary/40 text-primary' : 'border-border/60 text-muted-foreground')}>
-                    {e.isInterno ? 'Interno' : 'Externo'}
-                  </span>
-                </div>
-              ))}
-              {nextEvents.length === 0 && (
-                <p className="py-3 text-sm text-muted-foreground">Sem eventos no momento.</p>
-              )}
-            </div>
-            <div className="pt-3">
-              <Button variant="outline" size="sm" onClick={() => navigate('/comunicacao-interna/eventos')}>
-                Ver todos
-              </Button>
-            </div>
-          </div>
         </section>
       </div>
 

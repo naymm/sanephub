@@ -14,7 +14,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, FileDown } from 'lucide-react';
+import { toast } from 'sonner';
+import { exportRelatorioFinanceiroPdf } from '@/utils/financasRelatorioPdf';
 
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
@@ -87,6 +89,30 @@ export default function RelatoriosPage() {
     exportCSV(headers, rows, `relatorio-requisicoes-${ano}-${mesInicio}-${mesFim}.csv`);
   };
 
+  const centroFiltroLabel =
+    centroRef === 'todos'
+      ? 'Todos'
+      : `${centroRef} — ${centrosCusto.find(c => c.codigo === centroRef)?.nome ?? ''}`;
+
+  const handleExportPDF = () => {
+    try {
+      exportRelatorioFinanceiroPdf({
+        ano: anoNum,
+        mesInicio: mesINum,
+        mesFim: mesFNum,
+        centroFiltroLabel,
+        requisicoes: filteredReqs,
+        totalGasto,
+        porStatus,
+        porCentroCusto,
+        porMes,
+      });
+      toast.success('PDF do relatório gerado com sucesso.');
+    } catch {
+      toast.error('Não foi possível gerar o PDF.');
+    }
+  };
+
   return (
     <div className="space-y-8">
       <h1 className="page-header">Relatórios Financeiros</h1>
@@ -133,9 +159,14 @@ export default function RelatoriosPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={handleExportCSV}>
-            <Download className="h-4 w-4 mr-2" /> Exportar CSV
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleExportCSV}>
+              <Download className="h-4 w-4 mr-2" /> Exportar CSV
+            </Button>
+            <Button variant="default" className="bg-[#a57e26] hover:bg-[#8f6d20] text-white" onClick={handleExportPDF}>
+              <FileDown className="h-4 w-4 mr-2" /> Exportar PDF
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -206,7 +237,14 @@ export default function RelatoriosPage() {
       <div className="table-container">
         <div className="px-5 py-4 border-b border-border/80 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Requisições no período</h3>
-          <Button variant="ghost" size="sm" onClick={handleExportCSV}><FileText className="h-4 w-4 mr-1" /> Exportar</Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={handleExportCSV}>
+              <FileText className="h-4 w-4 mr-1" /> CSV
+            </Button>
+            <Button variant="ghost" size="sm" className="text-[#a57e26]" onClick={handleExportPDF}>
+              <FileDown className="h-4 w-4 mr-1" /> PDF
+            </Button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

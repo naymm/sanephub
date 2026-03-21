@@ -596,6 +596,10 @@ export interface MovimentoTesouraria {
   /** Conta onde o movimento incide (actualiza saldo_actual via trigger) */
   contaBancariaId?: number;
   comprovativoAnexos?: string[];
+  /** Saída: URLs de proforma (PDF). Obrigatório anexar proforma ou factura final ao registar. */
+  proformaAnexos?: string[];
+  /** Saída: URLs de factura final (PDF). */
+  facturaFinalAnexos?: string[];
   requisicaoId?: number;
   registadoPor?: string;
   registadoEm: string;

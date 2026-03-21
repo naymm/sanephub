@@ -33,6 +33,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -44,7 +45,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Search, Plus, Pencil, Eye, Check, X, Send, Banknote, Paperclip, Trash2, ChevronsUpDown } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Check, X, Send, Banknote, Paperclip, Trash2, ChevronsUpDown, AlertCircle, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -132,6 +133,8 @@ export default function RequisicoesPage() {
   /** Conta de onde sai o valor ao processar pagamento (requisição Aprovada). */
   const [pagoContaBancariaId, setPagoContaBancariaId] = useState('');
   const [pagoSubmitting, setPagoSubmitting] = useState(false);
+  const [anexarFacturaReq, setAnexarFacturaReq] = useState<Requisicao | null>(null);
+  const [anexarFacturaReqSubmitting, setAnexarFacturaReqSubmitting] = useState(false);
 
   const getFirstTruthy = (arr?: string[]) => (arr ?? []).find(v => !!v) ?? null;
   const getLastTruthy = (arr?: string[]) => {
@@ -441,6 +444,42 @@ export default function RequisicoesPage() {
 
   const temFacturaFinal = (r: Requisicao) => (r.facturaFinalAnexos?.length ?? 0) >= 1;
 
+  /** Falta factura final mas já há proforma, pagamento ou comprovativo — alerta + acção rápida. */
+  const precisaAnexarFacturaFinalReq = (r: Requisicao) => {
+    if (temFacturaFinal(r)) return false;
+    return (
+      (r.proformaAnexos?.length ?? 0) > 0 ||
+      r.status === 'Pago' ||
+      r.comprovante ||
+      (r.comprovativoAnexos?.length ?? 0) > 0
+    );
+  };
+
+  const uploadFacturaFinalRequisicaoRapida = async (file: File, r: Requisicao) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Upload requer Supabase configurado.');
+      return;
+    }
+    setAnexarFacturaReqSubmitting(true);
+    try {
+      const ext = file.name.split('.').pop() || 'pdf';
+      const path = `requisicoes/facturas-finais/req-${r.id}-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('proformas').upload(path, file, { upsert: true });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar factura final');
+      const { data: pub } = supabase.storage.from('proformas').getPublicUrl(data.path);
+      await updateRequisicao(r.id, {
+        facturaFinalAnexos: [...(r.facturaFinalAnexos ?? []), pub.publicUrl],
+        factura: true,
+      });
+      toast.success('Factura final anexada.');
+      setAnexarFacturaReq(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível anexar a factura final.');
+    } finally {
+      setAnexarFacturaReqSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -503,7 +542,16 @@ export default function RequisicoesPage() {
           <tbody>
             {pagination.slice.map(r => (
               <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-5 font-mono text-xs">{r.num}</td>
+                <td className="py-3 px-5 font-mono text-xs">
+                  <div className="flex items-center gap-1.5">
+                    {precisaAnexarFacturaFinalReq(r) && (
+                      <span title="Anexe a factura final.">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-red-600" aria-hidden />
+                      </span>
+                    )}
+                    <span>{r.num}</span>
+                  </div>
+                </td>
                 <td className="py-3 px-5 font-medium">{r.fornecedor}</td>
                 <td className="py-3 px-5 text-muted-foreground max-w-48 truncate">{r.descricao}</td>
                 <td className="py-3 px-5 text-muted-foreground">{r.centroCusto}</td>
@@ -517,19 +565,23 @@ export default function RequisicoesPage() {
                         Ações
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="min-w-[240px]">
                       <DropdownMenuItem onSelect={() => openView(r)}>
+                        <Eye className="h-4 w-4 mr-2" />
                         Ver
                       </DropdownMenuItem>
                       {canAccessFinancas && (
                         <DropdownMenuItem onSelect={() => openEdit(r)}>
+                          <Pencil className="h-4 w-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
                       )}
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
                         disabled={!(r.status === 'Pendente' && canAccessFinancas)}
                         onSelect={() => aprovar(r)}
                       >
+                        <Check className="h-4 w-4 mr-2" />
                         Aceitar
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -539,10 +591,27 @@ export default function RequisicoesPage() {
                           setRejectOpen(true);
                         }}
                       >
+                        <X className="h-4 w-4 mr-2" />
                         Rejeitar
                       </DropdownMenuItem>
+                      {canAccessFinancas && r.status === 'Aprovado' && (
+                        <DropdownMenuItem
+                          onSelect={() => openPagoDialog(r)}
+                          disabled={(r.comprovativoAnexos?.length ?? 0) > 0}
+                        >
+                          <Banknote className="h-4 w-4 mr-2" />
+                          Fazer pagamento
+                        </DropdownMenuItem>
+                      )}
+                      {canAccessFinancas && precisaAnexarFacturaFinalReq(r) && (
+                        <DropdownMenuItem onSelect={() => setAnexarFacturaReq(r)}>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Anexar factura final
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        disabled={!canAccessFinancas || (getFirstTruthy(r.proformaAnexos) == null)}
+                        disabled={!canAccessFinancas || getFirstTruthy(r.proformaAnexos) == null}
                         onSelect={() => {
                           const candidate = getFirstTruthy(r.proformaAnexos);
                           if (!candidate) {
@@ -564,32 +633,19 @@ export default function RequisicoesPage() {
                           })();
                         }}
                       >
-                        Proforma
+                        Pré-visualizar: Proforma
                       </DropdownMenuItem>
-                      {canAccessFinancas && r.status === 'Aprovado' && (
-                        <DropdownMenuItem
-                          onSelect={() => openPagoDialog(r)}
-                          disabled={(r.comprovativoAnexos?.length ?? 0) > 0}
-                        >
-                          Fazer pagamento
-                        </DropdownMenuItem>
-                      )}
                       <DropdownMenuItem
-                        disabled={
-                          !canAccessFinancas ||
-                          (getFirstTruthy(r.comprovativoAnexos) == null && getFirstTruthy(r.facturaFinalAnexos) == null)
-                        }
+                        disabled={!canAccessFinancas || getFirstTruthy(r.comprovativoAnexos) == null}
                         onSelect={() => {
-                          const candidateComprov = getFirstTruthy(r.comprovativoAnexos);
-                          const candidateFacturaFinal = getFirstTruthy(r.facturaFinalAnexos);
-                          const candidate = candidateComprov ?? candidateFacturaFinal;
-                          const bucket = candidateComprov ? 'comprovativos' : 'proformas';
+                          const candidate = getFirstTruthy(r.comprovativoAnexos);
                           if (!candidate) {
                             toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
                             return;
                           }
                           void (async () => {
                             try {
+                              const bucket = inferBucketFromStoragePublicUrl(candidate);
                               const url = await resolveComprovativoPublicUrl(supabase!, bucket, candidate);
                               if (!url) {
                                 toast.error('Não foi possível resolver a pré-visualização do comprovativo.');
@@ -603,10 +659,10 @@ export default function RequisicoesPage() {
                           })();
                         }}
                       >
-                        Comprovativo
+                        Pré-visualizar: Comprovativo
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={getLastTruthy(r.facturaFinalAnexos) == null}
+                        disabled={!canAccessFinancas || getLastTruthy(r.facturaFinalAnexos) == null}
                         onSelect={() => {
                           const candidate = getLastTruthy(r.facturaFinalAnexos);
                           if (!candidate) {
@@ -628,7 +684,7 @@ export default function RequisicoesPage() {
                           })();
                         }}
                       >
-                        Factura Final
+                        Pré-visualizar: Factura final
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -1203,6 +1259,38 @@ export default function RequisicoesPage() {
                 {pagoSubmitting ? 'A processar…' : 'Processar pagamento'}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!anexarFacturaReq} onOpenChange={open => { if (!open) setAnexarFacturaReq(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Anexar factura final</DialogTitle>
+            <DialogDescription>
+              Requisição {anexarFacturaReq?.num}. O PDF fica no armazenamento (bucket proformas) e o alerta desaparece após anexar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Factura final (PDF)</Label>
+            <Input
+              type="file"
+              accept=".pdf,application/pdf"
+              disabled={anexarFacturaReqSubmitting}
+              className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file && anexarFacturaReq) {
+                  void uploadFacturaFinalRequisicaoRapida(file, anexarFacturaReq);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnexarFacturaReq(null)} disabled={anexarFacturaReqSubmitting}>
+              Cancelar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

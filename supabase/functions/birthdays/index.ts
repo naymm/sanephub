@@ -90,8 +90,9 @@ Deno.serve(async (req) => {
     const company_id = body?.company_id ?? parsedCompanyIdFromQuery;
     const now = body?.nowISO ? new Date(body.nowISO) : new Date();
 
-    const month = now.getUTCMonth() + 1; // 1-12
-    const day = now.getUTCDate(); // 1-31
+    // Calendário local (alinhado ao client que envia nowISO): só MM-DD importa; o ano em data_nascimento é ignorado.
+    const month = now.getMonth() + 1; // 1-12
+    const day = now.getDate(); // 1-31
 
     const isGroupAdmin = (perfil === 'Admin' || perfil === 'PCA') && empresaIdProfile == null;
 
@@ -104,26 +105,30 @@ Deno.serve(async (req) => {
       finalCompanyFilter = empresaIdProfile;
     }
 
-    // Query colaboradores
-    let q = supabase
-      .from('colaboradores')
-      .select('id, nome, data_nascimento, empresa_id')
-      .order('nome', { ascending: true });
+    const pEmpresaId = finalCompanyFilter === undefined ? null : finalCompanyFilter;
 
-    // A relação "profiles(avatar)" depende do relacionamento/foreign key.
-    // Como não temos o relacionamento tipado neste repo, caso falhe na prática,
-    // o código ainda funciona no formato SQL suportado pelo Supabase.
-    // (Se não houver FK, será necessário trocar por um join explícito.)
+    // Filtro no PostgreSQL: EXTRACT(month/day) em data_nascimento (tipo date) — compara só MM-DD.
+    const { data: rowsToday, error: errToday } = await supabase.rpc('colaboradores_aniversario_no_mes_dia', {
+      p_mes: month,
+      p_dia: day,
+      p_empresa_id: pEmpresaId,
+    });
+    if (errToday) throw errToday;
 
-    if (finalCompanyFilter != null) {
-      q = q.eq('empresa_id', finalCompanyFilter);
-    }
+    const { data: rowsMonth, error: errMonth } = await supabase.rpc('colaboradores_aniversario_no_mes', {
+      p_mes: month,
+      p_empresa_id: pEmpresaId,
+    });
+    if (errMonth) throw errMonth;
 
-    const { data: colaboradores } = await q;
+    const { data: rowsAll, error: errAll } = await supabase.rpc('colaboradores_com_data_nascimento', {
+      p_empresa_id: pEmpresaId,
+    });
+    if (errAll) throw errAll;
 
-    const rows = (colaboradores ?? []) as any[];
+    const rows = (rowsAll ?? []) as { id: number; nome: string; data_nascimento: string; empresa_id: number }[];
 
-    const collaboratorIds = rows.map(r => r.id).filter((x: any) => x != null);
+    const collaboratorIds = rows.map((r) => r.id).filter((x) => x != null);
     const { data: avatarsRows } = collaboratorIds.length
       ? await supabase
           .from('profiles')
@@ -137,32 +142,24 @@ Deno.serve(async (req) => {
       avatarByCollaboratorId.set(cid, (pr.avatar as string | null) ?? null);
     }
 
-    const monthBirthdays = [];
-    const todayBirthdays = [];
+    const toPayload = (c: { id: number; nome: string; data_nascimento: string; empresa_id: number }) => ({
+      id: c.id as number,
+      name: c.nome as string,
+      birth_date: c.data_nascimento as string,
+      company_id: c.empresa_id as number,
+      avatar: avatarByCollaboratorId.get(c.id) ?? null,
+    });
 
-    for (const c of rows) {
-      const d = new Date(c.data_nascimento);
-      const m = d.getUTCMonth() + 1;
-      const dd = d.getUTCDate();
-      const avatar = avatarByCollaboratorId.get(c.id) ?? null;
-      const birthDate = c.data_nascimento as string;
-
-      const payload = {
-        id: c.id as number,
-        name: c.nome as string,
-        birth_date: birthDate,
-        company_id: c.empresa_id as number,
-        avatar,
-      };
-
-      if (m === month) monthBirthdays.push(payload);
-      if (m === month && dd === day) todayBirthdays.push(payload);
-    }
+    const todayBirthdays = (rowsToday ?? []).map(toPayload);
+    const monthBirthdays = (rowsMonth ?? []).map(toPayload);
+    const allBirthdays = rows.map(toPayload);
 
     return new Response(
       JSON.stringify({
         month_birthdays: monthBirthdays,
         today_birthdays: todayBirthdays,
+        /** Todos os colaboradores activos com data de nascimento (para páginas que filtram por mês no cliente). */
+        all_birthdays: allBirthdays,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );

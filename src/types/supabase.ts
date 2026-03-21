@@ -69,6 +69,32 @@ export interface Database {
         Insert: Record<string, unknown>;
         Update: Record<string, unknown>;
       };
+      aniversario_parabens: {
+        Row: {
+          id: number;
+          empresa_id: number;
+          destinatario_colaborador_id: number;
+          autor_colaborador_id: number;
+          mensagem: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          empresa_id: number;
+          destinatario_colaborador_id: number;
+          autor_colaborador_id: number;
+          mensagem: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          empresa_id?: number;
+          destinatario_colaborador_id?: number;
+          autor_colaborador_id?: number;
+          mensagem?: string;
+          created_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

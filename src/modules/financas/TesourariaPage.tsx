@@ -5,6 +5,7 @@ import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { inferBucketFromStoragePublicUrl, resolveComprovativoPublicUrl } from '@/utils/storageComprovativo';
+import { movimentoSaidaPrecisaFacturaFinal } from '@/utils/tesourariaDocumentos';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { MovimentoTesouraria, CategoriaSaidaTesouraria, MetodoPagamentoTesouraria } from '@/types';
@@ -28,7 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Pencil, Eye, ArrowDownCircle, ArrowUpCircle, Paperclip, Trash2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Search, Pencil, Eye, ArrowDownCircle, ArrowUpCircle, Paperclip, Trash2, AlertCircle, FileText } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 
 const METODOS: MetodoPagamentoTesouraria[] = ['Transferência', 'Cheque', 'Numerário', 'MB', 'Outro'];
@@ -51,6 +59,8 @@ const emptyForm = (empresaId: number, tipo: 'entrada' | 'saida'): FormState => (
   metodoPagamento: 'Transferência',
   descricao: '',
   comprovativoAnexos: [],
+  proformaAnexos: [],
+  facturaFinalAnexos: [],
   contaBancariaId: undefined,
 });
 
@@ -81,6 +91,28 @@ export default function TesourariaPage() {
   const [form, setForm] = useState<FormState>(() => emptyForm(empresaIdForNew, 'entrada'));
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  /** Diálogo rápido para anexar factura final a uma saída que só tem proforma. */
+  const [movAnexarFacturaFinal, setMovAnexarFacturaFinal] = useState<MovimentoTesouraria | null>(null);
+  const [anexarFinalSubmitting, setAnexarFinalSubmitting] = useState(false);
+
+  const openPdfPreview = (url: string, closeOtherDialogs = false) => {
+    void (async () => {
+      if (!supabase) return;
+      const bucket = inferBucketFromStoragePublicUrl(url);
+      const resolved = await resolveComprovativoPublicUrl(supabase, bucket, url);
+      if (resolved) {
+        setPdfPreviewUrl(resolved);
+        if (closeOtherDialogs) {
+          setViewOpen(false);
+          setDialogOpen(false);
+          setMovAnexarFacturaFinal(null);
+        }
+        setTimeout(() => setPdfPreviewOpen(true), 0);
+      } else {
+        toast.error('Não foi possível pré-visualizar o documento.');
+      }
+    })();
+  };
 
   const filtered = movimentosTesouraria.filter(m => {
     const matchTipo = tipoFilter === 'todos' || m.tipo === tipoFilter;
@@ -120,6 +152,8 @@ export default function TesourariaPage() {
     setForm({
       ...m,
       comprovativoAnexos: m.comprovativoAnexos ?? [],
+      proformaAnexos: m.proformaAnexos ?? [],
+      facturaFinalAnexos: m.facturaFinalAnexos ?? [],
     });
     setDialogOpen(true);
   };
@@ -134,6 +168,45 @@ export default function TesourariaPage() {
       ...f,
       comprovativoAnexos: (f.comprovativoAnexos ?? []).filter((_, i) => i !== index),
     }));
+  };
+
+  const removeProformaAnexo = (index: number) => {
+    setForm(f => ({
+      ...f,
+      proformaAnexos: (f.proformaAnexos ?? []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const removeFacturaFinalAnexo = (index: number) => {
+    setForm(f => ({
+      ...f,
+      facturaFinalAnexos: (f.facturaFinalAnexos ?? []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const uploadSaidaProformaOuFactura = async (file: File, kind: 'proforma' | 'factura-final') => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Upload requer Supabase configurado.');
+      return;
+    }
+    try {
+      const ext = file.name.split('.').pop() || 'pdf';
+      const movKey = editing?.id ?? `new-${Date.now()}`;
+      const label = kind === 'proforma' ? 'proforma' : 'factura-final';
+      const path = `tesouraria/saidas/${label}-${movKey}-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('proformas').upload(path, file, { upsert: true });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha no upload');
+      const { data: pub } = supabase.storage.from('proformas').getPublicUrl(data.path);
+      if (kind === 'proforma') {
+        setForm(f => ({ ...f, proformaAnexos: [...(f.proformaAnexos ?? []), pub.publicUrl] }));
+        toast.success('Proforma anexada.');
+      } else {
+        setForm(f => ({ ...f, facturaFinalAnexos: [...(f.facturaFinalAnexos ?? []), pub.publicUrl] }));
+        toast.success('Factura final anexada.');
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível carregar o ficheiro.');
+    }
   };
 
   const uploadComprovativoTesourariaFile = async (file: File, tipoMov: 'entrada' | 'saida') => {
@@ -159,8 +232,15 @@ export default function TesourariaPage() {
     }
   };
 
+  const saidaTemProformaOuFactura = (f: FormState) =>
+    (f.proformaAnexos?.length ?? 0) > 0 || (f.facturaFinalAnexos?.length ?? 0) > 0;
+
   const save = async () => {
     if (!form.descricao.trim() || form.valor <= 0) return;
+    if (!editing && form.tipo === 'saida' && !saidaTemProformaOuFactura(form)) {
+      toast.error('Em novas saídas, anexe pelo menos uma proforma ou uma factura final (PDF).');
+      return;
+    }
     try {
       if (editing) {
         await updateMovimentoTesouraria(editing.id, {
@@ -170,6 +250,8 @@ export default function TesourariaPage() {
           metodoPagamento: form.metodoPagamento,
           descricao: form.descricao,
           comprovativoAnexos: form.comprovativoAnexos,
+          proformaAnexos: form.proformaAnexos,
+          facturaFinalAnexos: form.facturaFinalAnexos,
           origem: form.origem,
           beneficiario: form.beneficiario,
           categoriaSaida: form.categoriaSaida,
@@ -212,6 +294,35 @@ export default function TesourariaPage() {
 
   const contasForEmpresa = (empresaId: number) =>
     contasBancarias.filter(c => c.empresaId === empresaId).sort((a, b) => a.numeroConta.localeCompare(b.numeroConta));
+
+  const getFirstDocUrl = (arr?: string[]) => (arr ?? []).find(u => !!u) ?? null;
+  const getLastDocUrl = (arr?: string[]) => {
+    const xs = (arr ?? []).filter(Boolean);
+    return xs.length ? xs[xs.length - 1]! : null;
+  };
+
+  const podeEditarMovimento =
+    user?.perfil === 'Admin' || user?.perfil === 'Financeiro' || user?.perfil === 'Contabilidade';
+
+  const confirmarAnexarFacturaFinalRapido = async (file: File) => {
+    if (!movAnexarFacturaFinal || !isSupabaseConfigured() || !supabase) return;
+    setAnexarFinalSubmitting(true);
+    try {
+      const ext = file.name.split('.').pop() || 'pdf';
+      const path = `tesouraria/saidas/factura-final-${movAnexarFacturaFinal.id}-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('proformas').upload(path, file, { upsert: true });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha no upload');
+      const { data: pub } = supabase.storage.from('proformas').getPublicUrl(data.path);
+      const next = [...(movAnexarFacturaFinal.facturaFinalAnexos ?? []), pub.publicUrl];
+      await updateMovimentoTesouraria(movAnexarFacturaFinal.id, { facturaFinalAnexos: next });
+      toast.success('Factura final anexada.');
+      setMovAnexarFacturaFinal(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao anexar factura final');
+    } finally {
+      setAnexarFinalSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -275,13 +386,22 @@ export default function TesourariaPage() {
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Método</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Conta</th>
-              <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
+              <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Ações</th>
             </tr>
           </thead>
           <tbody>
             {pagination.slice.map(m => (
               <tr key={m.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-5 font-mono text-xs">{m.referencia}</td>
+                <td className="py-3 px-5 font-mono text-xs">
+                  <div className="flex items-center gap-1.5">
+                    {movimentoSaidaPrecisaFacturaFinal(m) && (
+                      <span title="Anexe a factura final — existe apenas proforma.">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-red-600" aria-hidden />
+                      </span>
+                    )}
+                    <span>{m.referencia}</span>
+                  </div>
+                </td>
                 <td className="py-3 px-5">
                   <span className={m.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}>
                     {m.tipo === 'entrada' ? 'Entrada' : 'Saída'}
@@ -300,12 +420,59 @@ export default function TesourariaPage() {
                   {contaLabel(m.contaBancariaId)}
                 </td>
                 <td className="py-3 px-5 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openView(m)}><Eye className="h-4 w-4" /></Button>
-                    {(user?.perfil === 'Admin' || user?.perfil === 'Financeiro' || user?.perfil === 'Contabilidade') && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
-                    )}
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        Ações
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[220px]">
+                      <DropdownMenuItem onSelect={() => openView(m)}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        Ver detalhe
+                      </DropdownMenuItem>
+                      {podeEditarMovimento && (
+                        <DropdownMenuItem onSelect={() => openEdit(m)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Editar
+                        </DropdownMenuItem>
+                      )}
+                      {m.tipo === 'saida' && movimentoSaidaPrecisaFacturaFinal(m) && podeEditarMovimento && (
+                        <DropdownMenuItem onSelect={() => setMovAnexarFacturaFinal(m)}>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Anexar factura final
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled={getFirstDocUrl(m.proformaAnexos) == null}
+                        onSelect={() => {
+                          const u = getFirstDocUrl(m.proformaAnexos);
+                          if (u) openPdfPreview(u, true);
+                        }}
+                      >
+                        Pré-visualizar: Proforma
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={getLastDocUrl(m.facturaFinalAnexos) == null}
+                        onSelect={() => {
+                          const u = getLastDocUrl(m.facturaFinalAnexos);
+                          if (u) openPdfPreview(u, true);
+                        }}
+                      >
+                        Pré-visualizar: Factura final
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={getFirstDocUrl(m.comprovativoAnexos) == null}
+                        onSelect={() => {
+                          const u = getFirstDocUrl(m.comprovativoAnexos);
+                          if (u) openPdfPreview(u, true);
+                        }}
+                      >
+                        Pré-visualizar: Comprovativo
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </td>
               </tr>
             ))}
@@ -324,7 +491,9 @@ export default function TesourariaPage() {
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar movimento' : formTipo === 'entrada' ? 'Registar entrada' : 'Registar saída'}</DialogTitle>
             <DialogDescription>
-              {formTipo === 'entrada' ? 'Registe o recebimento e associe à empresa e origem.' : 'Registe o pagamento e classifique por categoria.'}
+              {formTipo === 'entrada'
+                ? 'Registe o recebimento e associe à empresa e origem.'
+                : 'Registe o pagamento. Em saídas é obrigatório anexar pelo menos uma proforma ou uma factura final (PDF).'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -422,6 +591,110 @@ export default function TesourariaPage() {
                 <div className="space-y-2">
                   <Label>Beneficiário</Label>
                   <Input value={form.beneficiario ?? ''} onChange={e => setForm(f => ({ ...f, beneficiario: e.target.value || undefined }))} placeholder="Fornecedor, serviço, etc." />
+                </div>
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-3">
+                  <p className="text-sm font-medium">Documentação fiscal (obrigatório)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Anexe <strong className="text-foreground">proforma</strong> ou <strong className="text-foreground">factura final</strong> (ou ambas). Se ficar só com proforma, na lista aparecerá um alerta até anexar a factura final.
+                  </p>
+                  <div className="space-y-2">
+                    <Label className="text-amber-700 dark:text-amber-400">Factura proforma (PDF)</Label>
+                    {(form.proformaAnexos ?? []).length > 0 && (
+                      <ul className="space-y-1.5">
+                        {(form.proformaAnexos ?? []).map((urlOuNome, i) => {
+                          const displayName = urlOuNome.startsWith('http')
+                            ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome
+                            : urlOuNome;
+                          return (
+                            <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                              {urlOuNome.startsWith('http') ? (
+                                <button
+                                  type="button"
+                                  className="truncate text-left text-primary underline hover:no-underline"
+                                  onClick={() => openPdfPreview(urlOuNome, false)}
+                                >
+                                  {displayName}
+                                </button>
+                              ) : (
+                                <span className="truncate">{displayName}</span>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0 text-destructive"
+                                onClick={() => removeProformaAnexo(i)}
+                                aria-label="Remover proforma"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    <Input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          void uploadSaidaProformaOuFactura(file, 'proforma');
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-emerald-700 dark:text-emerald-400">Factura final (PDF)</Label>
+                    {(form.facturaFinalAnexos ?? []).length > 0 && (
+                      <ul className="space-y-1.5">
+                        {(form.facturaFinalAnexos ?? []).map((urlOuNome, i) => {
+                          const displayName = urlOuNome.startsWith('http')
+                            ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome
+                            : urlOuNome;
+                          return (
+                            <li key={i} className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                              {urlOuNome.startsWith('http') ? (
+                                <button
+                                  type="button"
+                                  className="truncate text-left text-primary underline hover:no-underline"
+                                  onClick={() => openPdfPreview(urlOuNome, false)}
+                                >
+                                  {displayName}
+                                </button>
+                              ) : (
+                                <span className="truncate">{displayName}</span>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0 text-destructive"
+                                onClick={() => removeFacturaFinalAnexo(i)}
+                                aria-label="Remover factura final"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    <Input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          void uploadSaidaProformaOuFactura(file, 'factura-final');
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
               </>
             )}
@@ -527,7 +800,16 @@ export default function TesourariaPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.descricao.trim() || form.valor <= 0}>Guardar</Button>
+            <Button
+              onClick={() => void save()}
+              disabled={
+                !form.descricao.trim() ||
+                form.valor <= 0 ||
+                (!editing && form.tipo === 'saida' && !saidaTemProformaOuFactura(form))
+              }
+            >
+              Guardar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -554,6 +836,66 @@ export default function TesourariaPage() {
               )}
               <p><span className="text-muted-foreground">Centro de custo:</span> {centroNome(viewMov.centroCustoId)}</p>
               <p><span className="text-muted-foreground">Projecto:</span> {projectoNome(viewMov.projectoId)}</p>
+              {viewMov.tipo === 'saida' && movimentoSaidaPrecisaFacturaFinal(viewMov) && (
+                <div className="flex items-start gap-2 rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>Anexe a <strong>factura final</strong> (menu Ações → Anexar factura final ou editar o movimento).</span>
+                </div>
+              )}
+              {viewMov.tipo === 'saida' && (viewMov.proformaAnexos?.length ?? 0) > 0 && (
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Proforma:</p>
+                  <ul className="space-y-1 pl-1">
+                    {(viewMov.proformaAnexos ?? []).map((urlOuNome, i) => {
+                      const displayName = urlOuNome.startsWith('http')
+                        ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome
+                        : urlOuNome;
+                      return (
+                        <li key={i}>
+                          {urlOuNome.startsWith('http') ? (
+                            <button
+                              type="button"
+                              className="text-primary underline hover:no-underline text-sm"
+                              onClick={() => openPdfPreview(urlOuNome, true)}
+                            >
+                              {displayName}
+                            </button>
+                          ) : (
+                            <span className="text-sm">{displayName}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              {viewMov.tipo === 'saida' && (viewMov.facturaFinalAnexos?.length ?? 0) > 0 && (
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Factura final:</p>
+                  <ul className="space-y-1 pl-1">
+                    {(viewMov.facturaFinalAnexos ?? []).map((urlOuNome, i) => {
+                      const displayName = urlOuNome.startsWith('http')
+                        ? urlOuNome.split('/').pop()?.split('?')[0] || urlOuNome
+                        : urlOuNome;
+                      return (
+                        <li key={i}>
+                          {urlOuNome.startsWith('http') ? (
+                            <button
+                              type="button"
+                              className="text-primary underline hover:no-underline text-sm"
+                              onClick={() => openPdfPreview(urlOuNome, true)}
+                            >
+                              {displayName}
+                            </button>
+                          ) : (
+                            <span className="text-sm">{displayName}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
               {(viewMov.comprovativoAnexos?.length ?? 0) > 0 && (
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Comprovativos:</p>
@@ -598,6 +940,38 @@ export default function TesourariaPage() {
               {viewMov.observacoes && <p><span className="text-muted-foreground">Observações:</span> {viewMov.observacoes}</p>}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!movAnexarFacturaFinal} onOpenChange={open => { if (!open) setMovAnexarFacturaFinal(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Anexar factura final</DialogTitle>
+            <DialogDescription>
+              Movimento {movAnexarFacturaFinal?.referencia}. O PDF será guardado no armazenamento e o alerta de proforma pendente desaparece.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Factura final (PDF)</Label>
+            <Input
+              type="file"
+              accept=".pdf,application/pdf"
+              disabled={anexarFinalSubmitting}
+              className="cursor-pointer file:mr-2 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  void confirmarAnexarFacturaFinalRapido(file);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMovAnexarFacturaFinal(null)} disabled={anexarFinalSubmitting}>
+              Cancelar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

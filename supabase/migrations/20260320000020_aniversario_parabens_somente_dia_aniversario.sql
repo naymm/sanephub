@@ -1,3 +1,7 @@
+-- Só é permitido enviar parabéns quando o destinatário faz anos *neste dia* (MM-DD),
+-- alinhado ao fuso de Angola (ajuste timezone se necessário).
+
+drop policy if exists "aniversario_parabens: colaborador insert" on public.aniversario_parabens;
 
 create policy "aniversario_parabens: colaborador insert"
   on public.aniversario_parabens for insert
