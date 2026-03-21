@@ -143,6 +143,14 @@ function extensaoDeNome(nome: string): string {
   return i >= 0 ? nome.slice(i + 1).toLowerCase() : '';
 }
 
+/** Nome do ficheiro sem extensão, normalizado e em maiúsculas (pt), para sugerir título ao anexar. */
+function tituloSugeridoDeNomeArquivo(nome: string): string {
+  const i = nome.lastIndexOf('.');
+  const base = i >= 0 ? nome.slice(0, i) : nome;
+  const cleaned = base.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned.toLocaleUpperCase('pt-PT');
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -1305,9 +1313,35 @@ export default function GestaoDocumentosPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Título do arquivo</Label>
-              <Input value={formTitulo} onChange={e => setFormTitulo(e.target.value)} placeholder="Ex.: Orçamento Q1 2026" />
+            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+              <Label className="text-base">Ficheiro</Label>
+              <Input
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={e => {
+                  const f = e.target.files?.[0] ?? null;
+                  setFormFile(f);
+                  if (f) setFormTitulo(tituloSugeridoDeNomeArquivo(f.name));
+                }}
+              />
+              {formFile ? (
+                <p className="text-xs text-muted-foreground">
+                  {extensaoDeNome(formFile.name).toUpperCase()} · {formatBytes(formFile.size)}
+                </p>
+              ) : null}
+              <div className="space-y-2 pt-1">
+                <Label htmlFor="gestao-doc-upload-titulo">Título</Label>
+                <Input
+                  id="gestao-doc-upload-titulo"
+                  value={formTitulo}
+                  onChange={e => setFormTitulo(e.target.value.toLocaleUpperCase('pt-PT'))}
+                  placeholder="Ex.: ORÇAMENTO Q1 2026"
+                  className="font-medium uppercase"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Em maiúsculas; sugerido a partir do nome do ficheiro ao anexar.
+                </p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Pasta</Label>
@@ -1369,15 +1403,6 @@ export default function GestaoDocumentosPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo de arquivo</Label>
-              <Input readOnly value={formFile ? `${extensaoDeNome(formFile.name).toUpperCase()} · ${formatBytes(formFile.size)}` : '—'} />
-              <Input
-                type="file"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={e => setFormFile(e.target.files?.[0] ?? null)}
-              />
             </div>
             <div className="space-y-2">
               <Label>Observação</Label>
