@@ -120,7 +120,7 @@ export default function PortalDadosPage() {
               <span>{colaborador.bi}</span>
               <span className="text-muted-foreground">NIF</span>
               <span>{colaborador.nif}</span>
-              <span className="text-muted-foreground">NISS</span>
+              <span className="text-muted-foreground">INSS</span>
               <span>{colaborador.niss}</span>
               <span className="text-muted-foreground">Nacionalidade</span>
               <span>{colaborador.nacionalidade}</span>

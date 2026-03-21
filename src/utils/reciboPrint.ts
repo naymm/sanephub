@@ -283,7 +283,7 @@ export function getReciboPrintHtml(recibo: ReciboSalario, colaborador: Colaborad
       <div class="header-top">
         <div class="header-left">
           <div class="company">${escapeHtml(EMPRESA.nome)}</div>
-          <div class="fiscal">NIF ${EMPRESA.nif} | NISS ${EMPRESA.niss}</div>
+          <div class="fiscal">NIF ${EMPRESA.nif} | INSS ${EMPRESA.niss}</div>
         </div>
         <div class="header-right">${escapeHtml(EMPRESA.morada)}</div>
       </div>

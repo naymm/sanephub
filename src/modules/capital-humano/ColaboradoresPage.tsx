@@ -36,18 +36,32 @@ const STATUS_OPTIONS: StatusColaborador[] = ['Activo', 'Inactivo', 'Suspenso', '
 const TIPO_CONTRATO_OPTIONS: TipoContrato[] = ['Efectivo', 'Prazo Certo', 'Prestação', 'Estágio'];
 const GENERO_OPTIONS: Genero[] = ['M', 'F', 'Outro'];
 
+const ESTADO_CIVIL_OPTIONS = [
+  'Solteiro(a)',
+  'Casado(a)',
+  'Divorciado(a)',
+  'Viúvo(a)',
+  'União de facto',
+  'Outro',
+] as const;
+
+const CARGO_OPTIONS = ['Técnico', 'Coordenador', 'Director'] as const;
+
+/** Valor sentinela para o Select quando ainda não há departamento escolhido. */
+const DEPARTAMENTO_SELECT_VAZIO = '__departamento_nenhum__';
+
 const emptyForm: Omit<Colaborador, 'id'> = {
   empresaId: 1,
   nome: '',
   dataNascimento: '',
   genero: 'M',
-  estadoCivil: '',
+  estadoCivil: 'Solteiro(a)',
   bi: '',
   nif: '',
   niss: '',
   nacionalidade: '',
   endereco: '',
-  cargo: '',
+  cargo: 'Técnico',
   departamento: '',
   dataAdmissao: '',
   tipoContrato: 'Efectivo',
@@ -59,7 +73,7 @@ const emptyForm: Omit<Colaborador, 'id'> = {
 };
 
 export default function ColaboradoresPage() {
-  const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas, refetch } = useData();
+  const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas, departamentos: departamentosCatalogo, refetch } = useData();
   const { usuarios } = useAuth();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
@@ -170,7 +184,30 @@ export default function ColaboradoresPage() {
   };
   const resetPage = () => setPage(0);
 
-  const departamentos = usePaginated ? departamentosList : Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
+  /** Nomes de departamento para o filtro da tabela (valores existentes nos colaboradores). */
+  const departamentosFiltroOpcoes = usePaginated ? departamentosList : Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
+
+  const cargoSelectOptions = useMemo(() => {
+    const set = new Set<string>([...CARGO_OPTIONS]);
+    if (form.cargo.trim() && !set.has(form.cargo)) set.add(form.cargo);
+    return Array.from(set);
+  }, [form.cargo]);
+
+  const estadoCivilSelectOptions = useMemo(() => {
+    const set = new Set<string>([...ESTADO_CIVIL_OPTIONS]);
+    if (form.estadoCivil.trim() && !set.has(form.estadoCivil)) set.add(form.estadoCivil);
+    return Array.from(set);
+  }, [form.estadoCivil]);
+
+  /** Nomes do catálogo de departamentos + valor legado do colaborador em edição, se não existir no catálogo. */
+  const departamentoSelectOptions = useMemo(() => {
+    const nomes = departamentosCatalogo.map(d => d.nome.trim()).filter(Boolean);
+    const unique = [...new Set(nomes)].sort((a, b) => a.localeCompare(b, 'pt'));
+    if (form.departamento.trim() && !unique.includes(form.departamento)) {
+      return [...unique, form.departamento].sort((a, b) => a.localeCompare(b, 'pt'));
+    }
+    return unique;
+  }, [departamentosCatalogo, form.departamento]);
 
   const openCreate = () => {
     setEditing(null);
@@ -189,13 +226,13 @@ export default function ColaboradoresPage() {
       nome: c.nome,
       dataNascimento: c.dataNascimento,
       genero: c.genero,
-      estadoCivil: c.estadoCivil,
+      estadoCivil: c.estadoCivil?.trim() || 'Solteiro(a)',
       bi: c.bi,
       nif: c.nif,
       niss: c.niss,
       nacionalidade: c.nacionalidade,
       endereco: c.endereco,
-      cargo: c.cargo,
+      cargo: c.cargo?.trim() || 'Técnico',
       departamento: c.departamento,
       dataAdmissao: c.dataAdmissao,
       tipoContrato: c.tipoContrato,
@@ -299,7 +336,7 @@ export default function ColaboradoresPage() {
           <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Departamento" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            {departamentos.map(d => (
+            {departamentosFiltroOpcoes.map(d => (
               <SelectItem key={d} value={d}>{d}</SelectItem>
             ))}
           </SelectContent>
@@ -396,7 +433,21 @@ export default function ColaboradoresPage() {
               </div>
               <div className="space-y-2">
                 <Label>Estado civil</Label>
-                <Input value={form.estadoCivil} onChange={e => setForm(f => ({ ...f, estadoCivil: e.target.value }))} placeholder="ex: Solteiro" />
+                <Select
+                  value={form.estadoCivil}
+                  onValueChange={v => setForm(f => ({ ...f, estadoCivil: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar estado civil" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {estadoCivilSelectOptions.map(ec => (
+                      <SelectItem key={ec} value={ec}>
+                        {ec}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
@@ -409,7 +460,7 @@ export default function ColaboradoresPage() {
                 <Input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>NISS</Label>
+                <Label>INSS</Label>
                 <Input value={form.niss} onChange={e => setForm(f => ({ ...f, niss: e.target.value }))} />
               </div>
             </div>
@@ -427,11 +478,45 @@ export default function ColaboradoresPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Cargo</Label>
-                <Input value={form.cargo} onChange={e => setForm(f => ({ ...f, cargo: e.target.value }))} />
+                <Select value={form.cargo} onValueChange={v => setForm(f => ({ ...f, cargo: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar cargo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cargoSelectOptions.map(cg => (
+                      <SelectItem key={cg} value={cg}>
+                        {cg}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Departamento</Label>
-                <Input value={form.departamento} onChange={e => setForm(f => ({ ...f, departamento: e.target.value }))} />
+                {departamentoSelectOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">
+                    Não há departamentos no catálogo. Cadastre em Configurações → Departamentos.
+                  </p>
+                ) : null}
+                <Select
+                  value={form.departamento.trim() ? form.departamento : DEPARTAMENTO_SELECT_VAZIO}
+                  onValueChange={v =>
+                    setForm(f => ({ ...f, departamento: v === DEPARTAMENTO_SELECT_VAZIO ? '' : v }))
+                  }
+                  disabled={departamentoSelectOptions.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar departamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DEPARTAMENTO_SELECT_VAZIO}>— Seleccionar —</SelectItem>
+                    {departamentoSelectOptions.map(nome => (
+                      <SelectItem key={nome} value={nome}>
+                        {nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

@@ -56,7 +56,7 @@ doc.setFontSize(8)
 doc.setFont("helvetica","bold")
 doc.text(EMPRESA.nome,left,y)
 doc.setFont("helvetica","normal")
-doc.text(`NIF ${EMPRESA.nif} | NISS ${EMPRESA.niss}`,left,y+4)
+doc.text(`NIF ${EMPRESA.nif} | INSS ${EMPRESA.niss}`,left,y+4)
 doc.text(EMPRESA.morada,right,y,{align:"right"})
 
 y+=20
