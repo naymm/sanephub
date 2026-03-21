@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
-import { getModulosAtivosForContext } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { IntranetTopbar } from './IntranetTopbar';
 import { HorizontalMenu } from './HorizontalMenu';
 
@@ -12,6 +12,7 @@ const PATH_TO_MODULE: Record<string, string> = {
   '/financas': 'financas',
   '/contabilidade': 'contabilidade',
   '/secretaria': 'secretaria',
+  '/gestao-documentos': 'gestao-documentos',
   '/juridico': 'juridico',
   '/planeamento': 'planeamento',
   '/conselho-administracao': 'conselho-administracao',
@@ -45,12 +46,16 @@ export function Layout() {
   }
 
   const pathPrefix = '/' + pathname.split('/')[1];
-  const moduleForPath = PATH_TO_MODULE[pathPrefix];
+  let moduleForPath = PATH_TO_MODULE[pathPrefix];
+  // Rota legada: mesmo módulo que /gestao-documentos (whitelist por empresa)
+  if (pathname.startsWith('/secretaria/gestao-documentos')) {
+    moduleForPath = 'gestao-documentos';
+  }
   if (user && moduleForPath && !hasModuleAccess(user, moduleForPath)) {
     return <Navigate to="/dashboard" replace />;
   }
   const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
-  if (user && moduleForPath && modulosAtivos != null && !modulosAtivos.includes(moduleForPath)) {
+  if (user && moduleForPath && modulosAtivos != null && !empresaTemModuloActivado(modulosAtivos, moduleForPath)) {
     return <Navigate to="/dashboard" replace />;
   }
 

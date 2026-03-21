@@ -4,7 +4,7 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useChat } from '@/context/ChatContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
-import { getModulosAtivosForContext } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
@@ -65,6 +65,12 @@ const NAV_ITEMS: NavItem[] = [
     ]
   },
   {
+    label: 'Gestão documental',
+    icon: FolderArchive,
+    path: '/gestao-documentos',
+    module: 'gestao-documentos',
+  },
+  {
     label: 'Jurídico', icon: Scale, module: 'juridico',
     children: [
       { label: 'Contratos', path: '/juridico/contratos' },
@@ -96,6 +102,9 @@ const NAV_ITEMS: NavItem[] = [
     ]
   },
 ];
+
+/** Evitar duplicar na secção «Módulo de trabalho» o que já está em «Geral». */
+const COLABORADOR_WORK_MODULES_SKIP_PATHS = new Set(['/dashboard', '/chat', '/notificacoes']);
 
 const COLABORADOR_ITEMS: NavItem[] = [
   { label: 'Os Meus Dados', icon: UserCircle, path: '/portal/dados', module: 'portal-colaborador' },
@@ -140,16 +149,20 @@ export function Sidebar() {
   const canShowModule = (moduleId: string | undefined) => {
     if (!moduleId) return true;
     if (!hasModuleAccess(user, moduleId)) return false;
+    // Alinhar ao HorizontalMenu: colaborador com módulos atribuídos não fica bloqueado por `modulos_ativos` incompleto na empresa.
+    if (user.perfil === 'Colaborador') return true;
     if (modulosAtivos == null) return true;
-    return modulosAtivos.includes(moduleId);
+    return empresaTemModuloActivado(modulosAtivos, moduleId);
   };
 
-  /** Módulos de área (Capital Humano, Finanças, etc.) a que o colaborador tem acesso para trabalhar */
+  /** Módulos de área (Capital Humano, Finanças, etc.) a que o colaborador tem acesso para trabalhar — inclui itens só com path (ex.: Gestão documental). */
   const workModules = isColaborador
-    ? NAV_ITEMS.filter(
-        (item): item is NavItem & { module: string; children?: { label: string; path: string }[] } =>
-          item.module != null && item.children != null && canShowModule(item.module)
-      )
+    ? NAV_ITEMS.filter(item => {
+        if (item.module == null || !canShowModule(item.module)) return false;
+        if (item.children != null) return true;
+        if (item.path != null && !COLABORADOR_WORK_MODULES_SKIP_PATHS.has(item.path)) return true;
+        return false;
+      })
     : [];
 
   const toggleExpand = (label: string) => {

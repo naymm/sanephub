@@ -272,6 +272,18 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
   'planeamento': ['Admin', 'PCA', 'Planeamento', 'Director'],
   'conselho-administracao': ['Admin', 'PCA'],
   'comunicacao-interna': ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'],
+  /** Repositório central de ficheiros; alinhado a quem pode carregar na BD (Secretaria, Finanças, Jurídico, RH…). */
+  'gestao-documentos': [
+    'Admin',
+    'PCA',
+    'Secretaria',
+    'Director',
+    'Financeiro',
+    'Juridico',
+    'RH',
+    'Contabilidade',
+    'Planeamento',
+  ],
   'portal-colaborador': ['Colaborador'],
   'configuracoes': ['Admin'],
 };
@@ -284,8 +296,12 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
     if (!Array.isArray(user.modulos) || user.modulos.length === 0) {
       return MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;
     }
+    if (module === 'gestao-documentos' && user.modulos.includes('secretaria')) return true;
     return user.modulos.includes(module);
   }
-  if (Array.isArray(user.modulos) && user.modulos.length > 0) return user.modulos.includes(module);
+  if (Array.isArray(user.modulos) && user.modulos.length > 0) {
+    if (module === 'gestao-documentos' && user.modulos.includes('secretaria')) return true;
+    return user.modulos.includes(module);
+  }
   return MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;
 }

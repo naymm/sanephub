@@ -46,6 +46,7 @@ export const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'financas', label: 'Finanças' },
   { id: 'contabilidade', label: 'Contabilidade' },
   { id: 'secretaria', label: 'Secretaria Geral' },
+  { id: 'gestao-documentos', label: 'Gestão de Documentos' },
   { id: 'juridico', label: 'Jurídico' },
   { id: 'conselho-administracao', label: 'Conselho de Administração' },
   { id: 'portal-colaborador', label: 'Portal Colaborador' },
@@ -506,7 +507,7 @@ export default function UtilizadoresPage() {
               <p className="text-xs text-muted-foreground">
                 Seleccione os módulos a que este utilizador pode aceder. Se nenhum for seleccionado, aplica-se o acesso padrão do perfil. Admin ignora esta lista.
                 {form.perfil === 'Colaborador' && (
-                  <span className="block mt-1 text-primary/90">Para Colaborador: o Portal fica sempre activo; pode ainda atribuir um ou mais módulos de trabalho (ex.: Finanças, Capital Humano).</span>
+                  <span className="block mt-1 text-primary/90">Para Colaborador: o Portal fica sempre activo; pode ainda atribuir um ou mais módulos de trabalho (ex.: Finanças, Capital Humano, Gestão de Documentos).</span>
                 )}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">

@@ -36,6 +36,7 @@ import ArquivoJuridicoPage from "@/modules/juridico/ArquivoJuridicoPage";
 import ReunioesPage from "@/modules/secretaria/ReunioesPage";
 import ActasPage from "@/modules/secretaria/ActasPage";
 import DocumentosOficiaisPage from "@/modules/secretaria/DocumentosOficiaisPage";
+import GestaoDocumentosPage from "@/modules/secretaria/GestaoDocumentosPage";
 import CorrespondenciasPage from "@/modules/secretaria/CorrespondenciasPage";
 import ArquivoPage from "@/modules/secretaria/ArquivoPage";
 import UtilizadoresPage from "@/modules/config/UtilizadoresPage";
@@ -118,6 +119,8 @@ const App = () => (
                   <Route path="/secretaria/reunioes" element={<ReunioesPage />} />
                   <Route path="/secretaria/actas" element={<ActasPage />} />
                   <Route path="/secretaria/documentos" element={<DocumentosOficiaisPage />} />
+                  <Route path="/gestao-documentos" element={<GestaoDocumentosPage />} />
+                  <Route path="/secretaria/gestao-documentos" element={<Navigate to="/gestao-documentos" replace />} />
                   <Route path="/secretaria/correspondencias" element={<CorrespondenciasPage />} />
                   <Route path="/secretaria/arquivo" element={<ArquivoPage />} />
                   {/* Jurídico */}

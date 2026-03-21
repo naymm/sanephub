@@ -3,7 +3,7 @@ import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Crown, DollarSign, FileText, LayoutGrid, LogOut, Palmtree, Search, Settings, Scale, Stamp, Target, Users, User, MessageCircle, Megaphone, CalendarDays, Cake } from 'lucide-react';
+import { Bell, Crown, DollarSign, FileText, LayoutGrid, LogOut, Palmtree, Search, Settings, Scale, Stamp, Target, Users, User, MessageCircle, Megaphone, CalendarDays, Cake, FolderArchive } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { formatRelative } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
 import type { NotificationAudienceOptions } from '@/context/NotificationContext';
-import { getModulosAtivosForContext } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { useMemo, useState } from 'react';
 
 export function IntranetTopbar() {
@@ -48,8 +48,9 @@ export function IntranetTopbar() {
   const canShowModule = (moduleId?: string) => {
     if (!moduleId) return true;
     if (!hasModuleAccess(user, moduleId)) return false;
+    if (user.perfil === 'Colaborador') return true;
     if (modulosAtivos == null) return true;
-    return modulosAtivos.includes(moduleId);
+    return empresaTemModuloActivado(modulosAtivos, moduleId);
   };
 
   const principalModules = useMemo(() => {
@@ -62,6 +63,7 @@ export function IntranetTopbar() {
       { moduleId: 'financas', label: 'Finanças', icon: <DollarSign className="h-4 w-4" /> },
       { moduleId: 'contabilidade', label: 'Contabilidade', icon: <FileText className="h-4 w-4" /> },
       { moduleId: 'secretaria', label: 'Secretaria Geral', icon: <Stamp className="h-4 w-4" /> },
+      { moduleId: 'gestao-documentos', label: 'Gestão documental', icon: <FolderArchive className="h-4 w-4" /> },
       { moduleId: 'juridico', label: 'Jurídico', icon: <Scale className="h-4 w-4" /> },
       { moduleId: 'planeamento', label: 'Planeamento', icon: <Target className="h-4 w-4" /> },
     ];
@@ -104,6 +106,9 @@ export function IntranetTopbar() {
         { key: 'secretaria-documentos', label: 'Documentos Oficiais', path: '/secretaria/documentos' },
         { key: 'secretaria-correspondencias', label: 'Correspondências', path: '/secretaria/correspondencias' },
         { key: 'secretaria-arquivo', label: 'Arquivo', path: '/secretaria/arquivo' },
+      ],
+      'gestao-documentos': [
+        { key: 'gestao-documentos-main', label: 'Documentos', path: '/gestao-documentos' },
       ],
       juridico: [
         { key: 'juridico-contratos', label: 'Contratos', path: '/juridico/contratos' },

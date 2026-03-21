@@ -1,38 +1,55 @@
 
-create policy "aniversario_parabens: colaborador insert"
-  on public.aniversario_parabens for insert
-  with check (
-    exists (
-      select 1
-      from public.profiles p
-      where p.auth_user_id = auth.uid()
-        and p.colaborador_id is not null
-        and p.colaborador_id = aniversario_parabens.autor_colaborador_id
-    )
-    and exists (
-      select 1
-      from public.colaboradores c_a
-      inner join public.colaboradores c_d on c_d.id = aniversario_parabens.destinatario_colaborador_id
-      where c_a.id = aniversario_parabens.autor_colaborador_id
-        and c_a.empresa_id = c_d.empresa_id
-        and c_a.empresa_id = aniversario_parabens.empresa_id
-    )
-    and exists (
-      select 1
-      from public.profiles p
-      where p.auth_user_id = auth.uid()
-        and (
-          (p.perfil in ('Admin', 'PCA') and p.empresa_id is null)
-          or (p.empresa_id is not null and p.empresa_id = aniversario_parabens.empresa_id)
-        )
-    )
-    -- Destinatário com aniversário (mês/dia) igual a "hoje" no fuso Africa/Luanda
-    and exists (
-      select 1
-      from public.colaboradores c
-      where c.id = aniversario_parabens.destinatario_colaborador_id
-        and c.data_nascimento is not null
-        and to_char(c.data_nascimento::date, 'MM-DD')
-          = to_char((timezone('Africa/Luanda', now()))::date, 'MM-DD')
-    )
-  );
+-- Pastas iniciais por empresa (exemplo da especificação)
+do $$
+declare
+  e record;
+  id_fin bigint;
+  id_jur bigint;
+  id_rh bigint;
+begin
+  for e in select id from public.empresas
+  loop
+    if exists (select 1 from public.gestao_documentos_pastas where empresa_id = e.id) then
+      continue;
+    end if;
+
+    insert into public.gestao_documentos_pastas (empresa_id, parent_id, nome, ordem)
+    values (e.id, null, 'Financeiro', 1)
+    returning id into id_fin;
+    insert into public.gestao_documentos_pastas (empresa_id, parent_id, nome, ordem) values
+      (e.id, id_fin, 'Orçamentos', 1),
+      (e.id, id_fin, 'Pagamentos', 2);
+
+    insert into public.gestao_documentos_pastas (empresa_id, parent_id, nome, ordem)
+    values (e.id, null, 'Jurídico', 2)
+    returning id into id_jur;
+    insert into public.gestao_documentos_pastas (empresa_id, parent_id, nome, ordem) values
+      (e.id, id_jur, 'Contratos', 1),
+      (e.id, id_jur, 'Processos', 2);
+
+    insert into public.gestao_documentos_pastas (empresa_id, parent_id, nome, ordem)
+    values (e.id, null, 'RH', 3)
+    returning id into id_rh;
+    insert into public.gestao_documentos_pastas (empresa_id, parent_id, nome, ordem) values
+      (e.id, id_rh, 'Colaboradores', 1);
+
+    insert into public.gestao_documentos_pastas (empresa_id, parent_id, nome, ordem) values
+      (e.id, null, 'Finanças', 4),
+      (e.id, null, 'Contabilidade', 5),
+      (e.id, null, 'Planeamento', 6),
+      (e.id, null, 'Comunicação Interna', 7),
+      (e.id, null, 'Geral', 8);
+  end loop;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'gestao_documentos_arquivos'
+  ) then
+    alter publication supabase_realtime add table public.gestao_documentos_arquivos;
+  end if;
+end $$;

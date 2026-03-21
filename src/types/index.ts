@@ -441,6 +441,45 @@ export interface Correspondencia {
   estadoResposta: 'Pendente' | 'Respondida' | 'Não requer' | 'Arquivada';
 }
 
+/** Pasta na árvore de gestão documental (multi-tenant). */
+export interface GestaoDocumentoPasta {
+  id: number;
+  empresaId: number;
+  parentId: number | null;
+  nome: string;
+  ordem: number;
+  createdAt: string;
+}
+
+/** Ficheiro registado na gestão documental (metadados + permissões). */
+export interface GestaoDocumentoArquivo {
+  id: number;
+  empresaId: number;
+  pastaId: number;
+  titulo: string;
+  observacao: string;
+  storagePath: string;
+  nomeFicheiro: string;
+  mimeType: string;
+  tamanhoBytes: number;
+  tipoFicheiro: string;
+  modulosAcesso: string[];
+  sectoresAcesso: string[];
+  origemModulo?: string | null;
+  uploadedBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GestaoDocumentoAuditoria {
+  id: number;
+  arquivoId: number;
+  profileId: number | null;
+  accao: 'upload' | 'view' | 'download' | 'delete';
+  detalhe: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface DocumentoOficial {
   id: number;
   tipo: 'Deliberação' | 'Despacho' | 'Circular' | 'Convocatória' | 'Comunicado Interno';

@@ -7,3 +7,14 @@ export function getModulosAtivosForContext(
   const emp = empresas.find(e => e.id === currentEmpresaId);
   return emp?.modulosAtivos ?? null;
 }
+
+/**
+ * Verifica se o módulo está activo para a empresa.
+ * `gestao-documentos` fica disponível também quando `secretaria` está na lista (retrocompatibilidade).
+ */
+export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleId: string): boolean {
+  if (modulosAtivos == null) return true;
+  if (modulosAtivos.includes(moduleId)) return true;
+  if (moduleId === 'gestao-documentos' && modulosAtivos.includes('secretaria')) return true;
+  return false;
+}

@@ -3,7 +3,7 @@ import type React from 'react';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
-import { getModulosAtivosForContext } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import {
   Users,
   Palmtree,
@@ -18,6 +18,7 @@ import {
   Megaphone,
   CalendarDays,
   Cake,
+  FolderArchive,
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -78,6 +79,12 @@ const MODULE_GROUPS: MenuGroup[] = [
       { label: 'Correspondências', path: '/secretaria/correspondencias', module: 'secretaria' },
       { label: 'Arquivo', path: '/secretaria/arquivo', module: 'secretaria' },
     ],
+  },
+  {
+    label: 'Gestão documental',
+    module: 'gestao-documentos',
+    icon: FolderArchive,
+    children: [{ label: 'Documentos', path: '/gestao-documentos', module: 'gestao-documentos' }],
   },
   {
     label: 'Jurídico',
@@ -158,7 +165,7 @@ export function HorizontalMenu() {
     // Evita que uma configuração incompleta em `modulos_ativos` (multi-tenant) esconda o menu.
     if (user.perfil === 'Colaborador') return true;
     if (modulosAtivos == null) return true;
-    return modulosAtivos.includes(moduleId);
+    return empresaTemModuloActivado(modulosAtivos, moduleId);
   };
 
   const isColaborador = user.perfil === 'Colaborador';
@@ -200,6 +207,7 @@ export function HorizontalMenu() {
     '/secretaria/reunioes': <Stamp className="h-4 w-4" />,
     '/secretaria/actas': <FileText className="h-4 w-4" />,
     '/secretaria/documentos': <FileText className="h-4 w-4" />,
+    '/gestao-documentos': <FolderArchive className="h-4 w-4" />,
     '/secretaria/correspondencias': <MessageCircle className="h-4 w-4" />,
     '/secretaria/arquivo': <Scale className="h-4 w-4" />,
     '/juridico/contratos': <Scale className="h-4 w-4" />,
