@@ -95,9 +95,100 @@ export interface Database {
           created_at?: string;
         };
       };
+      intranet_chat_conversations: {
+        Row: {
+          id: string;
+          type: string;
+          name: string | null;
+          participant_ids: number[];
+          created_by_profile_id: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          name?: string | null;
+          participant_ids: number[];
+          created_by_profile_id: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          name?: string | null;
+          participant_ids?: number[];
+          created_by_profile_id?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      intranet_chat_messages: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          sender_profile_id: number;
+          content: string;
+          attachments: Json;
+          read_by_profile_ids: number[];
+          pinned: boolean;
+          pinned_at: string | null;
+          pinned_by_profile_id: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          sender_profile_id: number;
+          content: string;
+          attachments?: Json;
+          read_by_profile_ids?: number[];
+          pinned?: boolean;
+          pinned_at?: string | null;
+          pinned_by_profile_id?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          conversation_id?: string;
+          sender_profile_id?: number;
+          content?: string;
+          attachments?: Json;
+          read_by_profile_ids?: number[];
+          pinned?: boolean;
+          pinned_at?: string | null;
+          pinned_by_profile_id?: number | null;
+          created_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      intranet_chat_mark_conversation_read: {
+        Args: { p_conversation_id: string };
+        Returns: undefined;
+      };
+      intranet_chat_latest_messages: {
+        Args: { p_conversation_ids: string[] };
+        Returns: {
+          id: string;
+          conversation_id: string;
+          sender_profile_id: number;
+          content: string;
+          attachments: Json;
+          read_by_profile_ids: number[];
+          pinned: boolean;
+          pinned_at: string | null;
+          pinned_by_profile_id: number | null;
+          created_at: string;
+        }[];
+      };
+      intranet_chat_unread_summary: {
+        Args: Record<string, never>;
+        Returns: { conversation_id: string; unread_count: number }[];
+      };
+    };
     Enums: Record<string, never>;
   };
 }

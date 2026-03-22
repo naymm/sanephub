@@ -60,7 +60,6 @@ function ChatContent() {
 export default function ChatPage() {
   return (
     <div className="space-y-4">
-      
       <ChatContent />
     </div>
   );

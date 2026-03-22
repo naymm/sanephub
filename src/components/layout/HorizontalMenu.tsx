@@ -28,7 +28,6 @@ type MenuGroup = { label: string; module?: string; children: MenuChild[]; icon?:
 
 const GENERAL_ITEMS: MenuChild[] = [
   { label: 'Dashboard', path: '/dashboard', module: 'dashboard' },
-  { label: 'Chat', path: '/chat', module: 'dashboard' },
   { label: 'Notificações', path: '/notificacoes', module: 'dashboard' },
 ];
 
@@ -186,7 +185,6 @@ export function HorizontalMenu() {
   // Ícones fixos para alguns itens; para outros usamos o rótulo.
   const iconByPath: Record<string, React.ReactNode> = {
     '/dashboard': <span className="text-[11px] font-bold">D</span>,
-    '/chat': <MessageCircle className="h-4 w-4" />,
     '/notificacoes': <Bell className="h-4 w-4" />,
     '/portal/ferias': <Palmtree className="h-4 w-4" />,
     '/portal/declaracoes': <FileText className="h-4 w-4" />,
@@ -245,6 +243,17 @@ export function HorizontalMenu() {
               {iconByPath['/dashboard'] ? iconByPath['/dashboard'] : <span>D</span>}
               <span className="hidden sm:inline">Dashboard</span>
             </NavLink>
+
+            {GENERAL_ITEMS.filter(i => i.path !== '/dashboard' && canShowModule(i.module)).map(item => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) => itemClass(isActive || location.pathname === item.path)}
+              >
+                {iconByPath[item.path] ? iconByPath[item.path] : <span>{item.label.split(' ')[0]}</span>}
+                <span className="hidden sm:inline">{item.label}</span>
+              </NavLink>
+            ))}
 
             {MODULE_GROUPS.flatMap(g => {
               // Para Colaborador, mostramos Comunicação Interna como leitura

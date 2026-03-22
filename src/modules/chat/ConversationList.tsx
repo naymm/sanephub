@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageCircle, Users } from 'lucide-react';
+import { conversaSoEntreColaboradores } from '@/utils/chatColaboradores';
 
 interface ConversationListProps {
   selectedId: string | null;
@@ -21,7 +22,10 @@ export function ConversationList({ selectedId, onSelect, onNewConversation }: Co
     getUnreadCount,
   } = useChat();
 
-  const myConversations = conversations.filter(c => c.participantIds.includes(user?.id ?? 0));
+  const myConversations = conversations.filter(
+    c =>
+      c.participantIds.includes(user?.id ?? 0) && conversaSoEntreColaboradores(c.participantIds, usuarios),
+  );
 
   return (
     <div className="flex flex-col h-full border-r border-border bg-muted/20">

@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, Users, Search } from 'lucide-react';
+import { usuariosColaboradoresParaChat } from '@/utils/chatColaboradores';
 
 interface NewConversationModalProps {
   open: boolean;
@@ -31,7 +32,7 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const others = usuarios.filter(u => u.id !== user?.id);
+  const others = usuariosColaboradoresParaChat(user, usuarios);
   const filteredOthers = searchQuery.trim()
     ? others.filter(
         u =>
@@ -44,9 +45,9 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
     setSelectedGroupIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   };
 
-  const handleCreatePrivate = () => {
+  const handleCreatePrivate = async () => {
     if (!selectedUserId) return;
-    const id = createPrivateConversation(selectedUserId);
+    const id = await createPrivateConversation(selectedUserId);
     if (id) {
       onCreated(id);
       onOpenChange(false);
@@ -55,9 +56,10 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
     }
   };
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (selectedGroupIds.length === 0) return;
-    const id = createGroupConversation(groupName.trim() || 'Grupo', selectedGroupIds);
+    const id = await createGroupConversation(groupName.trim() || 'Grupo', selectedGroupIds);
+    if (!id) return;
     onCreated(id);
     onOpenChange(false);
     setGroupName('');
@@ -75,7 +77,9 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Nova conversa</DialogTitle>
-          <DialogDescription>Inicie uma conversa privada ou crie um grupo.</DialogDescription>
+          <DialogDescription>
+            Converse com qualquer utilizador do sistema (todas as empresas). Privada ou grupo.
+          </DialogDescription>
         </DialogHeader>
         <Tabs value={tab} onValueChange={v => setTab(v as 'private' | 'group')}>
           <TabsList className="grid w-full grid-cols-2">
@@ -101,7 +105,11 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
             </div>
             <div className="max-h-60 overflow-y-auto space-y-1 border rounded-md p-1">
               {filteredOthers.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhum utilizador encontrado.</p>
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {others.length === 0
+                    ? 'Não há outros utilizadores disponíveis para conversa.'
+                    : 'Nenhum resultado para a pesquisa.'}
+                </p>
               ) : (
               filteredOthers.map(u => (
                 <button
@@ -143,7 +151,11 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
               </div>
               <div className="max-h-48 overflow-y-auto space-y-1 border rounded-md p-1">
                 {filteredOthers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum utilizador encontrado.</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {others.length === 0
+                      ? 'Não há outros utilizadores disponíveis para conversa.'
+                      : 'Nenhum resultado para a pesquisa.'}
+                  </p>
                 ) : (
                 filteredOthers.map(u => (
                   <label

@@ -146,17 +146,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchProfileAndSetUser]);
 
-  // Com Supabase: carregar lista de utilizadores a partir de profiles (não usar seed/localStorage).
-  useEffect(() => {
+  // Com Supabase: lista de utilizadores só após haver sessão (JWT), senão a RLS devolve vazio.
+  // Recarrega ao iniciar sessão / mudar utilizador (evita «Não há outros utilizadores» no Chat).
+  const fetchUsuariosProfiles = useCallback(async () => {
     if (!isSupabaseConfigured() || !supabase) return;
-    supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .order('id', { ascending: true })
-      .then(({ data, error }) => {
-        if (!error && data) setUsuarios(data.map((row) => profileToUsuario(row as ProfileRow)));
-      });
+      .order('id', { ascending: true });
+    if (error) {
+      console.error('[auth] Erro ao carregar lista de perfis', error);
+      return;
+    }
+    setUsuarios((data ?? []).map((row) => profileToUsuario(row as ProfileRow)));
   }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    if (!user) {
+      setUsuarios([]);
+      return;
+    }
+    void fetchUsuariosProfiles();
+  }, [user?.id, fetchUsuariosProfiles]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -263,7 +275,19 @@ export function useAuth() {
 }
 
 const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
-  'dashboard': ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'],
+  /** Chat, notificações e entrada geral — disponível a todos os perfis (ver também `hasModuleAccess`). */
+  'dashboard': [
+    'Admin',
+    'PCA',
+    'Planeamento',
+    'Director',
+    'RH',
+    'Financeiro',
+    'Contabilidade',
+    'Secretaria',
+    'Juridico',
+    'Colaborador',
+  ],
   'capital-humano': ['Admin', 'RH'],
   'financas': ['Admin', 'Financeiro'],
   'contabilidade': ['Admin', 'Contabilidade', 'Financeiro'],
@@ -292,6 +316,8 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
 export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (!user) return false;
   if (user.perfil === 'Admin') return true;
+  // Dashboard no menu agrupa Chat + Notificações (+ link ao painel): sempre acessível a quem tem sessão.
+  if (module === 'dashboard') return true;
   if (user.perfil === 'Colaborador') {
     if (!Array.isArray(user.modulos) || user.modulos.length === 0) {
       return MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;

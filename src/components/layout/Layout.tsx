@@ -5,6 +5,7 @@ import { useTenant } from '@/context/TenantContext';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { IntranetTopbar } from './IntranetTopbar';
 import { HorizontalMenu } from './HorizontalMenu';
+import { ChatFloatingButton } from './ChatFloatingButton';
 
 const PATH_TO_MODULE: Record<string, string> = {
   '/portal': 'portal-colaborador',
@@ -69,6 +70,7 @@ export function Layout() {
       <footer className="border-t border-border/80 px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-muted-foreground">
         © {new Date().getFullYear()} GRUPO SANEP. Todos os direitos reservados.
       </footer>
+      <ChatFloatingButton />
     </div>
   );
 }

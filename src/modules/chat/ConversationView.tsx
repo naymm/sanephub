@@ -1,6 +1,6 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useLayoutEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useChat } from '@/context/ChatContext';
+import { useChat, CHAT_PAGE_SIZE } from '@/context/ChatContext';
 import type { ChatAttachment } from '@/types/chat';
 import { MessageBubble } from './MessageBubble';
 import { formatChatTime } from '@/utils/formatters';
@@ -18,7 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Paperclip, Send, Pin, X, Users, FileText, Link2, UserMinus, Search } from 'lucide-react';
+import { Paperclip, Send, Pin, X, Users, FileText, Link2, UserMinus, Search, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 
@@ -31,6 +31,12 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const {
     conversations,
     messages,
+    usesMessagePagination,
+    setActiveConversationId,
+    ensureThreadForConversation,
+    loadOlderMessages,
+    hasMoreOlderMessages,
+    loadingOlderMessages,
     sendMessage,
     markConversationAsRead,
     getConversationDisplayName,
@@ -41,7 +47,10 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
     removeParticipantFromGroup,
     canManageGroup,
   } = useChat();
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
+  const loadingOlderScrollRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+  const [localHistoryExtra, setLocalHistoryExtra] = useState(0);
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -51,18 +60,100 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const [groupLinksSearch, setGroupLinksSearch] = useState('');
 
   const conv = useMemo(() => conversations.find(c => c.id === conversationId), [conversations, conversationId]);
-  const convMessages = useMemo(
-    () => messages.filter(m => m.conversationId === conversationId).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [messages, conversationId]
+
+  const allConvMessagesSorted = useMemo(
+    () =>
+      messages
+        .filter(m => m.conversationId === conversationId)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    [messages, conversationId],
   );
+
+  const convMessages = useMemo(() => {
+    if (usesMessagePagination) {
+      return allConvMessagesSorted;
+    }
+    const take = CHAT_PAGE_SIZE + localHistoryExtra;
+    if (allConvMessagesSorted.length <= take) return allConvMessagesSorted;
+    return allConvMessagesSorted.slice(-take);
+  }, [usesMessagePagination, allConvMessagesSorted, localHistoryExtra]);
+
+  const hasMoreLocalOlder =
+    !usesMessagePagination && allConvMessagesSorted.length > CHAT_PAGE_SIZE + localHistoryExtra;
+
+  useEffect(() => {
+    setActiveConversationId(conversationId);
+    return () => setActiveConversationId(null);
+  }, [conversationId, setActiveConversationId]);
+
+  useEffect(() => {
+    setLocalHistoryExtra(0);
+    nearBottomRef.current = true;
+    loadingOlderScrollRef.current = null;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId || !usesMessagePagination) return;
+    void ensureThreadForConversation(conversationId).then(() => {
+      requestAnimationFrame(() => {
+        const el = scrollViewportRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    });
+  }, [conversationId, usesMessagePagination, ensureThreadForConversation]);
 
   useEffect(() => {
     if (conversationId) markConversationAsRead(conversationId);
   }, [conversationId, markConversationAsRead]);
 
+  useLayoutEffect(() => {
+    const p = loadingOlderScrollRef.current;
+    if (!p || !scrollViewportRef.current) return;
+    loadingOlderScrollRef.current = null;
+    const el = scrollViewportRef.current;
+    el.scrollTop = el.scrollHeight - p.prevHeight + p.prevTop;
+  }, [convMessages.length, conversationId]);
+
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [convMessages.length]);
+    if (!nearBottomRef.current) return;
+    const el = scrollViewportRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [convMessages.length, conversationId]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = scrollViewportRef.current;
+    if (!el || !conversationId) return;
+    const threshold = 100;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+
+    if (el.scrollTop > 72) return;
+
+    if (usesMessagePagination) {
+      if (!hasMoreOlderMessages(conversationId) || loadingOlderMessages(conversationId)) return;
+      const prevHeight = el.scrollHeight;
+      const prevTop = el.scrollTop;
+      void loadOlderMessages(conversationId).then(() => {
+        requestAnimationFrame(() => {
+          const n = scrollViewportRef.current;
+          if (!n) return;
+          n.scrollTop = n.scrollHeight - prevHeight + prevTop;
+        });
+      });
+      return;
+    }
+
+    if (!hasMoreLocalOlder) return;
+    loadingOlderScrollRef.current = { prevHeight: el.scrollHeight, prevTop: el.scrollTop };
+    setLocalHistoryExtra(prev => prev + CHAT_PAGE_SIZE);
+  }, [
+    conversationId,
+    usesMessagePagination,
+    hasMoreOlderMessages,
+    loadingOlderMessages,
+    loadOlderMessages,
+    hasMoreLocalOlder,
+  ]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value;
@@ -119,6 +210,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const handleSend = () => {
     const text = input.trim();
     if (!conversationId || (!text && attachments.length === 0)) return;
+    nearBottomRef.current = true;
     sendMessage(conversationId, text || '(ficheiro anexado)', attachments);
     setInput('');
     setAttachments([]);
@@ -385,8 +477,27 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
         </div>
       </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
+      {/* Messages (scroll no viewport nativo para paginação estilo WhatsApp Web) */}
+      <div
+        ref={scrollViewportRef}
+        className="flex-1 min-h-0 overflow-y-auto p-4"
+        onScroll={handleMessagesScroll}
+      >
+        {(usesMessagePagination
+          ? hasMoreOlderMessages(conversationId)
+          : hasMoreLocalOlder) && (
+          <div className="flex flex-col items-center justify-center gap-1 py-3 text-muted-foreground">
+            {usesMessagePagination && loadingOlderMessages(conversationId) ? (
+              <Loader2 className="h-5 w-5 animate-spin" aria-label="A carregar mensagens" />
+            ) : (
+              <span className="text-xs text-center px-2">
+                {usesMessagePagination
+                  ? 'Deslize para cima para carregar mensagens mais antigas'
+                  : 'Deslize para cima para ver o histórico anterior'}
+              </span>
+            )}
+          </div>
+        )}
         <div className="space-y-3">
           {convMessages.map(m => (
             <MessageBubble
@@ -396,9 +507,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
               onPin={togglePinMessage}
             />
           ))}
-          <div ref={scrollRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Composer */}
       <div className="shrink-0 border-t border-border p-3 bg-muted/20">
