@@ -26,7 +26,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import {
+  criarPastaColaboradorNaGestao,
+  nomePastaColaboradorMaiusculo,
+  uploadDocumentosColaboradorParaPasta,
+} from '@/lib/colaboradorGestaoDocumentos';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -72,9 +78,34 @@ const emptyForm: Omit<Colaborador, 'id'> = {
   status: 'Activo',
 };
 
+const DOC_EXT = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx']);
+
+function extDoc(nome: string): string {
+  const i = nome.lastIndexOf('.');
+  return i >= 0 ? nome.slice(i + 1).toLowerCase() : '';
+}
+
+function formatBytesDoc(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** ID de empresa positivo para Gestão documental / RLS (evita NaN por tipos inconsistentes). */
+function parseEmpresaIdGestao(...candidates: unknown[]): number {
+  for (const v of candidates) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return NaN;
+}
+
 export default function ColaboradoresPage() {
   const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas, departamentos: departamentosCatalogo, refetch } = useData();
-  const { usuarios } = useAuth();
+  const { usuarios, user } = useAuth();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const [search, setSearch] = useState('');
@@ -86,6 +117,12 @@ export default function ColaboradoresPage() {
   const [viewItem, setViewItem] = useState<Colaborador | null>(null);
   const [form, setForm] = useState<Omit<Colaborador, 'id'>>(emptyForm);
   const [associarUtilizadorId, setAssociarUtilizadorId] = useState<number | null>(null);
+  /** Anexos do cadastro (só «Novo colaborador») — enviados para Gestão documental após criar o registo. */
+  const [novoColaboradorAnexos, setNovoColaboradorAnexos] = useState<File[]>([]);
+  const [docDragActive, setDocDragActive] = useState(false);
+  const docDragDepth = useRef(0);
+  const novoDocInputRef = useRef<HTMLInputElement>(null);
+  const [saving, setSaving] = useState(false);
 
   const usePaginated = isSupabaseConfigured() && !!supabase;
   const [page, setPage] = useState(0);
@@ -212,12 +249,18 @@ export default function ColaboradoresPage() {
   const openCreate = () => {
     setEditing(null);
     setAssociarUtilizadorId(null);
+    setNovoColaboradorAnexos([]);
+    docDragDepth.current = 0;
+    setDocDragActive(false);
     const today = new Date().toISOString().slice(0, 10);
     setForm({ ...emptyForm, empresaId: empresaIdForNew, dataAdmissao: today });
     setDialogOpen(true);
   };
 
   const openEdit = (c: Colaborador) => {
+    setNovoColaboradorAnexos([]);
+    docDragDepth.current = 0;
+    setDocDragActive(false);
     setEditing(c);
     const usuarioLinked = usuarios.find(u => u.colaboradorId === c.id);
     setAssociarUtilizadorId(usuarioLinked?.id ?? null);
@@ -250,17 +293,42 @@ export default function ColaboradoresPage() {
     setDialogOpen(true);
   };
 
+  const applyNovoColaboradorFiles = (raw: File[]) => {
+    const list = raw.filter((f) => DOC_EXT.has(extDoc(f.name)));
+    const skipped = raw.length - list.length;
+    if (skipped > 0) {
+      toast.error(`${skipped} ficheiro(s) ignorados (use PDF, Word ou Excel).`);
+    }
+    setNovoColaboradorAnexos((prev) => {
+      const seen = new Set(prev.map((p) => `${p.name}-${p.size}`));
+      const merged = [...prev];
+      for (const f of list) {
+        const k = `${f.name}-${f.size}`;
+        if (!seen.has(k)) {
+          seen.add(k);
+          merged.push(f);
+        }
+      }
+      return merged;
+    });
+  };
+
   const save = async () => {
     if (!form.nome.trim() || !form.emailCorporativo.trim()) return;
     const payload = { ...form, empresaId: form.empresaId ?? empresaIdForNew };
+    setSaving(true);
     try {
       let colaboradorId: number;
+      /** Empresa usada na pasta/arquivos (prioriza valor gravado na BD no insert). */
+      let empresaIdParaGestao = parseEmpresaIdGestao(payload.empresaId, empresaIdForNew);
       if (editing) {
         await updateColaborador(editing.id, payload);
         colaboradorId = editing.id;
+        empresaIdParaGestao = parseEmpresaIdGestao(payload.empresaId, empresaIdForNew);
       } else {
         const created = await addColaborador(payload);
         colaboradorId = created.id;
+        empresaIdParaGestao = parseEmpresaIdGestao(created.empresaId, payload.empresaId, empresaIdForNew);
       }
       if (isSupabaseConfigured() && supabase && (associarUtilizadorId != null || editing)) {
         const colabIdToSync = editing ? editing.id : colaboradorId;
@@ -277,16 +345,83 @@ export default function ColaboradoresPage() {
           if (linkErr) throw new Error(linkErr.message);
         }
       }
+
+      let docSuccessSuffix = '';
+      const profileIdGestao = user?.id != null ? Number(user.id) : NaN;
+      const podeEnviarDocs =
+        !editing &&
+        novoColaboradorAnexos.length > 0 &&
+        isSupabaseConfigured() &&
+        !!supabase &&
+        Number.isFinite(profileIdGestao) &&
+        profileIdGestao > 0 &&
+        Number.isFinite(empresaIdParaGestao) &&
+        empresaIdParaGestao > 0;
+
+      if (!editing && novoColaboradorAnexos.length > 0 && !podeEnviarDocs) {
+        const razoes: string[] = [];
+        if (!isSupabaseConfigured() || !supabase) razoes.push('Supabase não está configurado.');
+        else if (!Number.isFinite(profileIdGestao) || profileIdGestao <= 0)
+          razoes.push('Sessão sem perfil válido (volte a iniciar sessão).');
+        else if (!Number.isFinite(empresaIdParaGestao) || empresaIdParaGestao <= 0)
+          razoes.push(
+            `Empresa inválida para documentos (empresaId: ${String(payload.empresaId ?? empresaIdForNew)}).`,
+          );
+        toast.error(
+          `Colaborador criado, mas ${novoColaboradorAnexos.length} documento(s) não foram enviados: ${razoes.join(' ')}`,
+          { duration: 14_000 },
+        );
+      }
+
+      if (podeEnviarDocs && supabase && user) {
+        const pastaRes = await criarPastaColaboradorNaGestao(
+          supabase,
+          empresaIdParaGestao,
+          colaboradorId,
+          payload.nome.trim(),
+        );
+        if ('error' in pastaRes) {
+          toast.error(
+            `Colaborador criado, mas não foi possível criar a pasta em Gestão documental: ${pastaRes.error}`,
+            { duration: 12_000 },
+          );
+        } else {
+          const up = await uploadDocumentosColaboradorParaPasta(
+            supabase,
+            empresaIdParaGestao,
+            profileIdGestao,
+            pastaRes.pastaId,
+            novoColaboradorAnexos,
+          );
+          if (up.ok > 0) {
+            docSuccessSuffix = ` ${up.ok} documento(s) em Capital Humano / Colaboradores / ${nomePastaColaboradorMaiusculo(payload.nome.trim())}.`;
+          }
+          if (up.errors.length > 0) {
+            toast.error(
+              up.errors.length <= 2
+                ? up.errors.join(' ')
+                : `${up.errors.slice(0, 2).join(' ')}… (+${up.errors.length - 2})`,
+              { duration: 12_000 },
+            );
+          }
+        }
+      }
+
       setDialogOpen(false);
       setEditing(null);
       setAssociarUtilizadorId(null);
+      setNovoColaboradorAnexos([]);
       if (usePaginated) {
         fetchPaginated();
         refetch();
       }
-      toast.success(editing ? 'Colaborador actualizado.' : 'Colaborador criado.');
+      toast.success(
+        (editing ? 'Colaborador actualizado.' : 'Colaborador criado.') + docSuccessSuffix,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -406,7 +541,11 @@ export default function ColaboradoresPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar colaborador' : 'Novo colaborador'}</DialogTitle>
-            <DialogDescription>Dados do colaborador.</DialogDescription>
+            <DialogDescription>
+              {editing
+                ? 'Dados do colaborador.'
+                : 'Dados do colaborador. Pode anexar documentos (arrastar ou clicar) — serão guardados na pasta «Colaboradores» já existente em Gestão documental (Capital Humano ou RH), dentro de uma subpasta com o nome do colaborador em maiúsculas.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
@@ -594,6 +733,101 @@ export default function ColaboradoresPage() {
                 </SelectContent>
               </Select>
             </div>
+            {!editing && isSupabaseConfigured() && (
+              <div className="space-y-3 border-t border-border/80 pt-4">
+                <Label className="text-base">Documentos para a pasta do colaborador</Label>
+                <p className="text-xs text-muted-foreground">
+                  Ao guardar, é criada só a subpasta do colaborador em{' '}
+                  <strong>… / Colaboradores / {form.nome.trim() ? nomePastaColaboradorMaiusculo(form.nome) : 'PRIMEIRO ÚLTIMO'}</strong>{' '}
+                  (primeiro e último nome em maiúsculas), desde que «Capital Humano» (ou «RH») e «Colaboradores» já existam na Gestão documental.
+                </p>
+                <div
+                  className={cn(
+                    'cursor-pointer rounded-lg border-2 border-dashed px-3 py-6 text-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    docDragActive
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border/80 bg-muted/20 hover:border-muted-foreground/40 hover:bg-muted/30',
+                  )}
+                  onClick={() => novoDocInputRef.current?.click()}
+                  onDragEnter={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    docDragDepth.current += 1;
+                    setDocDragActive(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    docDragDepth.current -= 1;
+                    if (docDragDepth.current <= 0) {
+                      docDragDepth.current = 0;
+                      setDocDragActive(false);
+                    }
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'copy';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    docDragDepth.current = 0;
+                    setDocDragActive(false);
+                    applyNovoColaboradorFiles(Array.from(e.dataTransfer.files));
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault();
+                      novoDocInputRef.current?.click();
+                    }
+                  }}
+                >
+                  <input
+                    ref={novoDocInputRef}
+                    type="file"
+                    multiple
+                    className="sr-only"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={(e) => {
+                      applyNovoColaboradorFiles(e.target.files ? Array.from(e.target.files) : []);
+                      e.target.value = '';
+                    }}
+                  />
+                  <UploadCloud
+                    className={cn('mx-auto h-9 w-9', docDragActive ? 'text-primary' : 'text-muted-foreground')}
+                    aria-hidden
+                  />
+                  <p className="mt-2 text-sm font-medium">Arraste documentos aqui ou clique para seleccionar</p>
+                  <p className="mt-1 text-xs text-muted-foreground">PDF, Word ou Excel · vários ficheiros</p>
+                </div>
+                {novoColaboradorAnexos.length > 0 && (
+                  <ul className="max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-border/60 bg-background/50 p-2 text-xs">
+                    {novoColaboradorAnexos.map((f, i) => (
+                      <li key={`${i}-${f.name}-${f.size}`} className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate font-medium">{f.name}</span>
+                        <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
+                          {extDoc(f.name).toUpperCase()} · {formatBytesDoc(f.size)}
+                          <button
+                            type="button"
+                            className="rounded p-0.5 text-destructive hover:bg-destructive/10"
+                            aria-label={`Remover ${f.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNovoColaboradorAnexos((prev) => prev.filter((_, j) => j !== i));
+                            }}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {isSupabaseConfigured() && usuarios.length > 0 && (
               <div className="space-y-2 border-t border-border/80 pt-4">
                 <Label>Associar a utilizador (opcional)</Label>
@@ -616,8 +850,15 @@ export default function ColaboradoresPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.nome.trim() || !form.emailCorporativo.trim()}>Guardar</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={save}
+              disabled={!form.nome.trim() || !form.emailCorporativo.trim() || saving}
+            >
+              {saving ? 'A guardar…' : 'Guardar'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
