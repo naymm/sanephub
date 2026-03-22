@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useTenant } from '@/context/TenantContext';
@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DocxPreviewDialog } from '@/components/DocxPreviewDialog';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -51,10 +52,12 @@ import {
   MoreVertical,
   Pencil,
   Move,
+  UploadCloud,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pt } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { nomeFicheiroParaDownload } from '@/utils/nomeFicheiroDownload';
 
 const BUCKET = 'gestao-documentos';
 
@@ -151,6 +154,21 @@ function tituloSugeridoDeNomeArquivo(nome: string): string {
   return cleaned.toLocaleUpperCase('pt-PT');
 }
 
+/** Word moderno (.docx) — pré-visualização no browser com docx-preview. */
+function isDocxArquivo(a: GestaoDocumentoArquivo): boolean {
+  const ext = (a.tipoFicheiro || extensaoDeNome(a.nomeFicheiro)).toLowerCase();
+  if (ext === 'docx') return true;
+  const mt = (a.mimeType || '').toLowerCase();
+  return mt.includes('wordprocessingml') || mt.includes('officedocument.wordprocessingml.document');
+}
+
+function isPdfArquivo(a: GestaoDocumentoArquivo): boolean {
+  const ext = (a.tipoFicheiro || extensaoDeNome(a.nomeFicheiro)).toLowerCase();
+  if (ext === 'pdf') return true;
+  const mt = (a.mimeType || '').toLowerCase();
+  return mt === 'application/pdf' || mt.includes('pdf');
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -210,6 +228,36 @@ function findNodeById(nodes: TreeNode[], id: number): TreeNode | null {
   return null;
 }
 
+/** Pasta de destino por defeito ao abrir o diálogo «Mover». */
+function defaultMoverDestinoPastaId(
+  arquivos: GestaoDocumentoArquivo[],
+  pastas: GestaoDocumentoPasta[],
+): number | null {
+  if (pastas.length === 0) return null;
+  const origemIds = new Set(arquivos.map(a => a.pastaId));
+  if (origemIds.size === 1) {
+    const only = [...origemIds][0];
+    const alt = pastas.find(p => p.id !== only);
+    return alt?.id ?? null;
+  }
+  const alt = pastas.find(p => !origemIds.has(p.id));
+  return alt?.id ?? pastas[0]?.id ?? null;
+}
+
+/** Opções do selector: se todos vêm da mesma pasta, essa pasta é excluída; com várias origens, mostra todas. */
+function pastasOpcoesDestinoMover(
+  arquivos: GestaoDocumentoArquivo[],
+  pastas: GestaoDocumentoPasta[],
+): GestaoDocumentoPasta[] {
+  if (arquivos.length === 0) return pastas;
+  const origemIds = new Set(arquivos.map(a => a.pastaId));
+  if (origemIds.size === 1) {
+    const only = [...origemIds][0];
+    return pastas.filter(p => p.id !== only);
+  }
+  return pastas;
+}
+
 function getBreadcrumbTrail(
   currentId: number | null,
   pastas: GestaoDocumentoPasta[],
@@ -237,14 +285,107 @@ function fileExtLabel(tipo: string): string {
   return '—';
 }
 
-/** Indicador de tipo neutro (sem cores de marca). */
+/** Ícone estilo Microsoft Word (doc/docx) — azul com W. */
+function IconWordDoc({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="6" fill="#185ABD" />
+      <path fill="#fff" d="M14 12h18l8 8v24a2 2 0 0 1-2 2H14V12z" opacity="0.1" />
+      <path fill="#fff" d="M32 12v8h8" opacity="0.22" />
+      <text
+        x="24"
+        y="33"
+        textAnchor="middle"
+        fill="#fff"
+        fontSize="22"
+        fontWeight="700"
+        fontFamily="Segoe UI, system-ui, sans-serif"
+      >
+        W
+      </text>
+    </svg>
+  );
+}
+
+/** Ícone estilo documento PDF (vermelho). */
+function IconPdf({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="6" fill="#E5252A" />
+      <path fill="#fff" d="M14 10h16l8 8v24a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V12a2 2 0 0 1 2-2z" opacity="0.15" />
+      <path fill="#fff" d="M30 10v8h8" opacity="0.4" />
+      <text
+        x="24"
+        y="33"
+        textAnchor="middle"
+        fill="#fff"
+        fontSize="13"
+        fontWeight="700"
+        fontFamily="system-ui, sans-serif"
+      >
+        PDF
+      </text>
+    </svg>
+  );
+}
+
+/** Excel (verde) — xls/xlsx. */
+function IconExcel({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="6" fill="#217346" />
+      <path fill="#fff" d="M14 12h18l8 8v24a2 2 0 0 1-2 2H14V12z" opacity="0.1" />
+      <path fill="#fff" d="M32 12v8h8" opacity="0.22" />
+      <text
+        x="24"
+        y="33"
+        textAnchor="middle"
+        fill="#fff"
+        fontSize="22"
+        fontWeight="700"
+        fontFamily="Segoe UI, system-ui, sans-serif"
+      >
+        X
+      </text>
+    </svg>
+  );
+}
+
+/** Ícone por tipo de ficheiro (Word, PDF, Excel); fallback texto. */
 function FileTypeBadge({ tipo, compact }: { tipo: string; compact?: boolean }) {
+  const t = (tipo || '').toLowerCase();
+  const box = cn(
+    'shrink-0 overflow-hidden rounded-md shadow-sm ring-1 ring-black/5 dark:ring-white/10',
+    compact ? 'h-8 w-9' : 'h-11 w-12',
+  );
+  if (t === 'pdf') {
+    return (
+      <div className={box} title="PDF">
+        <IconPdf className="h-full w-full" />
+      </div>
+    );
+  }
+  if (t === 'docx' || t === 'doc') {
+    return (
+      <div className={box} title="Microsoft Word">
+        <IconWordDoc className="h-full w-full" />
+      </div>
+    );
+  }
+  if (t === 'xls' || t === 'xlsx') {
+    return (
+      <div className={box} title="Microsoft Excel">
+        <IconExcel className="h-full w-full" />
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
         'flex items-center justify-center rounded-md border border-border/80 bg-muted/40 font-medium text-muted-foreground shrink-0 tabular-nums',
         compact ? 'h-8 w-9 text-[10px]' : 'h-11 w-12 text-xs',
       )}
+      title={fileExtLabel(tipo)}
     >
       {fileExtLabel(tipo)}
     </div>
@@ -297,8 +438,14 @@ export default function GestaoDocumentosPage() {
   const [formModulos, setFormModulos] = useState<string[]>([]);
   const [formSectores, setFormSectores] = useState<string[]>([]);
   const [formOrigem, setFormOrigem] = useState(ORIGEM_NONE);
-  const [formFile, setFormFile] = useState<File | null>(null);
+  const [formFiles, setFormFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  /** IDs de documentos marcados para eliminação em lote (lista actual). */
+  const [arquivosSelecionadosIds, setArquivosSelecionadosIds] = useState<number[]>([]);
+  const [deletingArquivosBulk, setDeletingArquivosBulk] = useState(false);
+  const uploadFileInputRef = useRef<HTMLInputElement>(null);
+  const uploadDragDepth = useRef(0);
+  const [uploadDragActive, setUploadDragActive] = useState(false);
 
   const [novaPastaNome, setNovaPastaNome] = useState('');
   const [novaPastaParentId, setNovaPastaParentId] = useState<number | null>(null);
@@ -315,9 +462,17 @@ export default function GestaoDocumentosPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const [moverOpen, setMoverOpen] = useState(false);
-  const [moverArquivo, setMoverArquivo] = useState<GestaoDocumentoArquivo | null>(null);
+  /** Um ou vários documentos a mover (fluxo único no diálogo). */
+  const [moverArquivos, setMoverArquivos] = useState<GestaoDocumentoArquivo[]>([]);
   const [moverDestinoPastaId, setMoverDestinoPastaId] = useState<number | null>(null);
   const [savingMover, setSavingMover] = useState(false);
+
+  const [docxPreviewOpen, setDocxPreviewOpen] = useState(false);
+  const [docxPreviewArquivo, setDocxPreviewArquivo] = useState<GestaoDocumentoArquivo | null>(null);
+
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewTitulo, setPdfPreviewTitulo] = useState('');
 
   const tree = useMemo(() => buildTree(pastas), [pastas]);
 
@@ -404,7 +559,9 @@ export default function GestaoDocumentosPage() {
     return m;
   }, [pastas]);
 
-  const arquivosFiltrados = useMemo(() => {
+  const LIMITE_RECENTES_TODAS_PASTAS = 10;
+
+  const arquivosFiltradosSemLimite = useMemo(() => {
     let list = arquivos;
     if (selectedPastaId != null) {
       list = list.filter(a => a.pastaId === selectedPastaId);
@@ -435,6 +592,32 @@ export default function GestaoDocumentosPage() {
     return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [arquivos, selectedPastaId, qTitulo, filtroTipo, filtroModulo, filtroSector, dataDe, dataAte]);
 
+  /** Em «todas as pastas», só os N mais recentes (após filtros). Dentro de uma pasta, lista completa. */
+  const arquivosFiltrados = useMemo(() => {
+    if (selectedPastaId != null) return arquivosFiltradosSemLimite;
+    return arquivosFiltradosSemLimite.slice(0, LIMITE_RECENTES_TODAS_PASTAS);
+  }, [arquivosFiltradosSemLimite, selectedPastaId]);
+
+  const idsArquivosVisiveis = useMemo(() => arquivosFiltrados.map(a => a.id), [arquivosFiltrados]);
+  const selecionadosNaVista = useMemo(
+    () => idsArquivosVisiveis.filter(id => arquivosSelecionadosIds.includes(id)),
+    [idsArquivosVisiveis, arquivosSelecionadosIds],
+  );
+  const todosVisiveisSelecionados =
+    idsArquivosVisiveis.length > 0 && selecionadosNaVista.length === idsArquivosVisiveis.length;
+  const algunsVisiveisSelecionados =
+    selecionadosNaVista.length > 0 && !todosVisiveisSelecionados;
+
+  const arquivosSelecionadosCount = useMemo(
+    () => arquivos.filter(a => arquivosSelecionadosIds.includes(a.id)).length,
+    [arquivos, arquivosSelecionadosIds],
+  );
+
+  useEffect(() => {
+    const valid = new Set(arquivos.map(a => a.id));
+    setArquivosSelecionadosIds(prev => prev.filter(id => valid.has(id)));
+  }, [arquivos]);
+
   const logAudit = async (
     arquivoId: number,
     accao: GestaoDocumentoAuditoria['accao'],
@@ -460,21 +643,52 @@ export default function GestaoDocumentosPage() {
     const url = publicUrl(a.storagePath);
     if (!url) return;
     await logAudit(a.id, 'view', { nome: a.nomeFicheiro });
+    if (isDocxArquivo(a)) {
+      setDocxPreviewArquivo(a);
+      setDocxPreviewOpen(true);
+      return;
+    }
+    if (isPdfArquivo(a)) {
+      setPdfPreviewUrl(url);
+      setPdfPreviewTitulo(a.titulo);
+      setPdfPreviewOpen(true);
+      return;
+    }
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const abrirDownload = async (a: GestaoDocumentoArquivo) => {
-    const url = publicUrl(a.storagePath);
-    if (!url) return;
-    await logAudit(a.id, 'download', { nome: a.nomeFicheiro });
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = a.nomeFicheiro;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    if (!supabase) return;
+    const nome = nomeFicheiroParaDownload(a.titulo, a.nomeFicheiro);
+    await logAudit(a.id, 'download', { nome: a.nomeFicheiro, nome_descarga: nome });
+    try {
+      const { data, error } = await supabase.storage.from(BUCKET).download(a.storagePath);
+      if (error) throw error;
+      if (!data) throw new Error('Ficheiro vazio.');
+      const blobUrl = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = nome;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      const url = publicUrl(a.storagePath);
+      if (!url) {
+        toast.error(e instanceof Error ? e.message : 'Erro ao descarregar.');
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = nome;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
   };
 
   const abrirAuditoria = async (a: GestaoDocumentoArquivo) => {
@@ -504,70 +718,151 @@ export default function GestaoDocumentosPage() {
       const { error } = await supabase.from('gestao_documentos_arquivos').delete().eq('id', a.id);
       if (error) throw error;
       toast.success('Documento eliminado.');
+      setArquivosSelecionadosIds(prev => prev.filter(id => id !== a.id));
       void loadAll();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao eliminar');
     }
   };
 
+  const toggleArquivoSelecionado = (id: number) => {
+    setArquivosSelecionadosIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    );
+  };
+
+  const toggleSelecionarTodosVisiveis = useCallback(() => {
+    if (todosVisiveisSelecionados) {
+      setArquivosSelecionadosIds(prev => prev.filter(id => !idsArquivosVisiveis.includes(id)));
+    } else {
+      setArquivosSelecionadosIds(prev => [...new Set([...prev, ...idsArquivosVisiveis])]);
+    }
+  }, [todosVisiveisSelecionados, idsArquivosVisiveis]);
+
+  const eliminarArquivosSelecionados = async () => {
+    if (!supabase || !user?.id) return;
+    if (!canManageFolders(user.perfil, user.empresaId)) return;
+    const toDelete = arquivos.filter(a => arquivosSelecionadosIds.includes(a.id));
+    if (toDelete.length === 0) return;
+    if (
+      !window.confirm(
+        `Eliminar ${toDelete.length} documento(s)? Esta acção não pode ser anulada.`,
+      )
+    )
+      return;
+    setDeletingArquivosBulk(true);
+    try {
+      for (const a of toDelete) {
+        await logAudit(a.id, 'delete', { nome: a.nomeFicheiro, em_lote: true });
+      }
+      const paths = toDelete.map(a => a.storagePath).filter(Boolean);
+      if (paths.length > 0) {
+        const { error: stErr } = await supabase.storage.from(BUCKET).remove(paths);
+        if (stErr) console.warn(stErr);
+      }
+      const { error: delA } = await supabase
+        .from('gestao_documentos_arquivos')
+        .delete()
+        .in(
+          'id',
+          toDelete.map(a => a.id),
+        );
+      if (delA) throw delA;
+      toast.success(
+        toDelete.length === 1 ? 'Documento eliminado.' : `${toDelete.length} documentos eliminados.`,
+      );
+      setArquivosSelecionadosIds(prev => prev.filter(id => !toDelete.some(a => a.id === id)));
+      void loadAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao eliminar');
+    } finally {
+      setDeletingArquivosBulk(false);
+    }
+  };
+
   const openMover = (a: GestaoDocumentoArquivo) => {
-    setMoverArquivo(a);
-    const alt = pastas.find(p => p.id !== a.pastaId);
-    setMoverDestinoPastaId(alt?.id ?? null);
+    setMoverArquivos([a]);
+    setMoverDestinoPastaId(defaultMoverDestinoPastaId([a], pastas));
+    setMoverOpen(true);
+  };
+
+  const openMoverSelecionados = () => {
+    if (empresaIdNum == null) return;
+    const list = arquivos.filter(a => arquivosSelecionadosIds.includes(a.id));
+    if (list.length === 0) {
+      toast.error('Seleccione pelo menos um documento.');
+      return;
+    }
+    setMoverArquivos(list);
+    setMoverDestinoPastaId(defaultMoverDestinoPastaId(list, pastas));
     setMoverOpen(true);
   };
 
   const executarMover = async () => {
-    if (!supabase || !moverArquivo || moverDestinoPastaId == null || empresaIdNum == null) {
+    if (!supabase || moverDestinoPastaId == null || empresaIdNum == null) {
       toast.error('Seleccione a pasta de destino.');
       return;
     }
-    if (moverDestinoPastaId === moverArquivo.pastaId) {
-      toast.error('Escolha uma pasta diferente da actual.');
+    if (moverArquivos.length === 0) {
+      toast.error('Nenhum documento seleccionado.');
       return;
     }
     const destPasta = pastas.find(p => p.id === moverDestinoPastaId);
-    if (!destPasta || destPasta.empresaId !== moverArquivo.empresaId) {
+    const first = moverArquivos[0];
+    if (!destPasta || destPasta.empresaId !== first.empresaId) {
       toast.error('Pasta de destino inválida.');
+      return;
+    }
+    const toMove = moverArquivos.filter(a => a.pastaId !== moverDestinoPastaId);
+    if (toMove.length === 0) {
+      toast.error('Todos os documentos seleccionados já estão nesta pasta.');
       return;
     }
     setSavingMover(true);
     try {
-      const fromPath = pastaPathById.get(moverArquivo.pastaId) ?? '';
       const toPath = pastaPathById.get(moverDestinoPastaId) ?? '';
-      const { data, error } = await supabase
-        .from('gestao_documentos_arquivos')
-        .update({ pasta_id: moverDestinoPastaId, updated_at: new Date().toISOString() })
-        .eq('id', moverArquivo.id)
-        .eq('empresa_id', empresaIdNum)
-        .select('id')
-        .maybeSingle();
-      if (error) throw error;
-      if (data == null) {
-        toast.error(
-          'Não foi possível mover (0 linhas). Confirme permissões de gestão documental e políticas RLS.',
-        );
-        return;
+      let auditWarn = false;
+      let ok = 0;
+      for (const moverArquivo of toMove) {
+        const fromPath = pastaPathById.get(moverArquivo.pastaId) ?? '';
+        const { data, error } = await supabase
+          .from('gestao_documentos_arquivos')
+          .update({ pasta_id: moverDestinoPastaId, updated_at: new Date().toISOString() })
+          .eq('id', moverArquivo.id)
+          .eq('empresa_id', empresaIdNum)
+          .select('id')
+          .maybeSingle();
+        if (error) throw error;
+        if (data == null) {
+          toast.error(
+            `Não foi possível mover "${moverArquivo.titulo}". Confirme permissões de gestão documental e políticas RLS.`,
+          );
+          void loadAll();
+          return;
+        }
+        const auditErr = await logAudit(moverArquivo.id, 'move', {
+          de_pasta_id: moverArquivo.pastaId,
+          de_pasta_caminho: fromPath,
+          para_pasta_id: moverDestinoPastaId,
+          para_pasta_caminho: toPath,
+          titulo: moverArquivo.titulo,
+          em_lote: toMove.length > 1,
+        });
+        if (auditErr) auditWarn = true;
+        ok += 1;
       }
-      const auditErr = await logAudit(moverArquivo.id, 'move', {
-        de_pasta_id: moverArquivo.pastaId,
-        de_pasta_caminho: fromPath,
-        para_pasta_id: moverDestinoPastaId,
-        para_pasta_caminho: toPath,
-        titulo: moverArquivo.titulo,
-      });
-      if (auditErr) {
-        console.warn(auditErr);
-        toast.success('Documento movido.', {
+      if (auditWarn) {
+        toast.success(ok === 1 ? 'Documento movido.' : `${ok} documentos movidos.`, {
           description:
-            'O registo de auditoria não foi gravado. Execute a migração 20260320000024_gestao_documentos_auditoria_accao_move.sql no Supabase (acção "move").',
+            'O registo de auditoria não foi gravado para alguns itens. Execute a migração 20260320000024_gestao_documentos_auditoria_accao_move.sql no Supabase (acção "move").',
           duration: 12_000,
         });
       } else {
-        toast.success('Documento movido.');
+        toast.success(ok === 1 ? 'Documento movido.' : `${ok} documentos movidos.`);
       }
       setMoverOpen(false);
-      setMoverArquivo(null);
+      setMoverArquivos([]);
+      setArquivosSelecionadosIds(prev => prev.filter(id => !toMove.some(a => a.id === id)));
       void loadAll();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao mover o documento');
@@ -576,68 +871,125 @@ export default function GestaoDocumentosPage() {
     }
   };
 
+  const resetFormUpload = () => {
+    setFormTitulo('');
+    setFormObs('');
+    setFormFiles([]);
+    setFormModulos([]);
+    setFormSectores([]);
+    setFormOrigem(ORIGEM_NONE);
+    uploadDragDepth.current = 0;
+    setUploadDragActive(false);
+  };
+
+  const applyUploadFiles = useCallback((raw: File[]) => {
+    const list = raw.filter(f => ALLOWED_EXT.has(extensaoDeNome(f.name)));
+    const skipped = raw.length - list.length;
+    if (skipped > 0) {
+      toast.error(`${skipped} ficheiro(s) ignorados (use PDF, Word ou Excel).`);
+    }
+    setFormFiles(list);
+    if (list.length === 1) {
+      setFormTitulo(tituloSugeridoDeNomeArquivo(list[0].name));
+    } else {
+      setFormTitulo('');
+    }
+  }, []);
+
   const guardarUpload = async () => {
     if (!supabase || empresaIdNum == null || !user?.id || formPastaId == null) {
       toast.error('Seleccione uma pasta e ficheiro.');
       return;
     }
-    const f = formFile;
-    if (!f || !formTitulo.trim()) {
+    const files = formFiles;
+    if (files.length === 0) {
+      toast.error('Seleccione pelo menos um ficheiro.');
+      return;
+    }
+    if (files.length === 1 && !formTitulo.trim()) {
       toast.error('Título e ficheiro são obrigatórios.');
       return;
     }
-    const ext = extensaoDeNome(f.name);
-    if (!ALLOWED_EXT.has(ext)) {
-      toast.error('Formato não permitido. Use PDF, Word ou Excel.');
-      return;
+    for (const f of files) {
+      const ext = extensaoDeNome(f.name);
+      if (!ALLOWED_EXT.has(ext)) {
+        toast.error(`Formato não permitido (${f.name}). Use PDF, Word ou Excel.`);
+        return;
+      }
     }
-    setSaving(true);
-    try {
-      const safe = sanitizeFileName(f.name);
-      const objectPath = `${crypto.randomUUID()}_${safe}`;
-      const fullPath = `${empresaIdNum}/${objectPath}`;
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(fullPath, f, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-      if (upErr) throw upErr;
 
-      const { data: ins, error: insErr } = await supabase
-        .from('gestao_documentos_arquivos')
-        .insert({
-          empresa_id: empresaIdNum,
-          pasta_id: formPastaId,
-          titulo: formTitulo.trim(),
-          observacao: formObs.trim(),
-          storage_path: fullPath,
-          nome_ficheiro: f.name,
-          mime_type: f.type || 'application/octet-stream',
-          tamanho_bytes: f.size,
-          tipo_ficheiro: ext,
-          modulos_acesso: formModulos,
-          sectores_acesso: formSectores,
-          origem_modulo: formOrigem === ORIGEM_NONE ? null : formOrigem,
-          uploaded_by: user.id,
-        })
-        .select('id')
-        .single();
-      if (insErr) throw insErr;
-      const newId = (ins as { id: number }).id;
-      await supabase.from('gestao_documentos_auditoria').insert({
-        arquivo_id: newId,
-        profile_id: user.id,
-        accao: 'upload',
-        detalhe: { nome: f.name, titulo: formTitulo.trim() },
-      });
-      toast.success('Documento carregado.');
-      setUploadOpen(false);
-      setFormTitulo('');
-      setFormObs('');
-      setFormFile(null);
-      setFormModulos([]);
-      setFormSectores([]);
-      setFormOrigem(ORIGEM_NONE);
-      void loadAll();
+    setSaving(true);
+    const errors: string[] = [];
+    let ok = 0;
+
+    try {
+      for (const f of files) {
+        const ext = extensaoDeNome(f.name);
+        const tituloDoc =
+          files.length === 1 ? formTitulo.trim() : tituloSugeridoDeNomeArquivo(f.name);
+        try {
+          const safe = sanitizeFileName(f.name);
+          const objectPath = `${crypto.randomUUID()}_${safe}`;
+          const fullPath = `${empresaIdNum}/${objectPath}`;
+          const { error: upErr } = await supabase.storage.from(BUCKET).upload(fullPath, f, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+          if (upErr) throw upErr;
+
+          const { data: ins, error: insErr } = await supabase
+            .from('gestao_documentos_arquivos')
+            .insert({
+              empresa_id: empresaIdNum,
+              pasta_id: formPastaId,
+              titulo: tituloDoc,
+              observacao: formObs.trim(),
+              storage_path: fullPath,
+              nome_ficheiro: f.name,
+              mime_type: f.type || 'application/octet-stream',
+              tamanho_bytes: f.size,
+              tipo_ficheiro: ext,
+              modulos_acesso: formModulos,
+              sectores_acesso: formSectores,
+              origem_modulo: formOrigem === ORIGEM_NONE ? null : formOrigem,
+              uploaded_by: user.id,
+            })
+            .select('id')
+            .single();
+          if (insErr) throw insErr;
+          const newId = (ins as { id: number }).id;
+          await supabase.from('gestao_documentos_auditoria').insert({
+            arquivo_id: newId,
+            profile_id: user.id,
+            accao: 'upload',
+            detalhe: { nome: f.name, titulo: tituloDoc },
+          });
+          ok++;
+        } catch (e) {
+          errors.push(`${f.name}: ${e instanceof Error ? e.message : 'erro'}`);
+        }
+      }
+
+      if (ok > 0) {
+        toast.success(
+          ok === 1
+            ? 'Documento carregado.'
+            : `${ok} documentos carregados${errors.length ? ` (${errors.length} falharam)` : '.'}`,
+        );
+      }
+      if (errors.length > 0) {
+        toast.error(
+          errors.length <= 2
+            ? errors.join(' ')
+            : `${errors.slice(0, 2).join(' ')}… (+${errors.length - 2})`,
+          { duration: 10_000 },
+        );
+      }
+      if (ok > 0) {
+        setUploadOpen(false);
+        resetFormUpload();
+        void loadAll();
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro no upload');
     } finally {
@@ -837,12 +1189,7 @@ export default function GestaoDocumentosPage() {
 
   const openUploadDialog = () => {
     setFormPastaId(selectedPastaId ?? pastas[0]?.id ?? null);
-    setFormTitulo('');
-    setFormObs('');
-    setFormFile(null);
-    setFormModulos([]);
-    setFormSectores([]);
-    setFormOrigem(ORIGEM_NONE);
+    resetFormUpload();
     setUploadOpen(true);
   };
 
@@ -867,6 +1214,8 @@ export default function GestaoDocumentosPage() {
   const uploadOk = canUpload(user.perfil, user.empresaId);
   /** Quem vê documentos nesta empresa pode mover entre pastas (RLS: migração `20260320000025_gestao_arquivos_update_leitores_mover.sql`). */
   const canMoverArquivos = empresaIdNum != null;
+  /** Checkboxes de selecção: quem pode eliminar em lote ou mover em lote. */
+  const showSelecaoArquivos = manage || canMoverArquivos;
   /** Quem pode criar pastas (Admin / PCA / Secretaria) pode também eliminá-las — coerente com RLS `gestao_documentos_pode_gerir`. */
   const canEliminarPastas = manage;
   /** Editar nome e permissões da pasta (RLS: update já permitido a quem gere pastas; UI só Admin). */
@@ -1140,15 +1489,85 @@ export default function GestaoDocumentosPage() {
             ) : null}
 
             <section>
-              <div className="mb-2 flex items-baseline justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Ficheiros
-                  <span className="text-foreground/70">
-                    {' '}
-                    · {selectedPastaId != null ? pastaNomeById.get(selectedPastaId) : 'todas as pastas'}
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Ficheiros
+                    <span className="text-foreground/70">
+                      {' '}
+                      · {selectedPastaId != null ? pastaNomeById.get(selectedPastaId) : 'todas as pastas'}
+                    </span>
+                    {selectedPastaId == null &&
+                    arquivosFiltradosSemLimite.length > LIMITE_RECENTES_TODAS_PASTAS ? (
+                      <span className="ml-1.5 font-normal text-muted-foreground">
+                        (últimos {LIMITE_RECENTES_TODAS_PASTAS} mais recentes)
+                      </span>
+                    ) : null}
+                  </p>
+                  {showSelecaoArquivos && arquivosFiltrados.length > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="gestao-doc-selecionar-visiveis"
+                        checked={
+                          todosVisiveisSelecionados
+                            ? true
+                            : algunsVisiveisSelecionados
+                              ? 'indeterminate'
+                              : false
+                        }
+                        onCheckedChange={() => toggleSelecionarTodosVisiveis()}
+                        aria-label="Seleccionar todos os documentos visíveis na lista"
+                      />
+                      <label
+                        htmlFor="gestao-doc-selecionar-visiveis"
+                        className="cursor-pointer text-xs text-muted-foreground"
+                      >
+                        Seleccionar visíveis
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {canMoverArquivos && arquivosSelecionadosCount > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={savingMover}
+                      onClick={() => openMoverSelecionados()}
+                    >
+                      <Move className="mr-1.5 h-3.5 w-3.5" />
+                      Mover seleccionados ({arquivosSelecionadosCount})
+                    </Button>
+                  ) : null}
+                  {manage && arquivosSelecionadosCount > 0 ? (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={deletingArquivosBulk}
+                      onClick={() => void eliminarArquivosSelecionados()}
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      Eliminar seleccionados ({arquivosSelecionadosCount})
+                    </Button>
+                  ) : null}
+                  <span
+                    className="text-xs tabular-nums text-muted-foreground"
+                    title={
+                      selectedPastaId == null && arquivosFiltradosSemLimite.length > LIMITE_RECENTES_TODAS_PASTAS
+                        ? `Total com filtros actuais: ${arquivosFiltradosSemLimite.length}`
+                        : undefined
+                    }
+                  >
+                    {selectedPastaId == null &&
+                    arquivosFiltradosSemLimite.length > LIMITE_RECENTES_TODAS_PASTAS
+                      ? `${arquivosFiltrados.length} de ${arquivosFiltradosSemLimite.length}`
+                      : arquivosFiltrados.length}
                   </span>
-                </p>
-                <span className="text-xs tabular-nums text-muted-foreground">{arquivosFiltrados.length}</span>
+                </div>
               </div>
 
               {arquivosFiltrados.length === 0 ? (
@@ -1160,12 +1579,36 @@ export default function GestaoDocumentosPage() {
                   {arquivosFiltrados.map(a => (
                     <div
                       key={a.id}
-                      className="group relative rounded-lg border border-border/60 bg-card/30 p-2.5 transition-colors hover:bg-muted/30"
+                      className={cn(
+                        'group relative rounded-lg border border-border/60 bg-card/30 p-2.5 transition-colors hover:bg-muted/30',
+                        showSelecaoArquivos && 'pl-8',
+                      )}
                     >
-                      <button
-                        type="button"
-                        className="flex w-full flex-col text-left"
-                        onDoubleClick={() => void abrirVer(a)}
+                      {showSelecaoArquivos ? (
+                        <div
+                          className="absolute left-1 top-1 z-20"
+                          onClick={e => e.stopPropagation()}
+                          onKeyDown={e => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={arquivosSelecionadosIds.includes(a.id)}
+                            onCheckedChange={() => toggleArquivoSelecionado(a.id)}
+                            aria-label={`Seleccionar documento: ${a.titulo}`}
+                          />
+                        </div>
+                      ) : null}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="flex w-full cursor-pointer flex-col text-left pr-7 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md"
+                        onClick={() => void abrirVer(a)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            void abrirVer(a);
+                          }
+                        }}
+                        aria-label={`Abrir pré-visualização: ${a.titulo}`}
                       >
                         <div className="mx-auto">
                           <FileTypeBadge tipo={a.tipoFicheiro} />
@@ -1175,8 +1618,8 @@ export default function GestaoDocumentosPage() {
                         <p className="mt-1.5 text-[10px] text-muted-foreground">
                           {formatBytes(a.tamanhoBytes)} · {format(new Date(a.createdAt), 'd MMM yyyy', { locale: pt })}
                         </p>
-                      </button>
-                      <div className="absolute right-0.5 top-0.5">
+                      </div>
+                      <div className="absolute right-0.5 top-0.5 z-10">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
@@ -1222,8 +1665,14 @@ export default function GestaoDocumentosPage() {
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-border/60">
-                  <div className="hidden grid-cols-[1fr_72px_88px_36px] gap-2 border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground sm:grid">
-                    <span>Nome</span>
+                  <div
+                    className={cn(
+                      'hidden gap-2 border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground sm:grid',
+                      showSelecaoArquivos ? 'grid-cols-[36px_1fr_72px_88px_36px]' : 'grid-cols-[1fr_72px_88px_36px]',
+                    )}
+                  >
+                    {showSelecaoArquivos ? <span className="sr-only">Seleccionar</span> : null}
+                    <span className={showSelecaoArquivos ? '' : 'col-span-1'}>Nome</span>
                     <span className="text-right">Tamanho</span>
                     <span>Data</span>
                     <span />
@@ -1232,26 +1681,53 @@ export default function GestaoDocumentosPage() {
                     {arquivosFiltrados.map(a => (
                       <li
                         key={a.id}
-                        className="flex flex-col gap-1.5 px-2 py-2 sm:grid sm:grid-cols-[1fr_72px_88px_36px] sm:items-center sm:gap-2 sm:px-3"
+                        tabIndex={0}
+                        className={cn(
+                          'flex cursor-pointer flex-col gap-1.5 px-2 py-2 transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:items-center sm:gap-2 sm:px-3',
+                          showSelecaoArquivos
+                            ? 'sm:grid sm:grid-cols-[36px_1fr_72px_88px_36px]'
+                            : 'sm:grid sm:grid-cols-[1fr_72px_88px_36px]',
+                        )}
+                        onClick={() => void abrirVer(a)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            void abrirVer(a);
+                          }
+                        }}
+                        aria-label={`Abrir pré-visualização: ${a.titulo}`}
                       >
-                        <button
-                          type="button"
-                          className="flex min-w-0 items-center gap-2.5 text-left sm:col-span-1"
-                          onDoubleClick={() => void abrirVer(a)}
-                        >
+                        {showSelecaoArquivos ? (
+                          <div
+                            className="flex shrink-0 items-center justify-center sm:justify-start"
+                            onClick={e => e.stopPropagation()}
+                            onKeyDown={e => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              checked={arquivosSelecionadosIds.includes(a.id)}
+                              onCheckedChange={() => toggleArquivoSelecionado(a.id)}
+                              aria-label={`Seleccionar documento: ${a.titulo}`}
+                            />
+                          </div>
+                        ) : null}
+                        <div className="flex min-w-0 items-center gap-2.5 text-left sm:col-span-1">
                           <FileTypeBadge tipo={a.tipoFicheiro} compact />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm">{a.titulo}</p>
                             <p className="truncate text-[11px] text-muted-foreground">{a.nomeFicheiro}</p>
                           </div>
-                        </button>
+                        </div>
                         <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:inline">
                           {formatBytes(a.tamanhoBytes)}
                         </span>
                         <span className="hidden text-xs text-muted-foreground sm:inline">
                           {format(new Date(a.createdAt), 'd MMM yyyy', { locale: pt })}
                         </span>
-                        <div className="flex justify-end">
+                        <div
+                          className="flex justify-end"
+                          onClick={e => e.stopPropagation()}
+                          onKeyDown={e => e.stopPropagation()}
+                        >
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -1303,45 +1779,121 @@ export default function GestaoDocumentosPage() {
       </div>
     </div>
 
-      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+      <Dialog
+        open={uploadOpen}
+        onOpenChange={o => {
+          setUploadOpen(o);
+          if (!o) resetFormUpload();
+        }}
+      >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo documento</DialogTitle>
+            <DialogTitle>{formFiles.length > 1 ? 'Novos documentos' : 'Novo documento'}</DialogTitle>
             <DialogDescription>
-              PDF, Word ou Excel. Defina quem pode consultar por módulo e por sector (departamento). Deixe vazio para
-              permitir a todos os perfis com acesso ao tenant conforme políticas.
+              PDF, Word ou Excel (pode seleccionar vários). Defina quem pode consultar por módulo e por sector. Deixe
+              vazio para permitir a todos os perfis com acesso ao tenant conforme políticas.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
-              <Label className="text-base">Ficheiro</Label>
-              <Input
-                type="file"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={e => {
-                  const f = e.target.files?.[0] ?? null;
-                  setFormFile(f);
-                  if (f) setFormTitulo(tituloSugeridoDeNomeArquivo(f.name));
+              <Label className="text-base">Ficheiros</Label>
+              <div
+                className={cn(
+                  'cursor-pointer rounded-lg border-2 border-dashed px-3 py-8 text-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  uploadDragActive
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border/80 bg-background/50 hover:border-muted-foreground/40 hover:bg-muted/30',
+                )}
+                onClick={() => uploadFileInputRef.current?.click()}
+                onDragEnter={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  uploadDragDepth.current += 1;
+                  setUploadDragActive(true);
                 }}
-              />
-              {formFile ? (
-                <p className="text-xs text-muted-foreground">
-                  {extensaoDeNome(formFile.name).toUpperCase()} · {formatBytes(formFile.size)}
+                onDragLeave={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  uploadDragDepth.current -= 1;
+                  if (uploadDragDepth.current <= 0) {
+                    uploadDragDepth.current = 0;
+                    setUploadDragActive(false);
+                  }
+                }}
+                onDragOver={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.dataTransfer.dropEffect = 'copy';
+                }}
+                onDrop={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  uploadDragDepth.current = 0;
+                  setUploadDragActive(false);
+                  applyUploadFiles(Array.from(e.dataTransfer.files));
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={ev => {
+                  if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    uploadFileInputRef.current?.click();
+                  }
+                }}
+              >
+                <input
+                  ref={uploadFileInputRef}
+                  type="file"
+                  multiple
+                  className="sr-only"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={e => {
+                    applyUploadFiles(e.target.files ? Array.from(e.target.files) : []);
+                    e.target.value = '';
+                  }}
+                />
+                <UploadCloud
+                  className={cn('mx-auto h-10 w-10', uploadDragActive ? 'text-primary' : 'text-muted-foreground')}
+                  aria-hidden
+                />
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  Arraste ficheiros para aqui ou clique para seleccionar
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">PDF, Word ou Excel · vários ficheiros</p>
+              </div>
+              {formFiles.length > 0 ? (
+                <ul className="max-h-36 space-y-1.5 overflow-y-auto rounded-md border border-border/60 bg-background/50 p-2 text-xs">
+                  {formFiles.map((f, i) => (
+                    <li key={`${i}-${f.name}-${f.size}-${f.lastModified}`} className="flex justify-between gap-2">
+                      <span className="min-w-0 truncate font-medium text-foreground">{f.name}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {extensaoDeNome(f.name).toUpperCase()} · {formatBytes(f.size)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {formFiles.length > 1 ? (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Cada ficheiro será registado com o <strong>título</strong> derivado automaticamente do nome do ficheiro
+                  (maiúsculas). A observação e permissões abaixo aplicam-se a <strong>todos</strong>.
                 </p>
               ) : null}
-              <div className="space-y-2 pt-1">
-                <Label htmlFor="gestao-doc-upload-titulo">Título</Label>
-                <Input
-                  id="gestao-doc-upload-titulo"
-                  value={formTitulo}
-                  onChange={e => setFormTitulo(e.target.value.toLocaleUpperCase('pt-PT'))}
-                  placeholder="Ex.: ORÇAMENTO Q1 2026"
-                  className="font-medium uppercase"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Em maiúsculas; sugerido a partir do nome do ficheiro ao anexar.
-                </p>
-              </div>
+              {formFiles.length === 1 ? (
+                <div className="space-y-2 pt-1">
+                  <Label htmlFor="gestao-doc-upload-titulo">Título</Label>
+                  <Input
+                    id="gestao-doc-upload-titulo"
+                    value={formTitulo}
+                    onChange={e => setFormTitulo(e.target.value.toLocaleUpperCase('pt-PT'))}
+                    placeholder="Ex.: ORÇAMENTO Q1 2026"
+                    className="font-medium uppercase"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Em maiúsculas; sugerido a partir do nome do ficheiro ao anexar.
+                  </p>
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Pasta</Label>
@@ -1413,8 +1965,20 @@ export default function GestaoDocumentosPage() {
             <Button variant="outline" onClick={() => setUploadOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => void guardarUpload()} disabled={saving}>
-              {saving ? 'A guardar…' : 'Carregar'}
+            <Button
+              onClick={() => void guardarUpload()}
+              disabled={
+                saving ||
+                formPastaId == null ||
+                formFiles.length === 0 ||
+                (formFiles.length === 1 && !formTitulo.trim())
+              }
+            >
+              {saving
+                ? 'A guardar…'
+                : formFiles.length > 1
+                  ? `Carregar ${formFiles.length} ficheiros`
+                  : 'Carregar'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1556,33 +2120,53 @@ export default function GestaoDocumentosPage() {
         onOpenChange={o => {
           setMoverOpen(o);
           if (!o) {
-            setMoverArquivo(null);
+            setMoverArquivos([]);
             setMoverDestinoPastaId(null);
           }
         }}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Mover documento</DialogTitle>
-            <DialogDescription>
-              {moverArquivo ? (
-                <>
-                  <span className="font-medium text-foreground">{moverArquivo.titulo}</span>
-                  <span className="block mt-1 text-xs">
-                    Origem: {pastaPathById.get(moverArquivo.pastaId) ?? '—'}
-                  </span>
-                </>
-              ) : (
-                'Seleccione a pasta de destino na mesma empresa.'
-              )}
+            <DialogTitle>
+              {moverArquivos.length > 1 ? 'Mover documentos' : 'Mover documento'}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {moverArquivos.length === 1 ? (
+                  <>
+                    <span className="font-medium text-foreground">{moverArquivos[0].titulo}</span>
+                    <span className="block text-xs">
+                      Origem: {pastaPathById.get(moverArquivos[0].pastaId) ?? '—'}
+                    </span>
+                  </>
+                ) : moverArquivos.length > 1 ? (
+                  <>
+                    <p className="text-foreground/90">
+                      {moverArquivos.length} documentos seleccionados (várias origens possíveis).
+                    </p>
+                    <ul className="max-h-28 space-y-0.5 overflow-y-auto rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-xs">
+                      {moverArquivos.slice(0, 40).map(a => (
+                        <li key={a.id} className="truncate" title={a.titulo}>
+                          {a.titulo}
+                        </li>
+                      ))}
+                      {moverArquivos.length > 40 ? (
+                        <li className="text-muted-foreground">… e mais {moverArquivos.length - 40}</li>
+                      ) : null}
+                    </ul>
+                  </>
+                ) : (
+                  <span>Seleccione a pasta de destino na mesma empresa.</span>
+                )}
+              </div>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-2">
               <Label>Pasta de destino</Label>
-              {pastas.filter(p => moverArquivo == null || p.id !== moverArquivo.pastaId).length === 0 ? (
+              {pastasOpcoesDestinoMover(moverArquivos, pastas).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Crie outra pasta para poder mover o documento.
+                  Crie outra pasta para poder mover {moverArquivos.length > 1 ? 'estes documentos' : 'o documento'}.
                 </p>
               ) : (
                 <Select
@@ -1593,13 +2177,11 @@ export default function GestaoDocumentosPage() {
                     <SelectValue placeholder="Seleccionar pasta" />
                   </SelectTrigger>
                   <SelectContent>
-                    {pastas
-                      .filter(p => moverArquivo == null || p.id !== moverArquivo.pastaId)
-                      .map(p => (
-                        <SelectItem key={p.id} value={String(p.id)}>
-                          {pastaPathById.get(p.id) ?? p.nome}
-                        </SelectItem>
-                      ))}
+                    {pastasOpcoesDestinoMover(moverArquivos, pastas).map(p => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {pastaPathById.get(p.id) ?? p.nome}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
@@ -1613,10 +2195,10 @@ export default function GestaoDocumentosPage() {
               onClick={() => void executarMover()}
               disabled={
                 savingMover ||
-                moverArquivo == null ||
+                moverArquivos.length === 0 ||
                 moverDestinoPastaId == null ||
-                moverDestinoPastaId === moverArquivo.pastaId ||
-                pastas.filter(p => moverArquivo == null || p.id !== moverArquivo.pastaId).length === 0
+                moverArquivos.every(a => a.pastaId === moverDestinoPastaId) ||
+                pastasOpcoesDestinoMover(moverArquivos, pastas).length === 0
               }
             >
               {savingMover ? 'A mover…' : 'Mover'}
@@ -1659,6 +2241,47 @@ export default function GestaoDocumentosPage() {
               )}
             </ul>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <DocxPreviewDialog
+        open={docxPreviewOpen}
+        onOpenChange={o => {
+          setDocxPreviewOpen(o);
+          if (!o) setDocxPreviewArquivo(null);
+        }}
+        storagePath={docxPreviewArquivo?.storagePath ?? null}
+        bucket={BUCKET}
+        fileUrl={docxPreviewArquivo ? publicUrl(docxPreviewArquivo.storagePath) : null}
+        titulo={docxPreviewArquivo?.titulo ?? ''}
+        nomeDownload={
+          docxPreviewArquivo
+            ? nomeFicheiroParaDownload(docxPreviewArquivo.titulo, docxPreviewArquivo.nomeFicheiro)
+            : ''
+        }
+      />
+
+      <Dialog
+        open={pdfPreviewOpen}
+        onOpenChange={open => {
+          setPdfPreviewOpen(open);
+          if (!open) {
+            setPdfPreviewUrl(null);
+            setPdfPreviewTitulo('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0 gap-0">
+          <DialogTitle className="sr-only">{pdfPreviewTitulo || 'Pré-visualização PDF'}</DialogTitle>
+          {pdfPreviewUrl ? (
+            <iframe
+              src={pdfPreviewUrl}
+              title="Pré-visualização do documento"
+              className="w-full h-full min-h-[80vh] border-0 rounded-md"
+            />
+          ) : (
+            <DialogDescription className="p-4">A carregar pré-visualização…</DialogDescription>
+          )}
         </DialogContent>
       </Dialog>
     </>
