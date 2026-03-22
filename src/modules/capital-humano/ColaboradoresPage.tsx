@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
+import { mapRowFromDb } from '@/lib/supabaseMappers';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
@@ -6,6 +7,7 @@ import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { fetchColaboradoresPaginated, fetchColaboradoresDepartamentos } from '@/lib/supabaseData';
 import type { Colaborador, StatusColaborador, TipoContrato, Genero } from '@/types';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
@@ -26,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, User, X } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, User, X, GraduationCap, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   criarPastaColaboradorNaGestao,
@@ -126,6 +128,74 @@ function formatBytesDoc(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Primeiro nome, nomes intermédios e apelido (para ficha estilo detalhe). */
+function partesNomeCompleto(nomeCompleto: string): { primeiro: string; meios: string; ultimo: string } {
+  const parts = nomeCompleto.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { primeiro: '—', meios: '—', ultimo: '—' };
+  if (parts.length === 1) return { primeiro: parts[0], meios: '—', ultimo: '—' };
+  if (parts.length === 2) return { primeiro: parts[0], meios: '—', ultimo: parts[1] };
+  return { primeiro: parts[0], meios: parts.slice(1, -1).join(' '), ultimo: parts[parts.length - 1] };
+}
+
+function labelGenero(g: Genero): string {
+  if (g === 'M') return 'Masculino';
+  if (g === 'F') return 'Feminino';
+  return 'Outro';
+}
+
+function ColaboradorDetailField({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold leading-snug text-foreground break-words">{value ?? '—'}</p>
+    </div>
+  );
+}
+
+function ColaboradorSectionCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-xl border border-border/80 bg-muted/20 p-4 shadow-sm md:p-5">
+      <h3 className="mb-4 border-b border-border/60 pb-2 text-sm font-semibold text-foreground">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+/** Foto no preview: URL limpa, recarrega quando muda, fallback se o pedido falhar (CORS, 404, etc.). */
+function ColaboradorPreviewFoto({
+  fotoUrl,
+  nome,
+}: {
+  fotoUrl: string | null | undefined;
+  nome: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const clean = (fotoUrl ?? '').trim();
+  useEffect(() => {
+    setFailed(false);
+  }, [clean]);
+  const initial = nome.trim().charAt(0).toLocaleUpperCase('pt-PT') || '?';
+  if (!clean || failed) {
+    return (
+      <div className="flex h-32 w-32 items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 text-3xl font-bold text-muted-foreground">
+        {initial}
+      </div>
+    );
+  }
+  return (
+    <img
+      key={clean}
+      src={clean}
+      alt=""
+      className="h-32 w-32 rounded-lg border-2 border-border object-cover shadow-sm"
+      referrerPolicy="no-referrer"
+      loading="eager"
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 /** ID de empresa positivo para Gestão documental / RLS (evita NaN por tipos inconsistentes). */
 function parseEmpresaIdGestao(...candidates: unknown[]): number {
   for (const v of candidates) {
@@ -150,6 +220,7 @@ export default function ColaboradoresPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [editing, setEditing] = useState<Colaborador | null>(null);
   const [viewItem, setViewItem] = useState<Colaborador | null>(null);
+  const [viewDetalhesLoading, setViewDetalhesLoading] = useState(false);
   const [form, setForm] = useState<Omit<Colaborador, 'id'>>(emptyForm);
   const [associarUtilizadorId, setAssociarUtilizadorId] = useState<number | null>(null);
   /** Anexos do cadastro (só «Novo colaborador») — enviados para Gestão documental após criar o registo. */
@@ -359,6 +430,26 @@ export default function ColaboradoresPage() {
     });
     setDialogOpen(true);
   };
+
+  /** Abre o preview e, com Supabase, recarrega o registo para incluir `foto_perfil_url` e demais campos actualizados. */
+  const openViewDetalhes = useCallback(async (c: Colaborador) => {
+    setViewItem(c);
+    setViewOpen(true);
+    if (!isSupabaseConfigured() || !supabase) return;
+    setViewDetalhesLoading(true);
+    try {
+      const { data, error } = await supabase.from('colaboradores').select('*').eq('id', c.id).maybeSingle();
+      if (error) {
+        console.warn('[colaboradores] preview', error.message);
+        return;
+      }
+      if (data) {
+        setViewItem(mapRowFromDb<Colaborador>('colaboradores', data as Record<string, unknown>));
+      }
+    } finally {
+      setViewDetalhesLoading(false);
+    }
+  }, []);
 
   const fotoMostrada =
     fotoPreviewObjectUrl ??
@@ -663,7 +754,7 @@ export default function ColaboradoresPage() {
                   <td className="py-3 px-5 text-right font-mono">{formatKz(c.salarioBase)}</td>
                   <td className="py-3 px-5"><StatusBadge status={c.status} /></td>
                   <td className="py-3 px-5 text-right">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setViewItem(c); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void openViewDetalhes(c)}><Eye className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
                   </td>
@@ -1099,41 +1190,173 @@ export default function ColaboradoresPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{viewItem?.nome}</DialogTitle>
-            <DialogDescription>Ficha do colaborador</DialogDescription>
-          </DialogHeader>
+      <Dialog
+        open={viewOpen}
+        onOpenChange={(open) => {
+          setViewOpen(open);
+          if (!open) setViewDetalhesLoading(false);
+        }}
+      >
+        <DialogContent className="max-h-[92vh] max-w-4xl gap-0 overflow-y-auto border-border/80 p-0 sm:rounded-xl">
           {viewItem && (
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-center pb-2">
-                {viewItem.fotoPerfilUrl ? (
-                  <img
-                    src={viewItem.fotoPerfilUrl}
-                    alt=""
-                    className="h-24 w-24 rounded-full object-cover border-2 border-border"
-                  />
-                ) : (
-                  <div className="flex h-24 w-24 items-center justify-center rounded-full bg-muted text-2xl font-semibold text-muted-foreground">
-                    {viewItem.nome.trim().charAt(0).toLocaleUpperCase('pt-PT') || '?'}
-                  </div>
-                )}
+            <>
+              <DialogTitle className="sr-only">Colaborador: {viewItem.nome}</DialogTitle>
+              <Tabs key={viewItem.id} defaultValue="pessoal" className="w-full">
+              <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-border/80 bg-background/95 px-4 py-3 pr-12 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pr-14">
+                <TabsList className="h-auto w-full justify-start gap-1 rounded-none border-0 bg-transparent p-0 sm:w-auto sm:gap-2">
+                  <TabsTrigger
+                    value="pessoal"
+                    className="rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
+                  >
+                    Dados pessoais
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="formacao"
+                    className="rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
+                  >
+                    Formação
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="emprego"
+                    className="rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
+                  >
+                    Emprego
+                  </TabsTrigger>
+                </TabsList>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-2 border-primary/40 text-primary hover:bg-primary/10"
+                  onClick={() => {
+                    const c = viewItem;
+                    setViewOpen(false);
+                    window.setTimeout(() => openEdit(c), 0);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Editar detalhes
+                </Button>
               </div>
-              <p><span className="text-muted-foreground">Cargo:</span> {viewItem.cargo} · {viewItem.departamento}</p>
-              <p><span className="text-muted-foreground">Nacionalidade:</span> {viewItem.nacionalidade}</p>
-              <p>
-                <span className="text-muted-foreground">Nível académico:</span>{' '}
-                {viewItem.nivelAcademico?.trim() || '—'}
-              </p>
-              <p><span className="text-muted-foreground">Admissão:</span> {formatDate(viewItem.dataAdmissao)} · {viewItem.tipoContrato}</p>
-              <p><span className="text-muted-foreground">Salário base:</span> {formatKz(viewItem.salarioBase)}</p>
-              <p><span className="text-muted-foreground">Email:</span> {viewItem.emailCorporativo}</p>
-              <p><span className="text-muted-foreground">Telefone:</span> {viewItem.telefonePrincipal}</p>
-              <p><span className="text-muted-foreground">BI/NIF:</span> {viewItem.bi} / {viewItem.nif}</p>
-              <p><span className="text-muted-foreground">Endereço:</span> {viewItem.endereco}</p>
-              <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
-            </div>
+
+              <div className="space-y-6 px-4 py-5 sm:px-6 sm:py-6">
+                <TabsContent value="pessoal" className="mt-0 space-y-6 focus-visible:ring-0 focus-visible:ring-offset-0">
+                  <div className="flex items-center gap-2">
+                    <User className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Dados pessoais</h2>
+                  </div>
+
+                  <ColaboradorSectionCard title="Informação pessoal">
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+                      <div className="mx-auto shrink-0 lg:mx-0">
+                        {viewDetalhesLoading ? (
+                          <div
+                            className="flex h-32 w-32 animate-pulse items-center justify-center rounded-lg border-2 border-border bg-muted"
+                            aria-hidden
+                          />
+                        ) : (
+                          <ColaboradorPreviewFoto fotoUrl={viewItem.fotoPerfilUrl} nome={viewItem.nome} />
+                        )}
+                      </div>
+                      <div className="grid min-w-0 flex-1 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                        <ColaboradorDetailField
+                          label="Primeiro nome"
+                          value={partesNomeCompleto(viewItem.nome).primeiro}
+                        />
+                        <ColaboradorDetailField
+                          label="Nomes intermédios"
+                          value={partesNomeCompleto(viewItem.nome).meios}
+                        />
+                        <ColaboradorDetailField
+                          label="Apelido"
+                          value={partesNomeCompleto(viewItem.nome).ultimo}
+                        />
+                        <ColaboradorDetailField label="Email corporativo" value={viewItem.emailCorporativo} />
+                        <ColaboradorDetailField label="Email pessoal" value={viewItem.emailPessoal?.trim() || '—'} />
+                        <ColaboradorDetailField label="Telefone principal" value={viewItem.telefonePrincipal} />
+                        <ColaboradorDetailField label="Telefone alternativo" value={viewItem.telefoneAlternativo?.trim() || '—'} />
+                        <ColaboradorDetailField label="Data de nascimento" value={formatDate(viewItem.dataNascimento)} />
+                        <ColaboradorDetailField label="Género" value={labelGenero(viewItem.genero)} />
+                        <ColaboradorDetailField label="Cargo / função" value={viewItem.cargo} />
+                        <ColaboradorDetailField label="BI" value={viewItem.bi?.trim() || '—'} />
+                        <ColaboradorDetailField label="NIF" value={viewItem.nif?.trim() || '—'} />
+                        <ColaboradorDetailField label="INSS (NISS)" value={viewItem.niss?.trim() || '—'} />
+                      </div>
+                    </div>
+                  </ColaboradorSectionCard>
+
+                  <ColaboradorSectionCard title="Morada">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <ColaboradorDetailField label="Morada completa" value={viewItem.endereco?.trim() || '—'} />
+                      <ColaboradorDetailField label="Empresa (tenant)" value={empresas.find((e) => e.id === viewItem.empresaId)?.nome ?? '—'} />
+                    </div>
+                  </ColaboradorSectionCard>
+
+                  <ColaboradorSectionCard title="Recursos humanos">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      <ColaboradorDetailField label="Nº interno (ID)" value={String(viewItem.id)} />
+                      <ColaboradorDetailField label="Data de admissão" value={formatDate(viewItem.dataAdmissao)} />
+                      <ColaboradorDetailField label="Tipo de contrato" value={viewItem.tipoContrato} />
+                      <ColaboradorDetailField
+                        label="Fim do contrato"
+                        value={viewItem.dataFimContrato ? formatDate(viewItem.dataFimContrato) : '—'}
+                      />
+                      <ColaboradorDetailField label="Salário base" value={formatKz(viewItem.salarioBase)} />
+                      <ColaboradorDetailField label="Estado" value={<StatusBadge status={viewItem.status} />} />
+                    </div>
+                  </ColaboradorSectionCard>
+
+                  <ColaboradorSectionCard title="Contacto de emergência">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                      <ColaboradorDetailField label="Nome" value={viewItem.contactoEmergenciaNome?.trim() || '—'} />
+                      <ColaboradorDetailField label="Telefone" value={viewItem.contactoEmergenciaTelefone?.trim() || '—'} />
+                    </div>
+                  </ColaboradorSectionCard>
+                </TabsContent>
+
+                <TabsContent value="formacao" className="mt-0 space-y-6 focus-visible:ring-0 focus-visible:ring-offset-0">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Formação e identificação</h2>
+                  </div>
+                  <ColaboradorSectionCard title="Formação académica e civil">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      <ColaboradorDetailField label="Nível académico" value={viewItem.nivelAcademico?.trim() || '—'} />
+                      <ColaboradorDetailField label="Nacionalidade" value={viewItem.nacionalidade} />
+                      <ColaboradorDetailField label="Estado civil" value={viewItem.estadoCivil?.trim() || '—'} />
+                    </div>
+                  </ColaboradorSectionCard>
+                </TabsContent>
+
+                <TabsContent value="emprego" className="mt-0 space-y-6 focus-visible:ring-0 focus-visible:ring-offset-0">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Emprego</h2>
+                  </div>
+                  <ColaboradorSectionCard title="Dados profissionais">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      <ColaboradorDetailField
+                        label="Empresa"
+                        value={empresas.find((e) => e.id === viewItem.empresaId)?.nome ?? '—'}
+                      />
+                      <ColaboradorDetailField label="Departamento" value={viewItem.departamento} />
+                      <ColaboradorDetailField label="Cargo" value={viewItem.cargo} />
+                      <ColaboradorDetailField label="Nº colaborador" value={String(viewItem.id)} />
+                      <ColaboradorDetailField label="Data de admissão" value={formatDate(viewItem.dataAdmissao)} />
+                      <ColaboradorDetailField label="Contrato" value={viewItem.tipoContrato} />
+                      <ColaboradorDetailField
+                        label="Data fim do contrato"
+                        value={viewItem.dataFimContrato ? formatDate(viewItem.dataFimContrato) : '—'}
+                      />
+                      <ColaboradorDetailField label="Salário base" value={formatKz(viewItem.salarioBase)} />
+                      <ColaboradorDetailField label="IBAN" value={viewItem.iban?.trim() || '—'} />
+                      <ColaboradorDetailField label="Status" value={<StatusBadge status={viewItem.status} />} />
+                    </div>
+                  </ColaboradorSectionCard>
+                </TabsContent>
+              </div>
+            </Tabs>
+            </>
           )}
         </DialogContent>
       </Dialog>
