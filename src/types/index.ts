@@ -57,6 +57,13 @@ export interface Colaborador {
   nif: string;
   niss: string;
   nacionalidade: string;
+  /**
+   * Nível académico (select fixo na app).
+   * Opcional no tipo para compatibilidade com dados antigos / seed sem o campo.
+   */
+  nivelAcademico?: string;
+  /** URL pública da fotografia de perfil (storage), opcional; null remove na BD. */
+  fotoPerfilUrl?: string | null;
   endereco: string;
   cargo: string;
   departamento: string;

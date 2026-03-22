@@ -1,4 +1,2 @@
-update public.gestao_documentos_pastas
-set nome = 'Capital Humano'
-where parent_id is null
-  and nome = 'RH';
+comment on column public.colaboradores.nivel_academico is
+  'Ensino Primário a Doutoramento; vazio se não definido.';

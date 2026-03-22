@@ -26,13 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, X } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, User, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   criarPastaColaboradorNaGestao,
   nomePastaColaboradorMaiusculo,
   uploadDocumentosColaboradorParaPasta,
 } from '@/lib/colaboradorGestaoDocumentos';
+import { uploadColaboradorFotoPerfil } from '@/lib/colaboradorFotoPerfil';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -53,8 +54,41 @@ const ESTADO_CIVIL_OPTIONS = [
 
 const CARGO_OPTIONS = ['Técnico', 'Coordenador', 'Director'] as const;
 
+/** Nacionalidades permitidas no cadastro (Capital Humano). */
+const NACIONALIDADE_OPCOES = ['Angola', 'Cuba', 'Espanha', 'Portugal'] as const;
+
+/** Níveis académicos (Capital Humano). */
+const NIVEL_ACADEMICO_OPCOES = [
+  'Ensino Primário',
+  'Ensino Secundário',
+  'Ensino Médio',
+  'Licenciatura',
+  'Mestrado',
+  'Doutoramento',
+] as const;
+
 /** Valor sentinela para o Select quando ainda não há departamento escolhido. */
 const DEPARTAMENTO_SELECT_VAZIO = '__departamento_nenhum__';
+
+/** Alinha valores antigos da BD às opções fixas do select. */
+function nacionalidadeParaSelect(valorGuardado: string): string {
+  const v = valorGuardado.trim();
+  const map: Record<string, string> = {
+    Angolana: 'Angola',
+    angolana: 'Angola',
+    Portuguesa: 'Portugal',
+    portuguesa: 'Portugal',
+    Português: 'Portugal',
+    Portugues: 'Portugal',
+    Espanhola: 'Espanha',
+    espanhola: 'Espanha',
+    Cubana: 'Cuba',
+    cubana: 'Cuba',
+  };
+  if (map[v]) return map[v];
+  if ((NACIONALIDADE_OPCOES as readonly string[]).includes(v)) return v;
+  return v || 'Angola';
+}
 
 const emptyForm: Omit<Colaborador, 'id'> = {
   empresaId: 1,
@@ -65,7 +99,8 @@ const emptyForm: Omit<Colaborador, 'id'> = {
   bi: '',
   nif: '',
   niss: '',
-  nacionalidade: '',
+  nacionalidade: 'Angola',
+  nivelAcademico: 'Ensino Secundário',
   endereco: '',
   cargo: 'Técnico',
   departamento: '',
@@ -122,6 +157,11 @@ export default function ColaboradoresPage() {
   const [docDragActive, setDocDragActive] = useState(false);
   const docDragDepth = useRef(0);
   const novoDocInputRef = useRef<HTMLInputElement>(null);
+  const fotoPerfilInputRef = useRef<HTMLInputElement>(null);
+  const [fotoPerfilPendente, setFotoPerfilPendente] = useState<File | null>(null);
+  const [fotoPreviewObjectUrl, setFotoPreviewObjectUrl] = useState<string | null>(null);
+  /** Se true, grava `foto_perfil_url` = null na BD (sem novo ficheiro). */
+  const [fotoPerfilRemovida, setFotoPerfilRemovida] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const usePaginated = isSupabaseConfigured() && !!supabase;
@@ -236,6 +276,19 @@ export default function ColaboradoresPage() {
     return Array.from(set);
   }, [form.estadoCivil]);
 
+  const nacionalidadeSelectOptions = useMemo(() => {
+    const set = new Set<string>([...NACIONALIDADE_OPCOES]);
+    if (form.nacionalidade.trim() && !set.has(form.nacionalidade)) set.add(form.nacionalidade);
+    return Array.from(set);
+  }, [form.nacionalidade]);
+
+  const nivelAcademicoSelectOptions = useMemo(() => {
+    const set = new Set<string>([...NIVEL_ACADEMICO_OPCOES]);
+    const v = (form.nivelAcademico ?? '').trim();
+    if (v && !set.has(v)) set.add(v);
+    return Array.from(set);
+  }, [form.nivelAcademico]);
+
   /** Nomes do catálogo de departamentos + valor legado do colaborador em edição, se não existir no catálogo. */
   const departamentoSelectOptions = useMemo(() => {
     const nomes = departamentosCatalogo.map(d => d.nome.trim()).filter(Boolean);
@@ -246,12 +299,22 @@ export default function ColaboradoresPage() {
     return unique;
   }, [departamentosCatalogo, form.departamento]);
 
+  const limparPreviewFoto = useCallback(() => {
+    setFotoPreviewObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setFotoPerfilPendente(null);
+  }, []);
+
   const openCreate = () => {
     setEditing(null);
     setAssociarUtilizadorId(null);
     setNovoColaboradorAnexos([]);
     docDragDepth.current = 0;
     setDocDragActive(false);
+    limparPreviewFoto();
+    setFotoPerfilRemovida(false);
     const today = new Date().toISOString().slice(0, 10);
     setForm({ ...emptyForm, empresaId: empresaIdForNew, dataAdmissao: today });
     setDialogOpen(true);
@@ -261,6 +324,8 @@ export default function ColaboradoresPage() {
     setNovoColaboradorAnexos([]);
     docDragDepth.current = 0;
     setDocDragActive(false);
+    limparPreviewFoto();
+    setFotoPerfilRemovida(false);
     setEditing(c);
     const usuarioLinked = usuarios.find(u => u.colaboradorId === c.id);
     setAssociarUtilizadorId(usuarioLinked?.id ?? null);
@@ -273,7 +338,9 @@ export default function ColaboradoresPage() {
       bi: c.bi,
       nif: c.nif,
       niss: c.niss,
-      nacionalidade: c.nacionalidade,
+      nacionalidade: nacionalidadeParaSelect(c.nacionalidade ?? ''),
+      nivelAcademico: c.nivelAcademico?.trim() || 'Ensino Secundário',
+      fotoPerfilUrl: c.fotoPerfilUrl ?? undefined,
       endereco: c.endereco,
       cargo: c.cargo?.trim() || 'Técnico',
       departamento: c.departamento,
@@ -291,6 +358,39 @@ export default function ColaboradoresPage() {
       status: c.status,
     });
     setDialogOpen(true);
+  };
+
+  const fotoMostrada =
+    fotoPreviewObjectUrl ??
+    (!fotoPerfilRemovida && form.fotoPerfilUrl ? form.fotoPerfilUrl : null);
+
+  const onSelectFotoPerfil = (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Seleccione uma imagem (JPEG, PNG, GIF ou WebP).');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 3 MB.');
+      return;
+    }
+    setFotoPreviewObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setFotoPerfilPendente(file);
+    setFotoPerfilRemovida(false);
+  };
+
+  const removerFotoPerfil = () => {
+    setFotoPreviewObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setFotoPerfilPendente(null);
+    setFotoPerfilRemovida(true);
+    setForm((f) => ({ ...f, fotoPerfilUrl: undefined }));
   };
 
   const applyNovoColaboradorFiles = (raw: File[]) => {
@@ -315,20 +415,51 @@ export default function ColaboradoresPage() {
 
   const save = async () => {
     if (!form.nome.trim() || !form.emailCorporativo.trim()) return;
-    const payload = { ...form, empresaId: form.empresaId ?? empresaIdForNew };
+    const payloadColaborador: Omit<Colaborador, 'id'> = {
+      ...form,
+      empresaId: form.empresaId ?? empresaIdForNew,
+    };
+    if (fotoPerfilPendente) {
+      delete payloadColaborador.fotoPerfilUrl;
+    } else if (fotoPerfilRemovida) {
+      payloadColaborador.fotoPerfilUrl = null;
+    }
     setSaving(true);
     try {
       let colaboradorId: number;
       /** Empresa usada na pasta/arquivos (prioriza valor gravado na BD no insert). */
-      let empresaIdParaGestao = parseEmpresaIdGestao(payload.empresaId, empresaIdForNew);
+      let empresaIdParaGestao = parseEmpresaIdGestao(payloadColaborador.empresaId, empresaIdForNew);
       if (editing) {
-        await updateColaborador(editing.id, payload);
+        await updateColaborador(editing.id, payloadColaborador);
         colaboradorId = editing.id;
-        empresaIdParaGestao = parseEmpresaIdGestao(payload.empresaId, empresaIdForNew);
+        empresaIdParaGestao = parseEmpresaIdGestao(payloadColaborador.empresaId, empresaIdForNew);
       } else {
-        const created = await addColaborador(payload);
+        const created = await addColaborador(payloadColaborador);
         colaboradorId = created.id;
-        empresaIdParaGestao = parseEmpresaIdGestao(created.empresaId, payload.empresaId, empresaIdForNew);
+        empresaIdParaGestao = parseEmpresaIdGestao(created.empresaId, payloadColaborador.empresaId, empresaIdForNew);
+      }
+
+      if (fotoPerfilPendente) {
+        if (!isSupabaseConfigured() || !supabase) {
+          toast.warning('A fotografia não foi guardada: ligue o Supabase para carregar imagens de perfil.', {
+            duration: 8000,
+          });
+        } else {
+          try {
+            const url = await uploadColaboradorFotoPerfil(
+              supabase,
+              empresaIdParaGestao,
+              colaboradorId,
+              fotoPerfilPendente,
+            );
+            await updateColaborador(colaboradorId, { fotoPerfilUrl: url });
+          } catch (fe) {
+            toast.error(
+              fe instanceof Error ? fe.message : 'Não foi possível carregar a fotografia de perfil.',
+              { duration: 10_000 },
+            );
+          }
+        }
       }
       if (isSupabaseConfigured() && supabase && (associarUtilizadorId != null || editing)) {
         const colabIdToSync = editing ? editing.id : colaboradorId;
@@ -348,24 +479,18 @@ export default function ColaboradoresPage() {
 
       let docSuccessSuffix = '';
       const profileIdGestao = user?.id != null ? Number(user.id) : NaN;
-      const podeEnviarDocs =
-        !editing &&
-        novoColaboradorAnexos.length > 0 &&
-        isSupabaseConfigured() &&
-        !!supabase &&
-        Number.isFinite(profileIdGestao) &&
-        profileIdGestao > 0 &&
-        Number.isFinite(empresaIdParaGestao) &&
-        empresaIdParaGestao > 0;
+      const profileOk = Number.isFinite(profileIdGestao) && profileIdGestao > 0;
+      const supabaseOk = isSupabaseConfigured() && !!supabase;
+      const empresaOk = Number.isFinite(empresaIdParaGestao) && empresaIdParaGestao > 0;
+      /** Novo colaborador: criar pasta em Gestão documental (vazia ou com anexos). */
+      const podeCriarPastaColaborador = !editing && supabaseOk && empresaOk;
 
-      if (!editing && novoColaboradorAnexos.length > 0 && !podeEnviarDocs) {
+      if (!editing && novoColaboradorAnexos.length > 0 && !podeCriarPastaColaborador) {
         const razoes: string[] = [];
-        if (!isSupabaseConfigured() || !supabase) razoes.push('Supabase não está configurado.');
-        else if (!Number.isFinite(profileIdGestao) || profileIdGestao <= 0)
-          razoes.push('Sessão sem perfil válido (volte a iniciar sessão).');
-        else if (!Number.isFinite(empresaIdParaGestao) || empresaIdParaGestao <= 0)
+        if (!supabaseOk) razoes.push('Supabase não está configurado.');
+        else if (!empresaOk)
           razoes.push(
-            `Empresa inválida para documentos (empresaId: ${String(payload.empresaId ?? empresaIdForNew)}).`,
+            `Empresa inválida para documentos (empresaId: ${String(payloadColaborador.empresaId ?? empresaIdForNew)}).`,
           );
         toast.error(
           `Colaborador criado, mas ${novoColaboradorAnexos.length} documento(s) não foram enviados: ${razoes.join(' ')}`,
@@ -373,12 +498,12 @@ export default function ColaboradoresPage() {
         );
       }
 
-      if (podeEnviarDocs && supabase && user) {
+      if (podeCriarPastaColaborador && supabase) {
         const pastaRes = await criarPastaColaboradorNaGestao(
           supabase,
           empresaIdParaGestao,
           colaboradorId,
-          payload.nome.trim(),
+          payloadColaborador.nome.trim(),
         );
         if ('error' in pastaRes) {
           toast.error(
@@ -386,27 +511,42 @@ export default function ColaboradoresPage() {
             { duration: 12_000 },
           );
         } else {
-          const up = await uploadDocumentosColaboradorParaPasta(
-            supabase,
-            empresaIdParaGestao,
-            profileIdGestao,
-            pastaRes.pastaId,
-            novoColaboradorAnexos,
-          );
-          if (up.ok > 0) {
-            docSuccessSuffix = ` ${up.ok} documento(s) em Capital Humano / Colaboradores / ${nomePastaColaboradorMaiusculo(payload.nome.trim())}.`;
-          }
-          if (up.errors.length > 0) {
-            toast.error(
-              up.errors.length <= 2
-                ? up.errors.join(' ')
-                : `${up.errors.slice(0, 2).join(' ')}… (+${up.errors.length - 2})`,
-              { duration: 12_000 },
-            );
+          const nomePasta = nomePastaColaboradorMaiusculo(payloadColaborador.nome.trim());
+          if (novoColaboradorAnexos.length > 0) {
+            if (!profileOk) {
+              toast.error(
+                `Pasta «${nomePasta}» criada, mas ${novoColaboradorAnexos.length} documento(s) não foram enviados: sessão sem perfil válido (volte a iniciar sessão).`,
+                { duration: 14_000 },
+              );
+            } else {
+              const up = await uploadDocumentosColaboradorParaPasta(
+                supabase,
+                empresaIdParaGestao,
+                profileIdGestao,
+                pastaRes.pastaId,
+                novoColaboradorAnexos,
+              );
+              if (up.ok > 0) {
+                docSuccessSuffix = ` ${up.ok} documento(s) em Capital Humano / Colaboradores / ${nomePasta}.`;
+              }
+              if (up.errors.length > 0) {
+                toast.error(
+                  up.errors.length <= 2
+                    ? up.errors.join(' ')
+                    : `${up.errors.slice(0, 2).join(' ')}… (+${up.errors.length - 2})`,
+                  { duration: 12_000 },
+                );
+              }
+            }
+          } else {
+            docSuccessSuffix = ` Pasta criada (vazia) em Capital Humano / Colaboradores / ${nomePasta}.`;
           }
         }
       }
 
+      setFotoPerfilPendente(null);
+      setFotoPerfilRemovida(false);
+      limparPreviewFoto();
       setDialogOpen(false);
       setEditing(null);
       setAssociarUtilizadorId(null);
@@ -482,6 +622,7 @@ export default function ColaboradoresPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
+              <th className="w-14 py-3 px-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Foto</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Cargo</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Departamento</th>
@@ -494,10 +635,26 @@ export default function ColaboradoresPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="py-8 text-center text-muted-foreground text-sm">A carregar…</td></tr>
+              <tr><td colSpan={9} className="py-8 text-center text-muted-foreground text-sm">A carregar…</td></tr>
             ) : (
               paginatedSlice.map(c => (
                 <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="py-3 px-2 align-middle">
+                    {c.fotoPerfilUrl ? (
+                      <img
+                        src={c.fotoPerfilUrl}
+                        alt=""
+                        className="h-9 w-9 rounded-full object-cover border border-border/80"
+                      />
+                    ) : (
+                      <div
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
+                        title={c.nome}
+                      >
+                        {c.nome.trim().charAt(0).toLocaleUpperCase('pt-PT') || '?'}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-3 px-5 font-medium">{c.nome}</td>
                   <td className="py-3 px-5 text-muted-foreground">{c.cargo}</td>
                   <td className="py-3 px-5 text-muted-foreground">{c.departamento}</td>
@@ -537,7 +694,13 @@ export default function ColaboradoresPage() {
       />
 
       {/* Dialog Criar/Editar */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (!open) limparPreviewFoto();
+          setDialogOpen(open);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar colaborador' : 'Novo colaborador'}</DialogTitle>
@@ -548,6 +711,46 @@ export default function ColaboradoresPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-start">
+              <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-full border-2 border-border bg-background shadow-sm">
+                {fotoMostrada ? (
+                  <img src={fotoMostrada} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                    <User className="h-14 w-14 opacity-60" aria-hidden />
+                  </div>
+                )}
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col gap-2 text-center sm:text-left">
+                <Label>Fotografia de perfil</Label>
+                <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => fotoPerfilInputRef.current?.click()}
+                  >
+                    Escolher imagem…
+                  </Button>
+                  {(fotoPreviewObjectUrl || (form.fotoPerfilUrl && !fotoPerfilRemovida)) && (
+                    <Button type="button" variant="ghost" size="sm" onClick={removerFotoPerfil}>
+                      Remover foto
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={fotoPerfilInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    onSelectFotoPerfil(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">JPEG, PNG, GIF ou WebP · máximo 3 MB</p>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nome completo</Label>
@@ -606,12 +809,44 @@ export default function ColaboradoresPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nacionalidade</Label>
-                <Input value={form.nacionalidade} onChange={e => setForm(f => ({ ...f, nacionalidade: e.target.value }))} />
+                <Select
+                  value={form.nacionalidade}
+                  onValueChange={(v) => setForm((f) => ({ ...f, nacionalidade: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar nacionalidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {nacionalidadeSelectOptions.map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                <Label>Endereço</Label>
-                <Input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} />
+                <Label>Nível académico</Label>
+                <Select
+                  value={form.nivelAcademico ?? 'Ensino Secundário'}
+                  onValueChange={(v) => setForm((f) => ({ ...f, nivelAcademico: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar nível académico" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {nivelAcademicoSelectOptions.map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Endereço</Label>
+              <Input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} />
             </div>
             <hr className="border-border/80" />
             <div className="grid grid-cols-2 gap-4">
@@ -735,11 +970,12 @@ export default function ColaboradoresPage() {
             </div>
             {!editing && isSupabaseConfigured() && (
               <div className="space-y-3 border-t border-border/80 pt-4">
-                <Label className="text-base">Documentos para a pasta do colaborador</Label>
+                <Label className="text-base">Pasta e documentos do colaborador</Label>
                 <p className="text-xs text-muted-foreground">
-                  Ao guardar, é criada só a subpasta do colaborador em{' '}
+                  Ao guardar, é criada a subpasta em{' '}
                   <strong>… / Colaboradores / {form.nome.trim() ? nomePastaColaboradorMaiusculo(form.nome) : 'PRIMEIRO ÚLTIMO'}</strong>{' '}
-                  (primeiro e último nome em maiúsculas), desde que «Capital Humano» (ou «RH») e «Colaboradores» já existam na Gestão documental.
+                  (primeiro e último nome em maiúsculas), mesmo sem ficheiros — fica vazia até carregar documentos abaixo ou na Gestão documental.
+                  Requer «Capital Humano» (ou «RH») e «Colaboradores» já existentes na Gestão documental.
                 </p>
                 <div
                   className={cn(
@@ -871,7 +1107,25 @@ export default function ColaboradoresPage() {
           </DialogHeader>
           {viewItem && (
             <div className="space-y-3 text-sm">
+              <div className="flex justify-center pb-2">
+                {viewItem.fotoPerfilUrl ? (
+                  <img
+                    src={viewItem.fotoPerfilUrl}
+                    alt=""
+                    className="h-24 w-24 rounded-full object-cover border-2 border-border"
+                  />
+                ) : (
+                  <div className="flex h-24 w-24 items-center justify-center rounded-full bg-muted text-2xl font-semibold text-muted-foreground">
+                    {viewItem.nome.trim().charAt(0).toLocaleUpperCase('pt-PT') || '?'}
+                  </div>
+                )}
+              </div>
               <p><span className="text-muted-foreground">Cargo:</span> {viewItem.cargo} · {viewItem.departamento}</p>
+              <p><span className="text-muted-foreground">Nacionalidade:</span> {viewItem.nacionalidade}</p>
+              <p>
+                <span className="text-muted-foreground">Nível académico:</span>{' '}
+                {viewItem.nivelAcademico?.trim() || '—'}
+              </p>
               <p><span className="text-muted-foreground">Admissão:</span> {formatDate(viewItem.dataAdmissao)} · {viewItem.tipoContrato}</p>
               <p><span className="text-muted-foreground">Salário base:</span> {formatKz(viewItem.salarioBase)}</p>
               <p><span className="text-muted-foreground">Email:</span> {viewItem.emailCorporativo}</p>
