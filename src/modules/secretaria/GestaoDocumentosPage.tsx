@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DocxPreviewDialog } from '@/components/DocxPreviewDialog';
+import { ExcelPreviewDialog } from '@/components/ExcelPreviewDialog';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -169,6 +170,14 @@ function isPdfArquivo(a: GestaoDocumentoArquivo): boolean {
   return mt === 'application/pdf' || mt.includes('pdf');
 }
 
+/** Excel (.xls / .xlsx) — pré-visualização no browser ou Office Online. */
+function isExcelArquivo(a: GestaoDocumentoArquivo): boolean {
+  const ext = (a.tipoFicheiro || extensaoDeNome(a.nomeFicheiro)).toLowerCase();
+  if (ext === 'xls' || ext === 'xlsx') return true;
+  const mt = (a.mimeType || '').toLowerCase();
+  return mt.includes('spreadsheetml') || mt.includes('ms-excel') || mt === 'application/vnd.ms-excel';
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -181,6 +190,23 @@ function sanitizeFileName(n: string): string {
 
 type TreeNode = GestaoDocumentoPasta & { children: TreeNode[] };
 
+/** Ordem A–Z em cada nível (ignora o campo `ordem` da BD). */
+function compararPastasPorNome(a: GestaoDocumentoPasta, b: GestaoDocumentoPasta): number {
+  return a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' });
+}
+
+/** Listas planas (selects): ordenar pelo caminho completo «Pai / Filho». */
+function ordenarPastasPeloCaminho(
+  list: GestaoDocumentoPasta[],
+  pastaPathById: Map<number, string>,
+): GestaoDocumentoPasta[] {
+  return [...list].sort((a, b) => {
+    const pa = pastaPathById.get(a.id) ?? a.nome;
+    const pb = pastaPathById.get(b.id) ?? b.nome;
+    return pa.localeCompare(pb, 'pt', { sensitivity: 'base' });
+  });
+}
+
 function buildTree(pastas: GestaoDocumentoPasta[]): TreeNode[] {
   const byParent = new Map<number | null, GestaoDocumentoPasta[]>();
   for (const p of pastas) {
@@ -189,7 +215,7 @@ function buildTree(pastas: GestaoDocumentoPasta[]): TreeNode[] {
     byParent.get(k)!.push(p);
   }
   for (const list of byParent.values()) {
-    list.sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt'));
+    list.sort(compararPastasPorNome);
   }
   const walk = (parentId: number | null): TreeNode[] => {
     const list = byParent.get(parentId) ?? [];
@@ -399,11 +425,21 @@ function canManageFolders(perfil: string, empresaId?: number | null): boolean {
   return false;
 }
 
+/** Upload e criação de pastas: alinhado a RLS `gestao_documentos_pode_carregar` + insert pastas. */
 function canUpload(perfil: string, empresaId?: number | null): boolean {
   if (perfil === 'Admin') return true;
   if (perfil === 'PCA') return true;
   if (empresaId == null) return false;
-  return ['Secretaria', 'Financeiro', 'Juridico', 'RH', 'Contabilidade'].includes(perfil);
+  return [
+    'Secretaria',
+    'Financeiro',
+    'Juridico',
+    'RH',
+    'Contabilidade',
+    'Director',
+    'Planeamento',
+    'Colaborador',
+  ].includes(perfil);
 }
 
 export default function GestaoDocumentosPage() {
@@ -474,6 +510,9 @@ export default function GestaoDocumentosPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewTitulo, setPdfPreviewTitulo] = useState('');
 
+  const [excelPreviewOpen, setExcelPreviewOpen] = useState(false);
+  const [excelPreviewArquivo, setExcelPreviewArquivo] = useState<GestaoDocumentoArquivo | null>(null);
+
   const tree = useMemo(() => buildTree(pastas), [pastas]);
 
   const childFolders = useMemo((): TreeNode[] => {
@@ -516,7 +555,6 @@ export default function GestaoDocumentosPage() {
           .from('gestao_documentos_pastas')
           .select('*')
           .eq('empresa_id', empresaIdNum)
-          .order('ordem')
           .order('nome'),
         supabase.from('gestao_documentos_arquivos').select('*').eq('empresa_id', empresaIdNum),
       ]);
@@ -558,6 +596,12 @@ export default function GestaoDocumentosPage() {
     for (const p of pastas) m.set(p.id, path(p.id));
     return m;
   }, [pastas]);
+
+  /** Pastas para dropdowns (carregar, nova pasta, mover…) — A–Z pelo caminho completo. */
+  const pastasOrdenadasPeloCaminho = useMemo(
+    () => ordenarPastasPeloCaminho(pastas, pastaPathById),
+    [pastas, pastaPathById],
+  );
 
   const LIMITE_RECENTES_TODAS_PASTAS = 10;
 
@@ -652,6 +696,11 @@ export default function GestaoDocumentosPage() {
       setPdfPreviewUrl(url);
       setPdfPreviewTitulo(a.titulo);
       setPdfPreviewOpen(true);
+      return;
+    }
+    if (isExcelArquivo(a)) {
+      setExcelPreviewArquivo(a);
+      setExcelPreviewOpen(true);
       return;
     }
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -1188,7 +1237,7 @@ export default function GestaoDocumentosPage() {
   };
 
   const openUploadDialog = () => {
-    setFormPastaId(selectedPastaId ?? pastas[0]?.id ?? null);
+    setFormPastaId(selectedPastaId ?? pastasOrdenadasPeloCaminho[0]?.id ?? null);
     resetFormUpload();
     setUploadOpen(true);
   };
@@ -1375,22 +1424,24 @@ export default function GestaoDocumentosPage() {
               </PopoverContent>
             </Popover>
 
+            {uploadOk ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs font-normal"
+                onClick={() => {
+                  setNovaPastaParentId(selectedPastaId);
+                  setNovaPastaModulos([]);
+                  setNovaPastaSectores([]);
+                  setNovaPastaOpen(true);
+                }}
+              >
+                <Folder className="mr-1.5 h-3.5 w-3.5" />
+                Nova pasta
+              </Button>
+            ) : null}
             {manage ? (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs font-normal"
-                  onClick={() => {
-                    setNovaPastaParentId(selectedPastaId);
-                    setNovaPastaModulos([]);
-                    setNovaPastaSectores([]);
-                    setNovaPastaOpen(true);
-                  }}
-                >
-                  <Folder className="mr-1.5 h-3.5 w-3.5" />
-                  Nova pasta
-                </Button>
                 {canEditPastaAdmin && selectedPastaId != null ? (
                   <Button
                     variant="outline"
@@ -1484,7 +1535,14 @@ export default function GestaoDocumentosPage() {
               </section>
             ) : tree.length === 0 ? (
               <div className="mb-8 rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-                Sem pastas. Crie uma ou execute as migrações.
+                {uploadOk ? (
+                  <>
+                    Sem pastas. Use <strong className="text-foreground">Nova pasta</strong> acima para criar a primeira
+                    pasta, depois <strong className="text-foreground">Carregar</strong> para adicionar ficheiros.
+                  </>
+                ) : (
+                  <>Sem pastas nesta empresa. Se for um ambiente novo, execute as migrações ou peça apoio a um gestor.</>
+                )}
               </div>
             ) : null}
 
@@ -1905,7 +1963,7 @@ export default function GestaoDocumentosPage() {
                   <SelectValue placeholder="Seleccionar pasta" />
                 </SelectTrigger>
                 <SelectContent>
-                  {pastas.map(p => (
+                  {pastasOrdenadasPeloCaminho.map(p => (
                     <SelectItem key={p.id} value={String(p.id)}>
                       {pastaPathById.get(p.id) ?? p.nome}
                     </SelectItem>
@@ -1997,7 +2055,10 @@ export default function GestaoDocumentosPage() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Nova pasta</DialogTitle>
-            <DialogDescription>Subpasta ou raiz. Permissões vazias = visível a quem já acede ao tenant.</DialogDescription>
+            <DialogDescription>
+              Subpasta ou pasta na raiz. Permissões vazias = sem filtro extra nesta pasta. Editar ou eliminar pastas
+              existentes continua reservado a perfis de gestão.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -2011,9 +2072,9 @@ export default function GestaoDocumentosPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__root__">Raiz</SelectItem>
-                  {pastas.map(p => (
+                  {pastasOrdenadasPeloCaminho.map(p => (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {p.nome}
+                      {pastaPathById.get(p.id) ?? p.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2177,7 +2238,7 @@ export default function GestaoDocumentosPage() {
                     <SelectValue placeholder="Seleccionar pasta" />
                   </SelectTrigger>
                   <SelectContent>
-                    {pastasOpcoesDestinoMover(moverArquivos, pastas).map(p => (
+                    {ordenarPastasPeloCaminho(pastasOpcoesDestinoMover(moverArquivos, pastas), pastaPathById).map(p => (
                       <SelectItem key={p.id} value={String(p.id)}>
                         {pastaPathById.get(p.id) ?? p.nome}
                       </SelectItem>
@@ -2257,6 +2318,23 @@ export default function GestaoDocumentosPage() {
         nomeDownload={
           docxPreviewArquivo
             ? nomeFicheiroParaDownload(docxPreviewArquivo.titulo, docxPreviewArquivo.nomeFicheiro)
+            : ''
+        }
+      />
+
+      <ExcelPreviewDialog
+        open={excelPreviewOpen}
+        onOpenChange={o => {
+          setExcelPreviewOpen(o);
+          if (!o) setExcelPreviewArquivo(null);
+        }}
+        storagePath={excelPreviewArquivo?.storagePath ?? null}
+        bucket={BUCKET}
+        fileUrl={excelPreviewArquivo ? publicUrl(excelPreviewArquivo.storagePath) : null}
+        titulo={excelPreviewArquivo?.titulo ?? ''}
+        nomeDownload={
+          excelPreviewArquivo
+            ? nomeFicheiroParaDownload(excelPreviewArquivo.titulo, excelPreviewArquivo.nomeFicheiro)
             : ''
         }
       />
