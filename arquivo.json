@@ -1,0 +1,168 @@
+{
+    "name": "Processar Acta de Reunião",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "process-minutes",
+          "responseMode": "lastNode"
+        },
+        "id": "webhook",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [200, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{$json[\"audio_url\"]}}",
+          "responseFormat": "file"
+        },
+        "id": "downloadAudio",
+        "name": "Download Audio",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 2,
+        "position": [400, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://api.openai.com/v1/audio/transcriptions",
+          "method": "POST",
+          "authentication": "none",
+          "sendBinaryData": true,
+          "headerParameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            }
+          ],
+          "bodyParametersUi": {
+            "parameter": [
+              {
+                "name": "model",
+                "value": "whisper-1"
+              }
+            ]
+          }
+        },
+        "id": "transcribe",
+        "name": "Transcrever Áudio",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 2,
+        "position": [600, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://api.openai.com/v1/chat/completions",
+          "method": "POST",
+          "authentication": "none",
+          "headerParameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            }
+          ],
+          "jsonParameters": true,
+          "options": {},
+          "bodyParametersJson": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Cria uma acta formal institucional\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Título: {{$json[\"meeting\"][\"title\"]}}\\nPresidida por: {{$json[\"meeting\"][\"chaired_by\"]}}\\nNúmero: {{$json[\"meeting\"][\"minutes_number\"]}}\\nLocal: {{$json[\"meeting\"][\"location\"]}}\\nData: {{$json[\"meeting\"][\"date\"]}}\\nHora: {{$json[\"meeting\"][\"time\"]}}\\nParticipantes: {{$json[\"participants\"].map(p => p.name + ' - ' + p.role).join(', ')}}\\n\\nTranscrição: {{$json[\"text\"]}}\"\n    }\n  ]\n}"
+        },
+        "id": "generateMinutes",
+        "name": "Gerar Acta",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 2,
+        "position": [800, 300]
+      },
+      {
+        "parameters": {
+          "functionCode": "return [{ json: { html: `<h1>Acta</h1><p>${$json[\"choices\"][0][\"message\"][\"content\"]}</p>` } }];"
+        },
+        "id": "html",
+        "name": "Criar HTML",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [1000, 300]
+      },
+      {
+        "parameters": {
+          "operation": "generate",
+          "html": "={{$json[\"html\"]}}"
+        },
+        "id": "pdf",
+        "name": "Gerar PDF",
+        "type": "n8n-nodes-base.htmlPdf",
+        "typeVersion": 1,
+        "position": [1200, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://YOUR_SUPABASE_URL/storage/v1/object/atas/{{$json[\"minutes_id\"]}}.pdf",
+          "method": "POST",
+          "sendBinaryData": true,
+          "headerParameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_KEY"
+            }
+          ]
+        },
+        "id": "upload",
+        "name": "Upload PDF",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 2,
+        "position": [1400, 300]
+      },
+      {
+        "parameters": {
+          "url": "https://YOUR_ERP_ENDPOINT",
+          "method": "POST",
+          "jsonParameters": true,
+          "bodyParametersJson": "={\"minutes_id\": \"{{$json[\"minutes_id\"]}}\", \"status\": \"completed\"}"
+        },
+        "id": "notify",
+        "name": "Notificar ERP",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 2,
+        "position": [1600, 300]
+      },
+      {
+        "parameters": {
+          "responseBody": "{\"status\":\"processing\"}"
+        },
+        "id": "response",
+        "name": "Resposta",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [1800, 300]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [[{ "node": "Download Audio", "type": "main", "index": 0 }]]
+      },
+      "Download Audio": {
+        "main": [[{ "node": "Transcrever Áudio", "type": "main", "index": 0 }]]
+      },
+      "Transcrever Áudio": {
+        "main": [[{ "node": "Gerar Acta", "type": "main", "index": 0 }]]
+      },
+      "Gerar Acta": {
+        "main": [[{ "node": "Criar HTML", "type": "main", "index": 0 }]]
+      },
+      "Criar HTML": {
+        "main": [[{ "node": "Gerar PDF", "type": "main", "index": 0 }]]
+      },
+      "Gerar PDF": {
+        "main": [[{ "node": "Upload PDF", "type": "main", "index": 0 }]]
+      },
+      "Upload PDF": {
+        "main": [[{ "node": "Notificar ERP", "type": "main", "index": 0 }]]
+      },
+      "Notificar ERP": {
+        "main": [[{ "node": "Resposta", "type": "main", "index": 0 }]]
+      }
+    }
+  }

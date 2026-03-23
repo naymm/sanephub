@@ -536,6 +536,18 @@ export interface Acta {
   conteudo: string;
   aprovadaPor?: string;
   status: 'Rascunho' | 'Em Revisão' | 'Aprovada' | 'Publicada' | 'Arquivada';
+  /** Colaborador que presidiu à sessão. */
+  presididaPor?: number | null;
+  /** IDs de colaboradores presentes (multi-select; pode ser sincronizado com a reunião). */
+  participantesIds?: number[];
+  /** Cópia do local da reunião (editável). */
+  local?: string;
+  /** Cópia da hora da reunião (editável). */
+  hora?: string;
+  /** Duração (texto livre, ex.: 90 min ou 1h30). */
+  duracao?: string;
+  /** URL pública do áudio no storage (transcrição n8n). */
+  audioTranscricaoPath?: string | null;
 }
 
 export interface RiscoJuridico {

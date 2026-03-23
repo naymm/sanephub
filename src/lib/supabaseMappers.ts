@@ -49,7 +49,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   centros_custo: ['id', 'empresaId', 'orcamentoMensal', 'orcamentoAnual', 'gastoActual'],
   projectos: ['id', 'empresaId', 'orcamentoTotal', 'gasto'],
   reunioes: ['id'],
-  actas: ['id', 'reuniaoId'],
+  actas: ['id', 'reuniaoId', 'presididaPor'],
   contratos: ['id', 'empresaId', 'valor', 'alertarAntesDias'],
   requisicoes: ['id', 'empresaId', 'quantidade', 'valorUnitario', 'valor', 'requisitanteColaboradorId'],
   pagamentos: ['id', 'requisicaoId', 'valor'],
@@ -79,8 +79,16 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {
   const camel = toCamel<Record<string, unknown>>(row);
   const keys = NUMERIC_KEYS[tableName];
-  if (keys) return ensureNumbers(camel, keys) as T;
-  return camel as T;
+  let out = keys ? ensureNumbers(camel, keys) : camel;
+  if (tableName === 'actas' && Array.isArray((out as Record<string, unknown>).participantesIds)) {
+    out = {
+      ...out,
+      participantesIds: ((out as Record<string, unknown>).participantesIds as unknown[]).map(v =>
+        typeof v === 'string' || typeof v === 'number' ? Number(v) : v,
+      ),
+    };
+  }
+  return out as T;
 }
 
 export function mapRowsFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, rows: Record<string, unknown>[]): T[] {

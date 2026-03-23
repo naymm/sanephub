@@ -21,8 +21,7 @@ export function ChatFloatingButton() {
       to="/chat"
       className={({ isActive }) =>
         cn(
-          'fixed z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all',
-          'bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))]',
+          'relative z-10 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all',
           'bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 active:scale-95',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isActive && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
