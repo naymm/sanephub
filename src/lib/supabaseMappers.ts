@@ -80,13 +80,23 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
   const camel = toCamel<Record<string, unknown>>(row);
   const keys = NUMERIC_KEYS[tableName];
   let out = keys ? ensureNumbers(camel, keys) : camel;
-  if (tableName === 'actas' && Array.isArray((out as Record<string, unknown>).participantesIds)) {
-    out = {
-      ...out,
-      participantesIds: ((out as Record<string, unknown>).participantesIds as unknown[]).map(v =>
-        typeof v === 'string' || typeof v === 'number' ? Number(v) : v,
-      ),
-    };
+  if (tableName === 'actas') {
+    const o = out as Record<string, unknown>;
+    if (Array.isArray(o.participantesIds)) {
+      out = {
+        ...out,
+        participantesIds: (o.participantesIds as unknown[]).map(v =>
+          typeof v === 'string' || typeof v === 'number' ? Number(v) : v,
+        ),
+      };
+    }
+    const o2 = out as Record<string, unknown>;
+    if (Array.isArray(o2.participantesNomes)) {
+      out = {
+        ...out,
+        participantesNomes: (o2.participantesNomes as unknown[]).map(v => String(v)),
+      };
+    }
   }
   return out as T;
 }

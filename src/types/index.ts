@@ -540,6 +540,8 @@ export interface Acta {
   presididaPor?: number | null;
   /** IDs de colaboradores presentes (multi-select; pode ser sincronizado com a reunião). */
   participantesIds?: number[];
+  /** Nomes dos participantes, na mesma ordem que `participantesIds` (gravado automaticamente). */
+  participantesNomes?: string[];
   /** Cópia do local da reunião (editável). */
   local?: string;
   /** Cópia da hora da reunião (editável). */

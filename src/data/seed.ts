@@ -157,8 +157,30 @@ export const REUNIOES_SEED: Reuniao[] = [
 ];
 
 export const ACTAS_SEED: Acta[] = [
-  { id: 1, reuniaoId: 3, numero: "ACT-2024-001", data: "2024-11-20", titulo: "Acta — Kick-off Projecto Expansão", conteudo: "Reunião realizada no Auditório. Decisões: aprovação do cronograma; atribuição de responsabilidades ao Pedro Santos (TI), António Fernandes (Comercial).", aprovadaPor: "António Fernandes", status: "Publicada" },
-  { id: 2, reuniaoId: 2, numero: "ACT-2024-002", data: "2024-12-10", titulo: "Acta — Comissão de Ética", conteudo: "Em elaboração.", aprovadaPor: undefined, status: "Rascunho" },
+  {
+    id: 1,
+    reuniaoId: 3,
+    numero: "ACT-2024-001",
+    data: "2024-11-20",
+    titulo: "Acta — Kick-off Projecto Expansão",
+    conteudo: "Reunião realizada no Auditório. Decisões: aprovação do cronograma; atribuição de responsabilidades ao Pedro Santos (TI), António Fernandes (Comercial).",
+    aprovadaPor: "António Fernandes",
+    status: "Publicada",
+    participantesIds: [1, 2, 3, 4, 5, 6, 7, 8],
+    participantesNomes: ["António Fernandes", "Maria Silva", "João Costa", "Ana Rodrigues", "Carlos Mendes", "Isabel Lopes", "Pedro Santos", "Rosa Neto"],
+  },
+  {
+    id: 2,
+    reuniaoId: 2,
+    numero: "ACT-2024-002",
+    data: "2024-12-10",
+    titulo: "Acta — Comissão de Ética",
+    conteudo: "Em elaboração.",
+    aprovadaPor: undefined,
+    status: "Rascunho",
+    participantesIds: [1, 6, 5],
+    participantesNomes: ["António Fernandes", "Isabel Lopes", "Carlos Mendes"],
+  },
 ];
 
 export const CONTRATOS_SEED: Contrato[] = [

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
-import type { Acta, Reuniao } from '@/types';
+import type { Acta, Colaborador, Reuniao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,11 @@ const STATUS_OPTIONS: Acta['status'][] = ['Rascunho', 'Em Revisão', 'Aprovada',
 const MAX_AUDIO_BYTES = 80 * 1024 * 1024;
 
 const AUDIO_INPUT_ACCEPT = 'audio/*,.mp3,.wav,.m4a,.aac,.ogg,.webm,.flac,.opus';
+
+/** Nomes na mesma ordem que os IDs (lista completa de colaboradores para resolver nomes). */
+function participantesIdsToNomes(ids: number[], todosColaboradores: Colaborador[]): string[] {
+  return ids.map(id => todosColaboradores.find(c => c.id === id)?.nome ?? `Colaborador #${id}`);
+}
 
 function nextNumero(actas: Acta[]): string {
   const year = new Date().getFullYear();
@@ -75,7 +80,7 @@ function emptyForm(actas: Acta[], reunioes: Reuniao[]): Omit<Acta, 'id'> {
 }
 
 export default function ActasPage() {
-  const { actas, addActa, updateActa, deleteActa, reunioes, colaboradores } = useData();
+  const { actas, addActa, updateActa, deleteActa, reunioes, colaboradores, colaboradoresTodos } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<Acta['status'] | 'todos'>('todos');
   const [reuniaoFilter, setReuniaoFilter] = useState<string>('todos');
@@ -186,6 +191,7 @@ export default function ActasPage() {
     }
     setSaving(true);
     try {
+      const idsParticipantes = form.participantesIds ?? [];
       const payload: Partial<Acta> = {
         reuniaoId: form.reuniaoId,
         numero: editing ? form.numero.trim() : nextNumero(actas),
@@ -195,7 +201,8 @@ export default function ActasPage() {
         aprovadaPor: form.aprovadaPor,
         status: form.status,
         presididaPor: form.presididaPor ?? null,
-        participantesIds: form.participantesIds ?? [],
+        participantesIds: idsParticipantes,
+        participantesNomes: participantesIdsToNomes(idsParticipantes, colaboradoresTodos),
         local: form.local ?? '',
         hora: form.hora ?? '',
         duracao: form.duracao ?? '',
@@ -590,16 +597,20 @@ export default function ActasPage() {
               {viewItem.presididaPor != null && (
                 <p><span className="text-muted-foreground">Presidida por:</span> {nomeColab(viewItem.presididaPor)}</p>
               )}
-              {(viewItem.participantesIds?.length ?? 0) > 0 && (
+              {(viewItem.participantesNomes?.length ?? 0) > 0 ||
+              (viewItem.participantesIds?.length ?? 0) > 0 ? (
                 <div>
                   <p className="text-muted-foreground mb-1">Participantes:</p>
                   <ul className="list-disc pl-5 space-y-0.5">
-                    {viewItem.participantesIds!.map(id => (
-                      <li key={id}>{nomeColab(id)}</li>
+                    {(viewItem.participantesNomes?.length
+                      ? viewItem.participantesNomes
+                      : viewItem.participantesIds!.map(id => nomeColab(id))
+                    ).map((nome, i) => (
+                      <li key={`${nome}-${i}`}>{nome}</li>
                     ))}
                   </ul>
                 </div>
-              )}
+              ) : null}
               <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
               {viewItem.aprovadaPor && <p><span className="text-muted-foreground">Aprovada por:</span> {viewItem.aprovadaPor}</p>}
               {viewItem.audioTranscricaoPath && (
