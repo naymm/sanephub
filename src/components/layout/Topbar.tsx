@@ -28,6 +28,7 @@ const routeTitles: Record<string, string> = {
   '/capital-humano/ferias': 'Gestão de Férias',
   '/capital-humano/faltas': 'Faltas & Efectividade',
   '/capital-humano/recibos': 'Recibos de Salário',
+  '/capital-humano/processamento-salarial': 'Processamento Salarial',
   '/capital-humano/declaracoes': 'Declarações',
   '/financas/requisicoes': 'Requisições',
   '/financas/tesouraria': 'Tesouraria',

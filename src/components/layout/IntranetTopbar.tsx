@@ -85,6 +85,7 @@ export function IntranetTopbar() {
         { key: 'capital-humano-faltas', label: 'Faltas', path: '/capital-humano/faltas' },
         { key: 'capital-humano-ferias', label: 'Férias', path: '/capital-humano/ferias' },
         { key: 'capital-humano-recibos', label: 'Recibos', path: '/capital-humano/recibos' },
+        { key: 'capital-humano-processamento-salarial', label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial' },
         { key: 'capital-humano-declaracoes', label: 'Declarações', path: '/capital-humano/declaracoes' },
       ],
       financas: [

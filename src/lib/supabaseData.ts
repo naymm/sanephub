@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
-import type { Empresa, Departamento, Colaborador, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria } from '@/types';
+import type { Empresa, Departamento, Colaborador, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
 
 const TABLE_NAMES = {
   empresas: 'empresas',
@@ -68,6 +68,7 @@ export async function loadAllTables(supabase: SupabaseClient) {
     { data: eventos },
     { data: bancos },
     { data: contasBancarias },
+    { data: irtEscalaes },
   ] = await Promise.all([
     supabase.from('empresas').select('*'),
     supabase.from('departamentos').select('*'),
@@ -97,6 +98,7 @@ export async function loadAllTables(supabase: SupabaseClient) {
     supabase.from('eventos').select('*'),
     supabase.from('bancos').select('*'),
     supabase.from('contas_bancarias').select('*'),
+    supabase.from('irt_escalaes').select('*'),
   ]);
 
   return {
@@ -128,6 +130,7 @@ export async function loadAllTables(supabase: SupabaseClient) {
     eventos: mapRowsFromDb<Evento>('eventos', eventos ?? []),
     bancos: mapRowsFromDb<Banco>('bancos', bancos ?? []),
     contasBancarias: mapRowsFromDb<ContaBancaria>('contas_bancarias', contasBancarias ?? []),
+    irtEscalaes: mapRowsFromDb<IRTEscalao>('irt_escalaes', irtEscalaes ?? []),
   };
 }
 

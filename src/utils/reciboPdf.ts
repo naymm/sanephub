@@ -41,7 +41,7 @@ morada:"Rua Direita da Samba, Edificio LGT, 1º Andar"
 const DIAS_MES = 22
 const CAMBIO = 500
 
-export function gerarPdfRecibo(recibo:any,colaborador:any): string {
+export function gerarPdfRecibo(recibo:any,colaborador:any, opts?: { irtTaxaPercent?: number | null }): string {
 
 const doc = new jsPDF({unit:"mm",format:"a4"})
 const pageW = doc.internal.pageSize.getWidth()
@@ -174,13 +174,16 @@ y+=8
 
 const dataCod = dataCodigo(recibo.mesAno)
 
+const irtTaxa = opts?.irtTaxaPercent;
+const irtLabel = typeof irtTaxa === "number" && isFinite(irtTaxa) ? `IRT (${irtTaxa}%)` : "IRT (tabela)";
+
 const linhas = [
   { cod: "R01", desc: "Vencimento", rem: recibo.vencimentoBase, des: 0 },
   { cod: "R11", desc: "Subsídio de alimentação", rem: recibo.subsidioAlimentacao, des: 0 },
   { cod: "R13", desc: "Subsídio de transporte", rem: recibo.subsidioTransporte, des: 0 },
-  { cod: "R14", desc: "Subsídio disponibilidade", rem: recibo.outrosSubsidios, des: 0 },
+  { cod: "R14", desc: "Outros subsídios", rem: recibo.outrosSubsidios, des: 0 },
   { cod: "D01", desc: "Segurança Social (3%)", rem: 0, des: recibo.inss },
-  { cod: "D02", desc: "IRT (19%)", rem: 0, des: recibo.irt }
+  { cod: "D02", desc: irtLabel, rem: 0, des: recibo.irt }
 ]
 
 linhas.forEach(l => {
@@ -247,6 +250,6 @@ doc.line(left,y+5,left+80,y+5)
 doc.setFontSize(7)
 doc.text("© PRIMAVERA BSS / Licença de: SANEP-SGPS, SA",left,285)
 
-const blobUrl = doc.output("bloburl")
-return typeof blobUrl === "string" ? blobUrl : String(blobUrl)
+const blob = doc.output("blob")
+return URL.createObjectURL(blob)
 }

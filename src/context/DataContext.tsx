@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, ReactNode } from 'react';
-import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria } from '@/types';
+import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { loadAllTables, db } from '@/lib/supabaseData';
@@ -54,6 +54,8 @@ interface DataContextType {
   setReunioes: React.Dispatch<React.SetStateAction<Reuniao[]>>;
   actas: Acta[];
   setActas: React.Dispatch<React.SetStateAction<Acta[]>>;
+  irtEscalaes: IRTEscalao[];
+  setIrtEscalaes: React.Dispatch<React.SetStateAction<IRTEscalao[]>>;
   contratos: Contrato[];
   setContratos: React.Dispatch<React.SetStateAction<Contrato[]>>;
   processos: ProcessoJudicial[];
@@ -183,6 +185,7 @@ const emptyArrays = {
   projectos: [] as Projecto[],
   reunioes: [] as Reuniao[],
   actas: [] as Acta[],
+  irtEscalaes: [] as IRTEscalao[],
   contratos: [] as Contrato[],
   processos: [] as ProcessoJudicial[],
   prazos: [] as PrazoLegal[],
@@ -217,6 +220,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [projectos, setProjectos] = useState<Projecto[]>(emptyArrays.projectos);
   const [reunioes, setReunioes] = useState<Reuniao[]>(emptyArrays.reunioes);
   const [actas, setActas] = useState<Acta[]>(emptyArrays.actas);
+  const [irtEscalaes, setIrtEscalaes] = useState<IRTEscalao[]>(emptyArrays.irtEscalaes);
   const [contratos, setContratos] = useState<Contrato[]>(emptyArrays.contratos);
   const [processos, setProcessos] = useState<ProcessoJudicial[]>(emptyArrays.processos);
   const [prazos, setPrazos] = useState<PrazoLegal[]>(emptyArrays.prazos);
@@ -349,6 +353,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setProjectos(data.projectos);
       setReunioes(data.reunioes);
       setActas(data.actas);
+      setIrtEscalaes(data.irtEscalaes);
       setContratos(data.contratos);
       setProcessos(data.processos);
       setPrazos(data.prazos);
@@ -907,6 +912,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setReunioes,
       actas,
       setActas,
+      irtEscalaes,
+      setIrtEscalaes,
       contratos: filtered.contratos,
       setContratos,
       processos: filtered.processos,

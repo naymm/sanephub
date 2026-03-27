@@ -109,13 +109,84 @@ const emptyForm: Omit<Colaborador, 'id'> = {
   dataAdmissao: '',
   tipoContrato: 'Efectivo',
   salarioBase: 0,
+  subsidioAlimentacao: 0,
+  subsidioTransporte: 0,
+  outrosSubsidios: 0,
+  subsidioNatal: 0,
+  abonoFamilia: 0,
+  subsidioTurno: 0,
+  subsidioDisponibilidade: 0,
+  subsidioRisco: 0,
+  subsidioAtavio: 0,
+  subsidioRepresentacao: 0,
   iban: '',
   emailCorporativo: '',
   telefonePrincipal: '',
   status: 'Activo',
 };
 
+type SubsidioKey =
+  | 'subsidioAlimentacao'
+  | 'subsidioTransporte'
+  | 'subsidioNatal'
+  | 'abonoFamilia'
+  | 'subsidioTurno'
+  | 'subsidioDisponibilidade'
+  | 'subsidioRisco'
+  | 'subsidioAtavio'
+  | 'subsidioRepresentacao';
+
+const SUBSIDIOS_CONFIG: Array<{ key: SubsidioKey; label: string }> = [
+  { key: 'subsidioNatal', label: 'Subsídio de Natal (Kz)' },
+  { key: 'subsidioAlimentacao', label: 'Subsídio de Alimentação (Kz)' },
+  { key: 'subsidioTransporte', label: 'Subsídio de Transporte (Kz)' },
+  { key: 'abonoFamilia', label: 'Abono de Família (Kz)' },
+  { key: 'subsidioTurno', label: 'Subsídio de Turno (Kz)' },
+  { key: 'subsidioDisponibilidade', label: 'Subsídio de Disponibilidade (Kz)' },
+  { key: 'subsidioRisco', label: 'Subsídio de Risco (Kz)' },
+  { key: 'subsidioAtavio', label: 'Subsídio de Atavio (Kz)' },
+  { key: 'subsidioRepresentacao', label: 'Subsídio de Representação (Kz)' },
+];
+
+const SUBSIDIOS_ALL_KEYS: SubsidioKey[] = SUBSIDIOS_CONFIG.map(x => x.key);
+/** Subsídios detalhados usados no campo legado `outrosSubsidios` (exclui Alimentação e Transporte). */
+const SUBSIDIOS_DYNAMIC_KEYS: SubsidioKey[] = SUBSIDIOS_CONFIG.map(x => x.key).filter(
+  k => k !== 'subsidioAlimentacao' && k !== 'subsidioTransporte',
+);
+
 const DOC_EXT = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx']);
+
+function formatKzInput(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return '';
+  return new Intl.NumberFormat('pt-AO', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatKzTyping(raw: string): string {
+  const s = (raw ?? '').toString();
+  // Permite digitar números com separador decimal vírgula, formatando milhares com ponto.
+  // Ex: "400000" -> "400.000", "400000,5" -> "400.000,5"
+  const cleaned = s.replace(/[^\d,]/g, '');
+  if (!cleaned) return '';
+  const parts = cleaned.split(',');
+  const intDigits = (parts[0] ?? '').replace(/^0+(?=\d)/, '');
+  const decDigits = parts.length > 1 ? (parts[1] ?? '').replace(/[^\d]/g, '').slice(0, 2) : '';
+  const intFormatted = intDigits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  if (parts.length > 1) return `${intFormatted},${decDigits}`;
+  return intFormatted;
+}
+
+function parseKzInput(raw: string): number {
+  const s = (raw ?? '').toString().trim();
+  if (!s) return 0;
+  // remove espaços e separadores de milhar, normaliza vírgula para ponto
+  const normalized = s.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : NaN;
+}
 
 function extDoc(nome: string): string {
   const i = nome.lastIndexOf('.');
@@ -222,6 +293,11 @@ export default function ColaboradoresPage() {
   const [viewItem, setViewItem] = useState<Colaborador | null>(null);
   const [viewDetalhesLoading, setViewDetalhesLoading] = useState(false);
   const [form, setForm] = useState<Omit<Colaborador, 'id'>>(emptyForm);
+  const [salarioBaseText, setSalarioBaseText] = useState(() => formatKzInput(emptyForm.salarioBase ?? 0));
+  const [subsidioTextByKey, setSubsidioTextByKey] = useState<Record<string, string>>({});
+  const [subsidiosAtivos, setSubsidiosAtivos] = useState<SubsidioKey[]>(() => []);
+  const [subsidioParaAdicionar, setSubsidioParaAdicionar] = useState<SubsidioKey | '__none__'>('__none__');
+  const [editandoSubsidio, setEditandoSubsidio] = useState<SubsidioKey | null>(null);
   const [associarUtilizadorId, setAssociarUtilizadorId] = useState<number | null>(null);
   /** Anexos do cadastro (só «Novo colaborador») — enviados para Gestão documental após criar o registo. */
   const [novoColaboradorAnexos, setNovoColaboradorAnexos] = useState<File[]>([]);
@@ -378,6 +454,22 @@ export default function ColaboradoresPage() {
     setFotoPerfilPendente(null);
   }, []);
 
+  const resetModalState = useCallback(() => {
+    setEditing(null);
+    setAssociarUtilizadorId(null);
+    setNovoColaboradorAnexos([]);
+    docDragDepth.current = 0;
+    setDocDragActive(false);
+    limparPreviewFoto();
+    setFotoPerfilRemovida(false);
+    setForm({ ...emptyForm, empresaId: empresaIdForNew, dataAdmissao: '' });
+    setSalarioBaseText(formatKzInput(0));
+    setSubsidioTextByKey({});
+    setSubsidiosAtivos([]);
+    setSubsidioParaAdicionar('__none__');
+    setEditandoSubsidio(null);
+  }, [empresaIdForNew, limparPreviewFoto]);
+
   const openCreate = () => {
     setEditing(null);
     setAssociarUtilizadorId(null);
@@ -388,6 +480,11 @@ export default function ColaboradoresPage() {
     setFotoPerfilRemovida(false);
     const today = new Date().toISOString().slice(0, 10);
     setForm({ ...emptyForm, empresaId: empresaIdForNew, dataAdmissao: today });
+    setSalarioBaseText(formatKzInput(emptyForm.salarioBase ?? 0));
+    setSubsidioTextByKey({});
+    setSubsidiosAtivos([]);
+    setSubsidioParaAdicionar('__none__');
+    setEditandoSubsidio(null);
     setDialogOpen(true);
   };
 
@@ -419,6 +516,16 @@ export default function ColaboradoresPage() {
       tipoContrato: c.tipoContrato,
       dataFimContrato: c.dataFimContrato,
       salarioBase: c.salarioBase,
+      subsidioAlimentacao: c.subsidioAlimentacao ?? 25000,
+      subsidioTransporte: c.subsidioTransporte ?? 20000,
+      outrosSubsidios: c.outrosSubsidios ?? 0,
+      subsidioNatal: c.subsidioNatal ?? 0,
+      abonoFamilia: c.abonoFamilia ?? 0,
+      subsidioTurno: c.subsidioTurno ?? 0,
+      subsidioDisponibilidade: c.subsidioDisponibilidade ?? 0,
+      subsidioRisco: c.subsidioRisco ?? 0,
+      subsidioAtavio: c.subsidioAtavio ?? 0,
+      subsidioRepresentacao: c.subsidioRepresentacao ?? 0,
       iban: c.iban,
       emailCorporativo: c.emailCorporativo,
       emailPessoal: c.emailPessoal,
@@ -428,6 +535,12 @@ export default function ColaboradoresPage() {
       contactoEmergenciaTelefone: c.contactoEmergenciaTelefone,
       status: c.status,
     });
+    setSalarioBaseText(formatKzInput(c.salarioBase ?? 0));
+    setSubsidioTextByKey({});
+    const activos = SUBSIDIOS_ALL_KEYS.filter(k => Number((c as any)[k] ?? 0) > 0);
+    setSubsidiosAtivos(activos);
+    setSubsidioParaAdicionar('__none__');
+    setEditandoSubsidio(null);
     setDialogOpen(true);
   };
 
@@ -506,10 +619,25 @@ export default function ColaboradoresPage() {
 
   const save = async () => {
     if (!form.nome.trim() || !form.emailCorporativo.trim()) return;
+    if (!Number.isFinite(form.salarioBase) || form.salarioBase <= 0) {
+      toast.error('Informe um salário base válido (maior que 0).');
+      return;
+    }
     const payloadColaborador: Omit<Colaborador, 'id'> = {
       ...form,
       empresaId: form.empresaId ?? empresaIdForNew,
     };
+    // Mantém compatibilidade com o campo legado `outros_subsidios` na BD:
+    // passa a ser sempre a soma dos subsídios detalhados (exceto Alimentação/Transporte).
+    const detailedSum =
+      (form.subsidioNatal ?? 0) +
+      (form.abonoFamilia ?? 0) +
+      (form.subsidioTurno ?? 0) +
+      (form.subsidioDisponibilidade ?? 0) +
+      (form.subsidioRisco ?? 0) +
+      (form.subsidioAtavio ?? 0) +
+      (form.subsidioRepresentacao ?? 0);
+    payloadColaborador.outrosSubsidios = detailedSum;
     if (fotoPerfilPendente) {
       delete payloadColaborador.fotoPerfilUrl;
     } else if (fotoPerfilRemovida) {
@@ -554,13 +682,13 @@ export default function ColaboradoresPage() {
       }
       if (isSupabaseConfigured() && supabase && (associarUtilizadorId != null || editing)) {
         const colabIdToSync = editing ? editing.id : colaboradorId;
-        const { error: clearErr } = await supabase
+        const { error: clearErr } = await (supabase as any)
           .from('profiles')
           .update({ colaborador_id: null })
           .eq('colaborador_id', colabIdToSync);
         if (clearErr) console.warn('Ao desassociar perfis:', clearErr.message);
         if (associarUtilizadorId != null) {
-          const { error: linkErr } = await supabase
+          const { error: linkErr } = await (supabase as any)
             .from('profiles')
             .update({ colaborador_id: colaboradorId })
             .eq('id', associarUtilizadorId);
@@ -788,7 +916,7 @@ export default function ColaboradoresPage() {
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
-          if (!open) limparPreviewFoto();
+          if (!open) resetModalState();
           setDialogOpen(open);
         }}
       >
@@ -1010,11 +1138,169 @@ export default function ColaboradoresPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Salário base (Kz)</Label>
-                <Input type="number" min={0} value={form.salarioBase || ''} onChange={e => setForm(f => ({ ...f, salarioBase: Number(e.target.value) || 0 }))} />
+                <Input
+                  inputMode="decimal"
+                  placeholder="Ex: 400.000,00"
+                  value={salarioBaseText}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    // permite só dígitos, espaços e separadores comuns
+                    if (v && !/^[0-9\s.,]*$/.test(v)) return;
+                    const nextText = formatKzTyping(v);
+                    setSalarioBaseText(nextText);
+                    const parsed = parseKzInput(nextText);
+                    setForm(f => ({ ...f, salarioBase: Number.isFinite(parsed) ? parsed : f.salarioBase }));
+                  }}
+                  onBlur={() => {
+                    if (!salarioBaseText.trim()) {
+                      setForm(f => ({ ...f, salarioBase: 0 }));
+                      setSalarioBaseText('');
+                      return;
+                    }
+                    const parsed = parseKzInput(salarioBaseText);
+                    if (!Number.isFinite(parsed) || parsed < 0) {
+                      toast.error('Salário base inválido.');
+                      setSalarioBaseText(formatKzInput(form.salarioBase ?? 0));
+                      return;
+                    }
+                    setForm(f => ({ ...f, salarioBase: parsed }));
+                    setSalarioBaseText(formatKzInput(parsed));
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <Label>IBAN</Label>
                 <Input value={form.iban} onChange={e => setForm(f => ({ ...f, iban: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-3">
+                {subsidiosAtivos.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Nenhum subsídio adicionado.</p>
+                )}
+                {subsidiosAtivos.map(key => {
+                  const label = SUBSIDIOS_CONFIG.find(x => x.key === key)?.label ?? key;
+                  const rawValue = Number((form as any)[key] ?? 0);
+                  return (
+                    <div key={key} className="flex min-w-[320px] items-center gap-3">
+                      <div className="flex h-10 flex-1 items-center rounded-lg bg-muted/30 px-4">
+                        <p className="min-w-0 truncate text-sm font-medium">{label}</p>
+                      </div>
+
+                      <div className="flex h-10 w-44 items-center justify-end">
+                        {editandoSubsidio === key ? (
+                          <Input
+                            placeholder="—"
+                            inputMode="decimal"
+                            value={subsidioTextByKey[key] ?? (rawValue === 0 ? '' : formatKzTyping(String(rawValue)))}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v && !/^[0-9\s.,]*$/.test(v)) return;
+                              const nextText = formatKzTyping(v);
+                              setSubsidioTextByKey(prev => ({ ...prev, [key]: nextText }));
+                              const parsed = parseKzInput(nextText);
+                              setForm(f => ({ ...f, [key]: Number.isFinite(parsed) ? parsed : 0 } as any));
+                            }}
+                            onBlur={() => {
+                              const txt = subsidioTextByKey[key] ?? '';
+                              if (!txt.trim()) {
+                                setForm(f => ({ ...f, [key]: 0 } as any));
+                                setSubsidioTextByKey(prev => ({ ...prev, [key]: '' }));
+                                setEditandoSubsidio(null);
+                                return;
+                              }
+                              const parsed = parseKzInput(txt);
+                              if (!Number.isFinite(parsed) || parsed < 0) {
+                                toast.error('Valor de subsídio inválido.');
+                                setSubsidioTextByKey(prev => ({ ...prev, [key]: formatKzInput(rawValue) }));
+                                setEditandoSubsidio(null);
+                                return;
+                              }
+                              setForm(f => ({ ...f, [key]: parsed } as any));
+                              setSubsidioTextByKey(prev => ({ ...prev, [key]: formatKzInput(parsed) }));
+                              setEditandoSubsidio(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Escape') setEditandoSubsidio(null);
+                              if (e.key === 'Enter') setEditandoSubsidio(null);
+                            }}
+                            className="w-full text-right"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm text-right hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            onClick={() => {
+                              setSubsidioTextByKey(prev => ({
+                                ...prev,
+                                [key]: rawValue === 0 ? '' : formatKzInput(rawValue),
+                              }));
+                              setEditandoSubsidio(key);
+                            }}
+                            aria-label={`Editar ${label}`}
+                          >
+                            {rawValue === 0 ? <span className="text-muted-foreground">—</span> : formatKz(rawValue)}
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-destructive/10 text-destructive"
+                        onClick={() => {
+                          setSubsidiosAtivos(prev => prev.filter(k => k !== key));
+                          setEditandoSubsidio(cur => (cur === key ? null : cur));
+                          setForm(f => {
+                            const next = { ...f, [key]: 0 } as any;
+                            const detailedSum = SUBSIDIOS_DYNAMIC_KEYS.reduce((acc, k) => acc + (next[k] ?? 0), 0);
+                            next.outrosSubsidios = detailedSum;
+                            return next;
+                          });
+                        }}
+                        aria-label={`Remover ${label}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-end">
+                <Select
+                  value={subsidioParaAdicionar}
+                  onValueChange={v => {
+                    if (v === '__none__') return;
+                    const k = v as SubsidioKey;
+                    setSubsidiosAtivos(prev => (prev.includes(k) ? prev : [...prev, k]));
+                    setSubsidioParaAdicionar('__none__');
+                    setForm(f => ({ ...f, [k]: (f as any)[k] ?? 0 } as any));
+                    setSubsidioTextByKey(prev => ({ ...prev, [k]: '' }));
+                    setEditandoSubsidio(k);
+                  }}
+                >
+                  <SelectTrigger className="w-auto !border-0 !bg-primary !text-primary-foreground hover:!bg-primary/90 [&>svg]:hidden">
+                    <SelectValue placeholder="Adicionar Subsídios" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      Adicionar Subsídios
+                    </SelectItem>
+                    {SUBSIDIOS_ALL_KEYS.filter(k => !subsidiosAtivos.includes(k)).map(k => {
+                      const label = SUBSIDIOS_CONFIG.find(x => x.key === k)?.label ?? k;
+                      return (
+                        <SelectItem key={k} value={k}>
+                          {label}
+                        </SelectItem>
+                      );
+                    })}
+                    {SUBSIDIOS_ALL_KEYS.filter(k => !subsidiosAtivos.includes(k)).length === 0 && (
+                      <SelectItem value="__todos_ja_adicionados__" disabled>
+                        Todos já adicionados
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <hr className="border-border/80" />
@@ -1302,6 +1588,27 @@ export default function ColaboradoresPage() {
                         value={viewItem.dataFimContrato ? formatDate(viewItem.dataFimContrato) : '—'}
                       />
                       <ColaboradorDetailField label="Salário base" value={formatKz(viewItem.salarioBase)} />
+                      <ColaboradorDetailField
+                        label="Subs. alimentação"
+                        value={formatKz(viewItem.subsidioAlimentacao ?? 0)}
+                      />
+                      <ColaboradorDetailField
+                        label="Subs. transporte"
+                        value={formatKz(viewItem.subsidioTransporte ?? 0)}
+                      />
+                      <ColaboradorDetailField label="Subs. Natal" value={formatKz(viewItem.subsidioNatal ?? 0)} />
+                      <ColaboradorDetailField label="Abono família" value={formatKz(viewItem.abonoFamilia ?? 0)} />
+                      <ColaboradorDetailField label="Subs. turno" value={formatKz(viewItem.subsidioTurno ?? 0)} />
+                      <ColaboradorDetailField
+                        label="Subs. disponibilidade"
+                        value={formatKz(viewItem.subsidioDisponibilidade ?? 0)}
+                      />
+                      <ColaboradorDetailField label="Subs. risco" value={formatKz(viewItem.subsidioRisco ?? 0)} />
+                      <ColaboradorDetailField label="Subs. atavio" value={formatKz(viewItem.subsidioAtavio ?? 0)} />
+                      <ColaboradorDetailField
+                        label="Subs. representação"
+                        value={formatKz(viewItem.subsidioRepresentacao ?? 0)}
+                      />
                       <ColaboradorDetailField label="Estado" value={<StatusBadge status={viewItem.status} />} />
                     </div>
                   </ColaboradorSectionCard>

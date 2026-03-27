@@ -19,6 +19,7 @@ import {
   CalendarDays,
   Cake,
   FolderArchive,
+  Calculator,
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ const MODULE_GROUPS: MenuGroup[] = [
       { label: 'Férias', path: '/capital-humano/ferias', module: 'capital-humano' },
       { label: 'Faltas', path: '/capital-humano/faltas', module: 'capital-humano' },
       { label: 'Recibos', path: '/capital-humano/recibos', module: 'capital-humano' },
+      { label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial', module: 'capital-humano' },
       { label: 'Declarações', path: '/capital-humano/declaracoes', module: 'capital-humano' },
     ],
   },
@@ -192,6 +194,7 @@ export function HorizontalMenu() {
     '/capital-humano/ferias': <Palmtree className="h-4 w-4" />,
     '/capital-humano/faltas': <Target className="h-4 w-4" />,
     '/capital-humano/recibos': <FileText className="h-4 w-4" />,
+    '/capital-humano/processamento-salarial': <Calculator className="h-4 w-4" />,
     '/capital-humano/declaracoes': <FileText className="h-4 w-4" />,
     '/financas/requisicoes': <DollarSign className="h-4 w-4" />,
     '/financas/bancos': <DollarSign className="h-4 w-4" />,

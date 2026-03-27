@@ -7,6 +7,7 @@ import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
 import { gerarPdfRecibo } from '@/utils/reciboPdf';
+import { selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -31,7 +32,7 @@ const ANO_ACTUAL = new Date().getFullYear();
 
 export default function PortalRecibosPage() {
   const colaboradorId = useColaboradorId();
-  const { recibos, colaboradoresTodos } = useData();
+  const { recibos, colaboradoresTodos, irtEscalaes } = useData();
   const [mesFilter, setMesFilter] = useState<string>('todos');
   const [anoFilter, setAnoFilter] = useState<string>('todos');
   const [viewOpen, setViewOpen] = useState(false);
@@ -45,8 +46,10 @@ export default function PortalRecibosPage() {
       return;
     }
     try {
-      gerarPdfRecibo(r, colaborador);
-      toast.success('Recibo em PDF gerado. Verifique os transferidos.');
+      const esc = selecionarEscalaoIrtPorSalarioBase(r.vencimentoBase, irtEscalaes ?? []);
+      const url = gerarPdfRecibo(r, colaborador, { irtTaxaPercent: esc?.taxaPercent ?? null });
+      window.open(url, '_blank', 'noopener,noreferrer');
+      toast.success('PDF do recibo gerado.');
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
       toast.error('Não foi possível gerar o PDF. Tente novamente.');

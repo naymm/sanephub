@@ -6,6 +6,7 @@ import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
 import { gerarPdfRecibo } from '@/utils/reciboPdf';
+import { selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -32,7 +33,7 @@ const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set
 const ANO_ACTUAL = new Date().getFullYear();
 
 export default function RecibosPage() {
-  const { recibos, addRecibo, updateRecibo, deleteRecibo, colaboradores } = useData();
+  const { recibos, addRecibo, updateRecibo, deleteRecibo, colaboradores, irtEscalaes } = useData();
   const [search, setSearch] = useState('');
   const [mesFilter, setMesFilter] = useState<string>('todos');
   const [anoFilter, setAnoFilter] = useState<string>(String(ANO_ACTUAL));
@@ -64,7 +65,8 @@ export default function RecibosPage() {
       return;
     }
     try {
-      const blobUrl = gerarPdfRecibo(r, col);
+      const esc = selecionarEscalaoIrtPorSalarioBase(r.vencimentoBase, irtEscalaes ?? []);
+      const blobUrl = gerarPdfRecibo(r, col, { irtTaxaPercent: esc?.taxaPercent ?? null });
       setPdfPreviewUrl(blobUrl);
       setPdfPreviewOpen(true);
     } catch (e) {
@@ -90,18 +92,21 @@ export default function RecibosPage() {
   const openCreate = () => {
     const colab = colaboradores.find(c => c.status === 'Activo') ?? colaboradores[0];
     const base = colab?.salarioBase ?? 0;
+    const subsidioAlimentacao = colab?.subsidioAlimentacao ?? 25000;
+    const subsidioTransporte = colab?.subsidioTransporte ?? 20000;
+    const outrosSubsidios = colab?.outrosSubsidios ?? 0;
     const mesAno = `${anoFilter && anoFilter !== 'todos' ? anoFilter : ANO_ACTUAL}-${mesFilter && mesFilter !== 'todos' ? mesFilter : '01'}`;
     setForm({
       colaboradorId: colab?.id ?? 0,
       mesAno,
       vencimentoBase: base,
-      subsidioAlimentacao: 25000,
-      subsidioTransporte: 20000,
-      outrosSubsidios: 0,
+      subsidioAlimentacao,
+      subsidioTransporte,
+      outrosSubsidios,
       inss: 0,
       irt: 0,
       outrasDeducoes: 0,
-      liquido: base + 25000 + 20000,
+      liquido: base + subsidioAlimentacao + subsidioTransporte + outrosSubsidios,
       status: 'Emitido',
     });
     setDialogOpen(true);

@@ -71,6 +71,26 @@ export interface Colaborador {
   tipoContrato: TipoContrato;
   dataFimContrato?: string;
   salarioBase: number;
+  /** Subsídios mensais (Kz) para pré-preencher o processamento salarial. */
+  subsidioAlimentacao?: number;
+  /** Subsídios mensais (Kz) para pré-preencher o processamento salarial. */
+  subsidioTransporte?: number;
+  /** Outros subsídios mensais (Kz) para pré-preencher o processamento salarial (agregado legado). */
+  outrosSubsidios?: number;
+  /** Subsídio de Natal (Kz). */
+  subsidioNatal?: number;
+  /** Abono de família (Kz). */
+  abonoFamilia?: number;
+  /** Subsídio de Turno (Kz). */
+  subsidioTurno?: number;
+  /** Subsídio de Disponibilidade (Kz). */
+  subsidioDisponibilidade?: number;
+  /** Subsídio de Risco (Kz). */
+  subsidioRisco?: number;
+  /** Subsídio de Atavio (Kz). */
+  subsidioAtavio?: number;
+  /** Subsídio de Representação (Kz). */
+  subsidioRepresentacao?: number;
   iban: string;
   emailCorporativo: string;
   emailPessoal?: string;
@@ -118,6 +138,17 @@ export interface ReciboSalario {
   outrasDeducoes: number;
   liquido: number;
   status: 'Emitido' | 'Pago';
+}
+
+/** IRT: escalões e taxas armazenados para cálculo dinâmico. */
+export interface IRTEscalao {
+  id: number;
+  ordem: number;
+  valorMin: number;
+  valorMax: number | null;
+  parcelaFixa: number;
+  taxaPercent: number;
+  excessoDe: number;
 }
 
 /** Declarações (para banco, rendimentos, antiguidade, etc.) */
