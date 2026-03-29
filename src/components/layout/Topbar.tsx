@@ -30,6 +30,7 @@ const routeTitles: Record<string, string> = {
   '/capital-humano/recibos': 'Recibos de Salário',
   '/capital-humano/processamento-salarial': 'Processamento Salarial',
   '/capital-humano/declaracoes': 'Declarações',
+  '/capital-humano/marcacoes-ponto': 'Marcações de ponto',
   '/financas/requisicoes': 'Requisições',
   '/financas/tesouraria': 'Tesouraria',
   '/financas/centros-custo': 'Centros de Custo',

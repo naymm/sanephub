@@ -20,6 +20,7 @@ import {
   Cake,
   FolderArchive,
   Calculator,
+  Fingerprint,
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -44,6 +45,7 @@ const MODULE_GROUPS: MenuGroup[] = [
       { label: 'Recibos', path: '/capital-humano/recibos', module: 'capital-humano' },
       { label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial', module: 'capital-humano' },
       { label: 'Declarações', path: '/capital-humano/declaracoes', module: 'capital-humano' },
+      { label: 'Marcações de ponto', path: '/capital-humano/marcacoes-ponto', module: 'capital-humano' },
     ],
   },
   {
@@ -196,6 +198,7 @@ export function HorizontalMenu() {
     '/capital-humano/recibos': <FileText className="h-4 w-4" />,
     '/capital-humano/processamento-salarial': <Calculator className="h-4 w-4" />,
     '/capital-humano/declaracoes': <FileText className="h-4 w-4" />,
+    '/capital-humano/marcacoes-ponto': <Fingerprint className="h-4 w-4" />,
     '/financas/requisicoes': <DollarSign className="h-4 w-4" />,
     '/financas/bancos': <DollarSign className="h-4 w-4" />,
     '/financas/contas-bancarias': <DollarSign className="h-4 w-4" />,

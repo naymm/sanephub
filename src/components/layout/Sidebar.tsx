@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
-  Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock, ShieldAlert, FolderArchive,
+  Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock,   ShieldAlert, FolderArchive,
   Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator
 } from 'lucide-react';
 
@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Recibos de Salário', path: '/capital-humano/recibos' },
       { label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial' },
       { label: 'Declarações', path: '/capital-humano/declaracoes' },
+      { label: 'Marcações de ponto', path: '/capital-humano/marcacoes-ponto' },
     ]
   },
   {

@@ -1,3 +1,8 @@
+-- Leitura de marcações de ponto por Capital Humano / Admin no âmbito da empresa.
+-- A tabela `time_punches` já existe no projecto; esta migração só adiciona política de SELECT.
+
+alter table public.time_punches enable row level security;
+
 do $$
 begin
   if not exists (

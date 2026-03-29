@@ -125,6 +125,29 @@ export interface Falta {
   registadoPor: string;
 }
 
+/** Marcação de ponto (tabela `time_punches` no Supabase). Enums DB: punch_kind, verification_method, punch_status. */
+export interface TimePunch {
+  id: number;
+  authUserId: string;
+  colaboradorId: number | null;
+  empresaId: number | null;
+  kind: string;
+  occurredAt: string;
+  verificationMethod: string | null;
+  faceVerified: boolean | null;
+  faceConfidence: number | null;
+  pinVerified: boolean;
+  selfieStoragePath: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
+  locationAccuracyM: number | null;
+  geofenceId: number | null;
+  isWithinGeofence: boolean | null;
+  status: string;
+  clientMeta: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface ReciboSalario {
   id: number;
   colaboradorId: number;
