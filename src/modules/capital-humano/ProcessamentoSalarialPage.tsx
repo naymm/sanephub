@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { Colaborador, ReciboSalario } from '@/types';
-import { calcularInssIrtLiquido } from '@/lib/irtCalculo';
+import { calcularInssIrtLiquido, IRT_ESCALOES_FALLBACK } from '@/lib/irtCalculo';
 import { formatKz } from '@/utils/formatters';
 
 import { Button } from '@/components/ui/button';
@@ -59,6 +59,7 @@ export default function ProcessamentoSalarialPage() {
   const [processing, setProcessing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastResult, setLastResult] = useState<ResultadoProcessamento[]>([]);
+  const warnedIrtFallbackRef = useRef(false);
 
   const colaboradoresActivos = useMemo(() => {
     return [...colaboradores].filter(c => c.status === 'Activo').sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
@@ -86,11 +87,11 @@ export default function ProcessamentoSalarialPage() {
     return modo === 'singular' ? (colaboradorIdSingular ? [colaboradorIdSingular] : []) : colaboradoresSelecionados;
   }, [modo, colaboradorIdSingular, colaboradoresSelecionados]);
 
+  const irtEscalaesEfetivos = useMemo(() => {
+    return irtEscalaes?.length ? irtEscalaes : IRT_ESCALOES_FALLBACK;
+  }, [irtEscalaes]);
+
   const validarAntesProcessar = () => {
-    if (!irtEscalaes?.length) {
-      toast.error('A tabela de IRT não está carregada. Confirme a migração `irt_escalaes` no Supabase.');
-      return false;
-    }
     const anoNum = Number(ano);
     const mesNum = Number(mes);
     if (!Number.isFinite(anoNum) || !Number.isFinite(mesNum)) {
@@ -117,12 +118,16 @@ export default function ProcessamentoSalarialPage() {
         outrosSubsidios: col.outrosSubsidios ?? 0,
         outrasDeducoes: outrasDeducoes,
       },
-      irtEscalaes,
+      irtEscalaesEfetivos,
     );
   };
 
   const abrirConfirmacao = () => {
     if (!validarAntesProcessar()) return;
+    if (!irtEscalaes?.length && !warnedIrtFallbackRef.current) {
+      warnedIrtFallbackRef.current = true;
+      toast.warning('Tabela de IRT não carregada no Supabase. A usar escalões locais de fallback.');
+    }
     setConfirmOpen(true);
   };
 

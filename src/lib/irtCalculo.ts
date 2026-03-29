@@ -3,6 +3,21 @@ import type { IRTEscalao } from '@/types';
 const LIMITE_SUBSIDIO_TRIBUTAVEL = 30000;
 const TAXA_SEGURANCA_SOCIAL = 0.03;
 
+/** Fallback local para não bloquear processamento quando `irt_escalaes` não estiver carregada. */
+export const IRT_ESCALOES_FALLBACK: IRTEscalao[] = [
+  { id: -1, ordem: 1, valorMin: 0, valorMax: 150000, parcelaFixa: 0, taxaPercent: 0, excessoDe: 0 },
+  { id: -2, ordem: 2, valorMin: 150000, valorMax: 200000, parcelaFixa: 12500, taxaPercent: 16, excessoDe: 150000 },
+  { id: -3, ordem: 3, valorMin: 200000, valorMax: 300000, parcelaFixa: 31250, taxaPercent: 18, excessoDe: 200000 },
+  { id: -4, ordem: 4, valorMin: 300000, valorMax: 500000, parcelaFixa: 49250, taxaPercent: 19, excessoDe: 300000 },
+  { id: -5, ordem: 5, valorMin: 500000, valorMax: 1000000, parcelaFixa: 87250, taxaPercent: 20, excessoDe: 500000 },
+  { id: -6, ordem: 6, valorMin: 1000000, valorMax: 1500000, parcelaFixa: 187250, taxaPercent: 21, excessoDe: 1000000 },
+  { id: -7, ordem: 7, valorMin: 1500000, valorMax: 2000000, parcelaFixa: 292250, taxaPercent: 22, excessoDe: 1500000 },
+  { id: -8, ordem: 8, valorMin: 2000000, valorMax: 2500000, parcelaFixa: 402250, taxaPercent: 23, excessoDe: 2000000 },
+  { id: -9, ordem: 9, valorMin: 2500000, valorMax: 5000000, parcelaFixa: 517250, taxaPercent: 24, excessoDe: 2500000 },
+  { id: -10, ordem: 10, valorMin: 5000000, valorMax: 10000000, parcelaFixa: 1117250, taxaPercent: 24.5, excessoDe: 5000000 },
+  { id: -11, ordem: 11, valorMin: 10000000, valorMax: null, parcelaFixa: 2342250, taxaPercent: 25, excessoDe: 10000000 },
+];
+
 function arredondar2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }

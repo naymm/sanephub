@@ -174,8 +174,11 @@ y+=8
 
 const dataCod = dataCodigo(recibo.mesAno)
 
-const irtTaxa = opts?.irtTaxaPercent;
-const irtLabel = typeof irtTaxa === "number" && isFinite(irtTaxa) ? `IRT (${irtTaxa}%)` : "IRT (tabela)";
+// Aceita número ou string vinda da BD (ex. taxa_percent do Postgres).
+const irtTaxaNum = Number(opts?.irtTaxaPercent);
+const irtLabel = Number.isFinite(irtTaxaNum)
+  ? `IRT (${String(irtTaxaNum).replace(".", ",")}%)`
+  : "IRT (0%)";
 
 const linhas = [
   { cod: "R01", desc: "Vencimento", rem: recibo.vencimentoBase, des: 0 },

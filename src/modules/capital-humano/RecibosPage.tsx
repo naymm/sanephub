@@ -6,7 +6,7 @@ import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
 import { gerarPdfRecibo } from '@/utils/reciboPdf';
-import { selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
+import { IRT_ESCALOES_FALLBACK, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -65,7 +65,10 @@ export default function RecibosPage() {
       return;
     }
     try {
-      const esc = selecionarEscalaoIrtPorSalarioBase(r.vencimentoBase, irtEscalaes ?? []);
+      // O escalão do IRT segue o salário base do colaborador (mesma regra que o cálculo), não o vencimento gravado no recibo.
+      const salarioBaseIrt = col.salarioBase ?? r.vencimentoBase;
+      const tabelaIrt = irtEscalaes?.length ? irtEscalaes : IRT_ESCALOES_FALLBACK;
+      const esc = selecionarEscalaoIrtPorSalarioBase(salarioBaseIrt, tabelaIrt);
       const blobUrl = gerarPdfRecibo(r, col, { irtTaxaPercent: esc?.taxaPercent ?? null });
       setPdfPreviewUrl(blobUrl);
       setPdfPreviewOpen(true);
