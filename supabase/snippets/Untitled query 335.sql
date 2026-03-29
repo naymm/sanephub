@@ -1,2 +1,4 @@
-select count(*) from public.irt_escalaes;
-select ordem, valor_min, valor_max, taxa_percent from public.irt_escalaes order by ordem;
+
+grant execute on function public.set_my_pin(text, text) to authenticated;
+grant execute on function public.verify_my_pin(text) to authenticated;
+grant execute on function public.my_pin_is_configured() to authenticated;
