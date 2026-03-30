@@ -46,6 +46,18 @@ export default function PlaneamentoRelatoriosPage() {
   const isDirectorDaEmpresa = user?.perfil === 'Director' && user?.empresaId != null && currentEmpresaId !== 'consolidado' && user.empresaId === currentEmpresaId;
   const canEdit = isGroupLevel || isDirectorDaEmpresa;
 
+  const mesAnoReferenciaNovo = new Date().toISOString().slice(0, 7);
+  const relatorioMesReferencia = relatoriosPlaneamento.find(
+    r => r.empresaId === empresaIdForNew && r.mesAno === mesAnoReferenciaNovo,
+  );
+  const podeCriarNovoMesReferencia = !relatorioMesReferencia;
+  const tituloBloqueioNovo =
+    relatorioMesReferencia == null
+      ? undefined
+      : relatorioMesReferencia.status === 'Rascunho'
+        ? 'Já existe um rascunho para este mês. Edite-o na listagem.'
+        : 'Este mês já tem relatório submetido. Não é possível criar outro.';
+
   const filtered = relatoriosPlaneamento.filter(r => {
     const matchMes = !mesAnoFilter || r.mesAno === mesAnoFilter;
     const matchStatus = statusFilter === 'todos' || r.status === statusFilter;
@@ -79,7 +91,15 @@ export default function PlaneamentoRelatoriosPage() {
           </p>
         </div>
         {canEdit && (
-          <Button onClick={() => navigate(`/planeamento/relatorios/novo?empresaId=${empresaIdForNew}&mesAno=${new Date().toISOString().slice(0, 7)}`)}>
+          <Button
+            disabled={!podeCriarNovoMesReferencia}
+            title={tituloBloqueioNovo}
+            onClick={() =>
+              navigate(
+                `/planeamento/relatorios/novo?empresaId=${empresaIdForNew}&mesAno=${mesAnoReferenciaNovo}`,
+              )
+            }
+          >
             <Plus className="h-4 w-4 mr-2" /> Novo relatório
           </Button>
         )}
@@ -174,7 +194,17 @@ export default function PlaneamentoRelatoriosPage() {
           <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">Nenhum relatório encontrado.</p>
           {canEdit && (
-            <Button variant="outline" className="mt-3" onClick={() => navigate(`/planeamento/relatorios/novo?empresaId=${empresaIdForNew}&mesAno=${new Date().toISOString().slice(0, 7)}`)}>
+            <Button
+              variant="outline"
+              className="mt-3"
+              disabled={!podeCriarNovoMesReferencia}
+              title={tituloBloqueioNovo}
+              onClick={() =>
+                navigate(
+                  `/planeamento/relatorios/novo?empresaId=${empresaIdForNew}&mesAno=${mesAnoReferenciaNovo}`,
+                )
+              }
+            >
               Criar primeiro relatório
             </Button>
           )}

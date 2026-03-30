@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
@@ -372,6 +372,20 @@ export default function PlaneamentoRelatorioFormPage() {
   const initialForm = rawInitial ? normalizeRelatorioListFields(rawInitial) : null;
 
   const [form, setForm] = useState<RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number }) | null>(initialForm);
+
+  useEffect(() => {
+    if (!isNew) return;
+    const dup = relatoriosPlaneamento.find(
+      r => r.empresaId === empresaIdParam && r.mesAno === mesAnoParam,
+    );
+    if (!dup) return;
+    if (dup.status === 'Rascunho') {
+      navigate(`/planeamento/relatorios/${dup.id}/editar`, { replace: true });
+      return;
+    }
+    toast.error('Já existe relatório para este mês. Não é possível criar outro após a submissão.');
+    navigate('/planeamento/relatorios', { replace: true });
+  }, [isNew, empresaIdParam, mesAnoParam, relatoriosPlaneamento, navigate]);
 
   if (form == null) return <div className="p-6">A carregar...</div>;
 
