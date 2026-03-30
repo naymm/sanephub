@@ -769,6 +769,15 @@ export interface LinhaPlaneamento {
   total: number;
 }
 
+/** Secção 3: matéria-prima com stock inicial e stock final alinhados (preços podem diferir). Compras do período são grelha à parte. */
+export interface LinhaGestaoStockMateriaPrima {
+  descricao: string;
+  qtdStockInicial: number;
+  precoUnitInicial: number;
+  qtdStockFinal: number;
+  precoUnitFinal: number;
+}
+
 /** Gastos com pessoal: tipo e valores */
 export interface GastosPessoalItem extends LinhaPlaneamento {
   tipo: 'salarios_base' | 'subsidios' | 'inss' | 'irt';

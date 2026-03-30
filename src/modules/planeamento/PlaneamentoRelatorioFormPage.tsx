@@ -1,15 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
-import type { RelatorioMensalPlaneamento, LinhaPlaneamento, GastosPessoalItem, SaldoBancario, PendenteValor, CicloVidaEmpresa } from '@/types';
+import type {
+  RelatorioMensalPlaneamento,
+  LinhaPlaneamento,
+  LinhaGestaoStockMateriaPrima,
+  GastosPessoalItem,
+  SaldoBancario,
+  PendenteValor,
+  CicloVidaEmpresa,
+} from '@/types';
 import { formatKz } from '@/utils/formatters';
 import { calcularEbitda, calcularMargemBruta, calcularMargemEbitda, actualizarTotaisLinhas } from '@/utils/planeamentoCalculos';
 import { Input } from '@/components/ui/input';
+import { MonetaryInput } from '@/components/ui/monetary-input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { deserializePlaneamentoTextList } from '@/utils/planeamentoTextLists';
+import { emptyGestaoStockMateriaRow, legacyMateriasStockFromUnified, unifiedMateriasStockFromLegacy } from '@/utils/planeamentoStocks';
 import {
   Select,
   SelectContent,
@@ -98,8 +108,8 @@ function LinhasTable({
           <tr className="bg-muted/50">
             <th className="text-left p-2">{columnsLabel[0]}</th>
             <th className="text-right p-2 w-24">{columnsLabel[1]}</th>
-            <th className="text-right p-2 w-28">{columnsLabel[2]}</th>
-            <th className="text-right p-2 w-28">{columnsLabel[3]}</th>
+            <th className="text-right p-2 w-32">{columnsLabel[2]} (Kz)</th>
+            <th className="text-right p-2 w-36">{columnsLabel[3]}</th>
             {!readOnly && <th className="w-10" />}
           </tr>
         </thead>
@@ -113,9 +123,16 @@ function LinhasTable({
                 <Input type="number" className="h-8 text-right" value={l.quantidade || ''} onChange={e => update(i, { quantidade: Number(e.target.value) || 0 })} disabled={readOnly} />
               </td>
               <td className="p-2">
-                <Input type="number" className="h-8 text-right" value={l.precoUnitario || ''} onChange={e => update(i, { precoUnitario: Number(e.target.value) || 0 })} disabled={readOnly} />
+                <MonetaryInput
+                  className="h-8 text-right tabular-nums"
+                  value={l.precoUnitario}
+                  onChange={n => update(i, { precoUnitario: n })}
+                  disabled={readOnly}
+                />
               </td>
-              <td className="p-2 text-right font-mono text-muted-foreground">{l.quantidade * l.precoUnitario}</td>
+              <td className="p-2 text-right font-mono text-muted-foreground tabular-nums text-xs sm:text-sm">
+                {formatKz(l.quantidade * l.precoUnitario)}
+              </td>
               {!readOnly && (
                 <td className="p-2">
                   <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => remove(i)}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -126,6 +143,150 @@ function LinhasTable({
         </tbody>
       </table>
       {!readOnly && <Button type="button" variant="outline" size="sm" onClick={add}><Plus className="h-4 w-4 mr-1" /> Adicionar linha</Button>}
+    </div>
+  );
+}
+
+function MateriasPrimasStockTable({
+  stockInicial,
+  stockFinal,
+  onApplyUnified,
+  readOnly,
+}: {
+  stockInicial: LinhaPlaneamento[];
+  stockFinal: LinhaPlaneamento[];
+  onApplyUnified: (rows: LinhaGestaoStockMateriaPrima[]) => void;
+  readOnly?: boolean;
+}) {
+  const rows = unifiedMateriasStockFromLegacy(stockInicial, stockFinal);
+
+  const patchRow = (i: number, p: Partial<LinhaGestaoStockMateriaPrima>) => {
+    const next = rows.map((r, idx) => (idx === i ? { ...r, ...p } : r));
+    onApplyUnified(next);
+  };
+
+  const add = () => onApplyUnified([...rows, emptyGestaoStockMateriaRow()]);
+  const removeAt = (i: number) => onApplyUnified(rows.filter((_, j) => j !== i));
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">
+        Uma linha por matéria-prima: descrição única para stock inicial e stock final (quantidades e preços
+        podem diferir entre início e fim do período).
+      </p>
+      <div className="overflow-x-auto rounded-md border border-border/80">
+        <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
+          <colgroup>
+            <col style={{ width: readOnly ? '34%' : '22%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            {!readOnly && <col style={{ width: '12%' }} />}
+          </colgroup>
+          <thead>
+            <tr className="bg-muted/50 border-b border-border/80">
+              <th className="px-3 py-2 text-left align-bottom font-medium" rowSpan={2}>
+                Matéria-prima
+              </th>
+              <th className="px-2 py-2 text-center font-medium" colSpan={3}>
+                Stock inicial
+              </th>
+              <th className="px-2 py-2 text-center font-medium" colSpan={3}>
+                Stock final
+              </th>
+              {!readOnly && (
+                <th className="px-1 py-2 text-center align-bottom" rowSpan={2} aria-label="Remover" />
+              )}
+            </tr>
+            <tr className="border-b border-border/80 bg-muted/40 text-xs font-normal text-muted-foreground">
+              <th className="px-2 py-2 text-right">Qtd</th>
+              <th className="px-2 py-2 text-right">P. unit. (Kz)</th>
+              <th className="px-2 py-2 text-right">Total (Kz)</th>
+              <th className="px-2 py-2 text-right">Qtd</th>
+              <th className="px-2 py-2 text-right">P. unit. (Kz)</th>
+              <th className="px-2 py-2 text-right">Total (Kz)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t border-border/50 align-middle">
+                <td className="px-3 py-2">
+                  <Input
+                    className="h-8 w-full min-w-0"
+                    value={r.descricao}
+                    onChange={e => patchRow(i, { descricao: e.target.value })}
+                    disabled={readOnly}
+                    placeholder="Descrição"
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <Input
+                    type="number"
+                    className="h-8 w-full min-w-0 text-right tabular-nums"
+                    value={r.qtdStockInicial || ''}
+                    onChange={e => patchRow(i, { qtdStockInicial: Number(e.target.value) || 0 })}
+                    disabled={readOnly}
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <MonetaryInput
+                    className="h-8 w-full min-w-0 text-right tabular-nums"
+                    value={r.precoUnitInicial}
+                    onChange={n => patchRow(i, { precoUnitInicial: n })}
+                    disabled={readOnly}
+                  />
+                </td>
+                <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums text-xs">
+                  {formatKz(r.qtdStockInicial * r.precoUnitInicial)}
+                </td>
+                <td className="px-2 py-2">
+                  <Input
+                    type="number"
+                    className="h-8 w-full min-w-0 text-right tabular-nums"
+                    value={r.qtdStockFinal || ''}
+                    onChange={e => patchRow(i, { qtdStockFinal: Number(e.target.value) || 0 })}
+                    disabled={readOnly}
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <MonetaryInput
+                    className="h-8 w-full min-w-0 text-right tabular-nums"
+                    value={r.precoUnitFinal}
+                    onChange={n => patchRow(i, { precoUnitFinal: n })}
+                    disabled={readOnly}
+                  />
+                </td>
+                <td className="px-2 py-2 text-right font-mono text-muted-foreground tabular-nums text-xs">
+                  {formatKz(r.qtdStockFinal * r.precoUnitFinal)}
+                </td>
+                {!readOnly && (
+                  <td className="px-1 py-2 text-center align-middle">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => removeAt(i)}
+                      aria-label="Remover linha"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!readOnly && (
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          <Plus className="h-4 w-4 mr-1" />
+          Adicionar matéria-prima
+        </Button>
+      )}
     </div>
   );
 }
@@ -310,18 +471,27 @@ export default function PlaneamentoRelatorioFormPage() {
       {/* Secção 3: Gestão de stocks */}
       <Card>
         <CardHeader><CardTitle className="text-base">3. Gestão de Stocks</CardTitle></CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <Label className="mb-2 block">Stock inicial de matéria-prima</Label>
-            <LinhasTable linhas={form.stockInicial} onChange={l => setForm(f => f ? { ...f, stockInicial: l } : f)} readOnly={!editMode} />
-          </div>
+        <CardContent className="space-y-8">
+          <MateriasPrimasStockTable
+            stockInicial={form.stockInicial}
+            stockFinal={form.stockFinal}
+            onApplyUnified={rows => {
+              const { stockInicial, stockFinal } = legacyMateriasStockFromUnified(rows);
+              setForm(f => (f ? { ...f, stockInicial, stockFinal } : f));
+            }}
+            readOnly={!editMode}
+          />
           <div>
             <Label className="mb-2 block">Compras do período</Label>
-            <LinhasTable linhas={form.comprasPeriodo} onChange={l => setForm(f => f ? { ...f, comprasPeriodo: l } : f)} readOnly={!editMode} />
-          </div>
-          <div>
-            <Label className="mb-2 block">Stock final de matéria-prima</Label>
-            <LinhasTable linhas={form.stockFinal} onChange={l => setForm(f => f ? { ...f, stockFinal: l } : f)} readOnly={!editMode} />
+            <p className="text-sm text-muted-foreground mb-2">
+              Movimentos de compra independentes (podem incluir vários artigos ou fornecedores, sem coincidir
+              linha-a-linha com as matérias-prima acima).
+            </p>
+            <LinhasTable
+              linhas={form.comprasPeriodo}
+              onChange={l => setForm(f => (f ? { ...f, comprasPeriodo: l } : f))}
+              readOnly={!editMode}
+            />
           </div>
         </CardContent>
       </Card>
@@ -357,12 +527,19 @@ export default function PlaneamentoRelatorioFormPage() {
                     const next = [...f.gastosPessoal]; next[i] = { ...next[i], quantidade: Number(e.target.value) || 0 };
                     return { ...f, gastosPessoal: next };
                   })} disabled={!editMode} />
-                  <Input type="number" className="w-28 h-8 text-right" value={item.precoUnitario || ''} onChange={e => setForm(f => {
-                    if (!f) return f;
-                    const next = [...f.gastosPessoal]; next[i] = { ...next[i], precoUnitario: Number(e.target.value) || 0 };
-                    return { ...f, gastosPessoal: next };
-                  })} disabled={!editMode} />
-                  <span className="font-mono text-muted-foreground w-28 text-right">{item.quantidade * item.precoUnitario}</span>
+                  <MonetaryInput
+                    className="w-32 h-8 text-right tabular-nums"
+                    value={item.precoUnitario}
+                    onChange={n => setForm(f => {
+                      if (!f) return f;
+                      const next = [...f.gastosPessoal]; next[i] = { ...next[i], precoUnitario: n };
+                      return { ...f, gastosPessoal: next };
+                    })}
+                    disabled={!editMode}
+                  />
+                  <span className="font-mono text-muted-foreground min-w-[7.5rem] text-right tabular-nums text-sm">
+                    {formatKz(item.quantidade * item.precoUnitario)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -399,9 +576,17 @@ export default function PlaneamentoRelatorioFormPage() {
                   <Input className="w-40 h-8" value={s.numeroConta} onChange={e => setForm(f => {
                     if (!f) return f; const n = [...f.saldosBancarios]; n[i] = { ...n[i], numeroConta: e.target.value }; return { ...f, saldosBancarios: n };
                   })} disabled={!editMode} placeholder="Nº conta" />
-                  <Input type="number" className="w-32 h-8 text-right" value={s.saldoActual || ''} onChange={e => setForm(f => {
-                    if (!f) return f; const n = [...f.saldosBancarios]; n[i] = { ...n[i], saldoActual: Number(e.target.value) || 0 }; return { ...f, saldosBancarios: n };
-                  })} disabled={!editMode} placeholder="Saldo" />
+                  <MonetaryInput
+                    className="w-36 h-8 text-right tabular-nums"
+                    value={s.saldoActual}
+                    onChange={n => setForm(f => {
+                      if (!f) return f;
+                      const arr = [...f.saldosBancarios]; arr[i] = { ...arr[i], saldoActual: n };
+                      return { ...f, saldosBancarios: arr };
+                    })}
+                    disabled={!editMode}
+                    placeholder="Saldo"
+                  />
                   {editMode && <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setForm(f => f ? { ...f, saldosBancarios: form.saldosBancarios.filter((_, j) => j !== i) } : f)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                 </div>
               ))}
@@ -416,9 +601,17 @@ export default function PlaneamentoRelatorioFormPage() {
                   <Input className="flex-1 min-w-[120px] h-8" value={p.nome} onChange={e => setForm(f => {
                     if (!f) return f; const n = [...f.pendentesPagamento]; n[i] = { ...n[i], nome: e.target.value }; return { ...f, pendentesPagamento: n };
                   })} disabled={!editMode} placeholder="Fornecedor" />
-                  <Input type="number" className="w-28 h-8 text-right" value={p.valor || ''} onChange={e => setForm(f => {
-                    if (!f) return f; const n = [...f.pendentesPagamento]; n[i] = { ...n[i], valor: Number(e.target.value) || 0 }; return { ...f, pendentesPagamento: n };
-                  })} disabled={!editMode} placeholder="Valor" />
+                  <MonetaryInput
+                    className="w-32 h-8 text-right tabular-nums"
+                    value={p.valor}
+                    onChange={n => setForm(f => {
+                      if (!f) return f;
+                      const arr = [...f.pendentesPagamento]; arr[i] = { ...arr[i], valor: n };
+                      return { ...f, pendentesPagamento: arr };
+                    })}
+                    disabled={!editMode}
+                    placeholder="Valor"
+                  />
                   {editMode && <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setForm(f => f ? { ...f, pendentesPagamento: form.pendentesPagamento.filter((_, j) => j !== i) } : f)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                 </div>
               ))}
@@ -433,9 +626,17 @@ export default function PlaneamentoRelatorioFormPage() {
                   <Input className="flex-1 min-w-[120px] h-8" value={p.nome} onChange={e => setForm(f => {
                     if (!f) return f; const n = [...f.pendentesRecebimento]; n[i] = { ...n[i], nome: e.target.value }; return { ...f, pendentesRecebimento: n };
                   })} disabled={!editMode} placeholder="Cliente" />
-                  <Input type="number" className="w-28 h-8 text-right" value={p.valor || ''} onChange={e => setForm(f => {
-                    if (!f) return f; const n = [...f.pendentesRecebimento]; n[i] = { ...n[i], valor: Number(e.target.value) || 0 }; return { ...f, pendentesRecebimento: n };
-                  })} disabled={!editMode} placeholder="Valor" />
+                  <MonetaryInput
+                    className="w-32 h-8 text-right tabular-nums"
+                    value={p.valor}
+                    onChange={n => setForm(f => {
+                      if (!f) return f;
+                      const arr = [...f.pendentesRecebimento]; arr[i] = { ...arr[i], valor: n };
+                      return { ...f, pendentesRecebimento: arr };
+                    })}
+                    disabled={!editMode}
+                    placeholder="Valor"
+                  />
                   {editMode && <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setForm(f => f ? { ...f, pendentesRecebimento: form.pendentesRecebimento.filter((_, j) => j !== i) } : f)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                 </div>
               ))}

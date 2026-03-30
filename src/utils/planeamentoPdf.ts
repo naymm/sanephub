@@ -3,6 +3,7 @@ import { autoTable } from 'jspdf-autotable';
 import type { RelatorioMensalPlaneamento, LinhaPlaneamento, SaldoBancario, PendenteValor } from '@/types';
 import { totalVendas, totalCMV, totalServicosExternos, totalGastosPessoal, calcularEbitda } from '@/utils/planeamentoCalculos';
 import { formatPlaneamentoTextListForDisplay } from '@/utils/planeamentoTextLists';
+import { unifiedMateriasStockFromLegacy } from '@/utils/planeamentoStocks';
 
 const MARGIN = 14;
 const PAGE_WIDTH = 210;
@@ -272,9 +273,32 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
 
   // ——— 3. Gestão de Stocks ———
   y = sectionTitle(doc, '3. Gestão de Stocks', y);
-  y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.stockInicial), y, [90, 18, 35, 32], 'Stock inicial de matéria-prima');
-  y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.comprasPeriodo), y, [90, 18, 35, 32], 'Compras do período');
-  y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.stockFinal), y, [90, 18, 35, 32], 'Stock final de matéria-prima');
+  const materiasStock = unifiedMateriasStockFromLegacy(rel.stockInicial, rel.stockFinal);
+  const rowsMaterias: (string | number)[][] = materiasStock.map(r => [
+    r.descricao || '—',
+    r.qtdStockInicial,
+    r.precoUnitInicial.toLocaleString('pt-PT'),
+    (r.qtdStockInicial * r.precoUnitInicial).toLocaleString('pt-PT'),
+    r.qtdStockFinal,
+    r.precoUnitFinal.toLocaleString('pt-PT'),
+    (r.qtdStockFinal * r.precoUnitFinal).toLocaleString('pt-PT'),
+  ]);
+  y = tableWithAutoTable(
+    doc,
+    ['Matéria-prima', 'Ini. qtd', 'Ini. p.u.', 'Ini. total', 'Fin. qtd', 'Fin. p.u.', 'Fin. total'],
+    rowsMaterias,
+    y,
+    [46, 18, 20, 22, 18, 20, 22],
+    'Stock inicial e stock final de matéria-prima (por linha)',
+  );
+  y = tableWithAutoTable(
+    doc,
+    ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'],
+    mapLinhas(rel.comprasPeriodo),
+    y,
+    [90, 18, 35, 32],
+    'Compras do período',
+  );
   y += 4;
 
   y = addPageIfNeeded(doc, y, 50);

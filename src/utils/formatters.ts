@@ -1,6 +1,43 @@
 import { format, formatDistanceToNow, differenceInDays, differenceInCalendarDays, parseISO } from 'date-fns';
 import { pt } from 'date-fns/locale';
 
+/** Texto pt-AO para editar valores (sem sufixo; vírgula decimal). */
+export function formatMonetaryAmount(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return '';
+  return new Intl.NumberFormat('pt-AO', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/** Interpreta entrada com separadores pt-AO (ex.: 1.234,56 ou 1234,5). */
+export function parseMonetaryAmount(s: string): number {
+  let t = s.trim().replace(/\u00a0/g, ' ');
+  if (!t) return 0;
+  t = t.replace(/\s/g, '').replace(/kz/gi, '');
+  if (!t) return 0;
+  const hasComma = t.includes(',');
+  const hasDot = t.includes('.');
+  if (hasComma && hasDot) {
+    if (t.lastIndexOf(',') > t.lastIndexOf('.')) {
+      t = t.replace(/\./g, '').replace(',', '.');
+    } else {
+      t = t.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    t = t.replace(',', '.');
+  } else if (hasDot) {
+    const parts = t.split('.');
+    if (parts.length === 2 && parts[1].length <= 2) {
+      t = `${parts[0]}.${parts[1]}`;
+    } else {
+      t = t.replace(/\./g, '');
+    }
+  }
+  const n = Number(t);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function formatKz(value: number): string {
   return new Intl.NumberFormat('pt-AO', {
     style: 'decimal',
