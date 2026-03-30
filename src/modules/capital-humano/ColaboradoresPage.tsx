@@ -353,6 +353,30 @@ export default function ColaboradoresPage() {
     [geofences, form.empresaId],
   );
 
+  const empresasActivas = useMemo(
+    () => [...empresas].filter(e => e.activo).sort((a, b) => a.nome.localeCompare(b.nome, 'pt')),
+    [empresas],
+  );
+
+  const empresaAnteriorModalRef = useRef<number | null>(null);
+  /** Ao mudar de empresa no formulário, remove zonas que não pertencem à nova empresa (não altera na abertura inicial). */
+  useEffect(() => {
+    if (!dialogOpen) {
+      empresaAnteriorModalRef.current = null;
+      return;
+    }
+    const eid = form.empresaId;
+    if (!Number.isFinite(eid)) return;
+    const anterior = empresaAnteriorModalRef.current;
+    if (anterior === null) {
+      empresaAnteriorModalRef.current = eid;
+      return;
+    }
+    if (anterior === eid) return;
+    empresaAnteriorModalRef.current = eid;
+    setFormGeofenceIds(prev => prev.filter(id => geofences.some(g => g.id === id && g.empresaId === eid)));
+  }, [form.empresaId, dialogOpen, geofences]);
+
   const usePaginated = isSupabaseConfigured() && !!supabase;
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -667,6 +691,10 @@ export default function ColaboradoresPage() {
 
   const save = async () => {
     if (!form.nome.trim() || !form.emailCorporativo.trim()) return;
+    if (!Number.isFinite(form.empresaId) || form.empresaId <= 0) {
+      toast.error('Seleccione a empresa do colaborador.');
+      return;
+    }
     if (!Number.isFinite(form.salarioBase) || form.salarioBase <= 0) {
       toast.error('Informe um salário base válido (maior que 0).');
       return;
@@ -736,9 +764,10 @@ export default function ColaboradoresPage() {
           .eq('colaborador_id', colabIdToSync);
         if (clearErr) console.warn('Ao desassociar perfis:', clearErr.message);
         if (associarUtilizadorId != null) {
+          const novaEmpresaId = Number(payloadColaborador.empresaId ?? empresaIdForNew);
           const { error: linkErr } = await (supabase as any)
             .from('profiles')
-            .update({ colaborador_id: colaboradorId })
+            .update({ colaborador_id: colaboradorId, empresa_id: Number.isFinite(novaEmpresaId) ? novaEmpresaId : null })
             .eq('id', associarUtilizadorId);
           if (linkErr) throw new Error(linkErr.message);
         }
@@ -837,8 +866,13 @@ export default function ColaboradoresPage() {
         fetchPaginated();
         refetch();
       }
+      const transferiu =
+        Boolean(editing) &&
+        Number(editing!.empresaId) !== Number(payloadColaborador.empresaId ?? 0);
       toast.success(
-        (editing ? 'Colaborador actualizado.' : 'Colaborador criado.') + docSuccessSuffix,
+        (editing ? 'Colaborador actualizado.' : 'Colaborador criado.') +
+          (transferiu ? ' Transferência de empresa registada.' : '') +
+          docSuccessSuffix,
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
@@ -906,10 +940,11 @@ export default function ColaboradoresPage() {
             <tr className="border-b border-border/80">
               <th className="w-14 py-3 px-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Foto</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
+              {currentEmpresaId === 'consolidado' && (
+                <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Empresa</th>
+              )}
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Cargo</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Departamento</th>
-              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Admissão</th>
-              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Contrato</th>
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Salário Base</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
@@ -917,7 +952,11 @@ export default function ColaboradoresPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="py-8 text-center text-muted-foreground text-sm">A carregar…</td></tr>
+              <tr>
+                <td colSpan={currentEmpresaId === 'consolidado' ? 10 : 9} className="py-8 text-center text-muted-foreground text-sm">
+                  A carregar…
+                </td>
+              </tr>
             ) : (
               paginatedSlice.map(c => (
                 <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
@@ -938,10 +977,13 @@ export default function ColaboradoresPage() {
                     )}
                   </td>
                   <td className="py-3 px-5 font-medium">{c.nome}</td>
+                  {currentEmpresaId === 'consolidado' && (
+                    <td className="py-3 px-5 text-muted-foreground text-sm max-w-[140px] truncate" title={empresas.find(e => e.id === c.empresaId)?.nome}>
+                      {empresas.find(e => e.id === c.empresaId)?.nome ?? '—'}
+                    </td>
+                  )}
                   <td className="py-3 px-5 text-muted-foreground">{c.cargo}</td>
                   <td className="py-3 px-5 text-muted-foreground">{c.departamento}</td>
-                  <td className="py-3 px-5 text-muted-foreground">{formatDate(c.dataAdmissao)}</td>
-                  <td className="py-3 px-5"><StatusBadge status={c.tipoContrato} variant="neutral" /></td>
                   <td className="py-3 px-5 text-right font-mono">{formatKz(c.salarioBase)}</td>
                   <td className="py-3 px-5"><StatusBadge status={c.status} /></td>
                   <td className="py-3 px-5 text-right">
@@ -988,11 +1030,33 @@ export default function ColaboradoresPage() {
             <DialogTitle>{editing ? 'Editar colaborador' : 'Novo colaborador'}</DialogTitle>
             <DialogDescription>
               {editing
-                ? 'Dados do colaborador.'
+                ? 'Dados do colaborador. Para o transferir para outra empresa, altere «Empresa» abaixo e guarde.'
                 : 'Dados do colaborador. Pode anexar documentos (arrastar ou clicar) — serão guardados na pasta «Colaboradores» já existente em Gestão documental (Capital Humano ou RH), dentro de uma subpasta com o nome do colaborador em maiúsculas.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Empresa</Label>
+              <Select
+                value={form.empresaId != null && form.empresaId > 0 ? String(form.empresaId) : ''}
+                onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresasActivas.map(e => (
+                    <SelectItem key={e.id} value={String(e.id)}>
+                      {e.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                O colaborador fica associado à empresa seleccionada (transferência entre empresas). As zonas de ponto permitidas devem
+                pertencer à mesma empresa; ao mudar de empresa, as zonas incompatíveis são removidas automaticamente.
+              </p>
+            </div>
             <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-start">
               <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-full border-2 border-border bg-background shadow-sm">
                 {fotoMostrada ? (

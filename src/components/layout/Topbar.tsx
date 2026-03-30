@@ -1,9 +1,12 @@
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, hasModuleAccess } from '@/context/AuthContext';
+import { PORTAL_MENU_ITEMS, labelPortalMenuItem } from '@/navigation/portalMenu';
+import { PORTAL_PATH_ICONS } from '@/navigation/portalMenuIcons';
+import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, ChevronRight, LogOut, User, Settings, Building2, ChevronDown } from 'lucide-react';
+import { Bell, ChevronRight, FileText, LogOut, User, Settings, Building2, ChevronDown } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -78,6 +81,15 @@ export function Topbar() {
   const navigate = useNavigate();
 
   if (!user) return null;
+
+  const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
+  const canShowModule = (moduleId?: string) => {
+    if (!moduleId) return true;
+    if (!hasModuleAccess(user, moduleId)) return false;
+    if (user.perfil === 'Colaborador') return true;
+    if (modulosAtivos == null) return true;
+    return empresaTemModuloActivado(modulosAtivos, moduleId);
+  };
 
   const title = routeTitles[location.pathname] || 'Dashboard';
   const breadcrumb = location.pathname.split('/').filter(Boolean);
@@ -196,10 +208,24 @@ export function Topbar() {
               </div>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="min-w-[13rem] w-56">
             <DropdownMenuItem onClick={() => navigate('/portal/dados')}>
               <User className="mr-2 h-4 w-4" />Ver Perfil
             </DropdownMenuItem>
+            {canShowModule('portal-colaborador') && (
+              <>
+                <DropdownMenuSeparator />
+                {PORTAL_MENU_ITEMS.map(item => {
+                  const Icon = PORTAL_PATH_ICONS[item.path] ?? FileText;
+                  return (
+                    <DropdownMenuItem key={item.path} onSelect={() => navigate(item.path)}>
+                      <Icon className="mr-2 h-4 w-4" />
+                      {labelPortalMenuItem(item, user.modulos)}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </>
+            )}
             {user.perfil === 'Admin' && (
               <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
                 <Settings className="mr-2 h-4 w-4" />Configurações

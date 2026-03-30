@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
+import { serializePlaneamentoTextList } from '@/utils/planeamentoTextLists';
 import type { Empresa, Departamento, Colaborador, Geofence, ColaboradorGeofenceLink, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
 
 const TABLE_NAMES = {
@@ -371,6 +372,45 @@ async function deleteOne(supabase: SupabaseClient, table: keyof typeof TABLE_NAM
   if (error) throw error;
 }
 
+const RELATORIO_PLANEAMENTO_LIST_KEYS = [
+  'actividadesComerciais',
+  'principaisConstrangimentos',
+  'estrategiasReceitas',
+  'estrategiasCustos',
+] as const;
+
+function prepareRelatorioPlaneamentoDbRow(p: Record<string, unknown>, omitId: boolean): Record<string, unknown> {
+  const next = { ...p };
+  for (const k of RELATORIO_PLANEAMENTO_LIST_KEYS) {
+    if (k in next && Array.isArray(next[k])) {
+      next[k] = serializePlaneamentoTextList(next[k] as string[]);
+    }
+  }
+  return mapToDb(next, omitId);
+}
+
+async function insertRelatorioPlaneamento(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+): Promise<RelatorioMensalPlaneamento> {
+  const row = prepareRelatorioPlaneamentoDbRow(payload, true);
+  const { data, error } = await supabase.from(TABLE_NAMES.relatorios_planeamento).insert(row).select().single();
+  if (error) throw error;
+  return mapRowFromDb<RelatorioMensalPlaneamento>('relatorios_planeamento', data as Record<string, unknown>);
+}
+
+async function updateRelatorioPlaneamentoRow(
+  supabase: SupabaseClient,
+  id: number,
+  payload: Record<string, unknown>,
+): Promise<RelatorioMensalPlaneamento> {
+  const row = prepareRelatorioPlaneamentoDbRow(payload, false);
+  delete row.id;
+  const { data, error } = await supabase.from(TABLE_NAMES.relatorios_planeamento).update(row).eq('id', id).select().single();
+  if (error) throw error;
+  return mapRowFromDb<RelatorioMensalPlaneamento>('relatorios_planeamento', data as Record<string, unknown>);
+}
+
 export const db = {
   empresas: {
     insert: (s: SupabaseClient, p: Partial<Empresa>) => insertOne<Empresa>(s, 'empresas', p as Record<string, unknown>, 'empresas'),
@@ -499,8 +539,10 @@ export const db = {
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'pendencias_documentais', id),
   },
   relatorios_planeamento: {
-    insert: (s: SupabaseClient, p: Partial<RelatorioMensalPlaneamento>) => insertOne<RelatorioMensalPlaneamento>(s, 'relatorios_planeamento', p as Record<string, unknown>, 'relatorios_planeamento'),
-    update: (s: SupabaseClient, id: number, p: Partial<RelatorioMensalPlaneamento>) => updateOne<RelatorioMensalPlaneamento>(s, 'relatorios_planeamento', id, p as Record<string, unknown>, 'relatorios_planeamento'),
+    insert: (s: SupabaseClient, p: Partial<RelatorioMensalPlaneamento>) =>
+      insertRelatorioPlaneamento(s, p as Record<string, unknown>),
+    update: (s: SupabaseClient, id: number, p: Partial<RelatorioMensalPlaneamento>) =>
+      updateRelatorioPlaneamentoRow(s, id, p as Record<string, unknown>),
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'relatorios_planeamento', id),
   },
   noticias: {

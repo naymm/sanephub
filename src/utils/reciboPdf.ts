@@ -180,14 +180,31 @@ const irtLabel = Number.isFinite(irtTaxaNum)
   ? `IRT (${String(irtTaxaNum).replace(".", ",")}%)`
   : "IRT (0%)";
 
-const linhas = [
+const descontoFaltas = Number(recibo.descontoFaltas) || 0;
+const diasFaltaDesconto = Number(recibo.diasFaltaDesconto) || 0;
+const outrasDeduzidas = Number(recibo.outrasDeducoes) || 0;
+
+const linhas: { cod: string; desc: string; rem: number; des: number }[] = [
   { cod: "R01", desc: "Vencimento", rem: recibo.vencimentoBase, des: 0 },
   { cod: "R11", desc: "Subsídio de alimentação", rem: recibo.subsidioAlimentacao, des: 0 },
   { cod: "R13", desc: "Subsídio de transporte", rem: recibo.subsidioTransporte, des: 0 },
   { cod: "R14", desc: "Outros subsídios", rem: recibo.outrosSubsidios, des: 0 },
+];
+if (descontoFaltas > 0) {
+  linhas.push({
+    cod: "D00",
+    desc: `Desconto por faltas`,
+    rem: 0,
+    des: descontoFaltas,
+  });
+}
+linhas.push(
   { cod: "D01", desc: "Segurança Social (3%)", rem: 0, des: recibo.inss },
-  { cod: "D02", desc: irtLabel, rem: 0, des: recibo.irt }
-]
+  { cod: "D02", desc: irtLabel, rem: 0, des: recibo.irt },
+);
+if (outrasDeduzidas > 0) {
+  linhas.push({ cod: "D03", desc: "Outras deduções", rem: 0, des: outrasDeduzidas });
+}
 
 linhas.forEach(l => {
   doc.text(l.cod, colX[0] + 2, y)
@@ -224,8 +241,10 @@ recibo.subsidioTransporte+
 recibo.outrosSubsidios
 
 const totalDesc =
+descontoFaltas +
 recibo.inss+
-recibo.irt
+recibo.irt +
+outrasDeduzidas
 
 
 doc.setFont("helvetica","bold")

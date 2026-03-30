@@ -7,7 +7,7 @@ import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
 import { gerarPdfRecibo } from '@/utils/reciboPdf';
-import { IRT_ESCALOES_FALLBACK, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
+import { IRT_ESCALOES_FALLBACK, salarioBaseParaEscalaoIrtAposFaltas, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -46,7 +46,8 @@ export default function PortalRecibosPage() {
       return;
     }
     try {
-      const salarioBaseIrt = colaborador.salarioBase ?? r.vencimentoBase;
+      const salarioBaseNominal = colaborador.salarioBase ?? r.vencimentoBase;
+      const salarioBaseIrt = salarioBaseParaEscalaoIrtAposFaltas(salarioBaseNominal, r.diasFaltaDesconto ?? 0);
       const tabelaIrt = irtEscalaes?.length ? irtEscalaes : IRT_ESCALOES_FALLBACK;
       const esc = selecionarEscalaoIrtPorSalarioBase(salarioBaseIrt, tabelaIrt);
       const url = gerarPdfRecibo(r, colaborador, { irtTaxaPercent: esc?.taxaPercent ?? null });

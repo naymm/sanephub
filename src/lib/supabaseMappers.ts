@@ -1,3 +1,5 @@
+import { deserializePlaneamentoTextList } from '@/utils/planeamentoTextLists';
+
 /**
  * Converte chaves snake_case -> camelCase (para dados vindos do Supabase).
  * Converte valores numéricos e ids para number.
@@ -85,7 +87,20 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
     'locationAccuracyM',
     'geofenceId',
   ],
-  recibos_salario: ['id', 'colaboradorId', 'vencimentoBase', 'subsidioAlimentacao', 'subsidioTransporte', 'outrosSubsidios', 'inss', 'irt', 'outrasDeducoes', 'liquido'],
+  recibos_salario: [
+    'id',
+    'colaboradorId',
+    'vencimentoBase',
+    'subsidioAlimentacao',
+    'subsidioTransporte',
+    'outrosSubsidios',
+    'descontoFaltas',
+    'diasFaltaDesconto',
+    'inss',
+    'irt',
+    'outrasDeducoes',
+    'liquido',
+  ],
   declaracoes: ['id', 'colaboradorId'],
   processos_judiciais: ['id', 'empresaId', 'valorEmCausa'],
   prazos_legais: ['id', 'empresaId'],
@@ -107,6 +122,14 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
   const camel = toCamel<Record<string, unknown>>(row);
   const keys = NUMERIC_KEYS[tableName];
   let out = keys ? ensureNumbers(camel, keys) : camel;
+  if (tableName === 'recibos_salario') {
+    const o = out as Record<string, unknown>;
+    out = {
+      ...out,
+      descontoFaltas: Number(o.descontoFaltas ?? 0),
+      diasFaltaDesconto: Number(o.diasFaltaDesconto ?? 0),
+    };
+  }
   if (tableName === 'actas') {
     const o = out as Record<string, unknown>;
     if (Array.isArray(o.participantesIds)) {
@@ -124,6 +147,16 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
         participantesNomes: (o2.participantesNomes as unknown[]).map(v => String(v)),
       };
     }
+  }
+  if (tableName === 'relatorios_planeamento') {
+    const o = out as Record<string, unknown>;
+    out = {
+      ...o,
+      actividadesComerciais: deserializePlaneamentoTextList(o.actividadesComerciais),
+      principaisConstrangimentos: deserializePlaneamentoTextList(o.principaisConstrangimentos),
+      estrategiasReceitas: deserializePlaneamentoTextList(o.estrategiasReceitas),
+      estrategiasCustos: deserializePlaneamentoTextList(o.estrategiasCustos),
+    };
   }
   return out as T;
 }

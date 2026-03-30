@@ -6,7 +6,7 @@ import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
 import { gerarPdfRecibo } from '@/utils/reciboPdf';
-import { IRT_ESCALOES_FALLBACK, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
+import { IRT_ESCALOES_FALLBACK, salarioBaseParaEscalaoIrtAposFaltas, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -50,6 +50,8 @@ export default function RecibosPage() {
     inss: 0,
     irt: 0,
     outrasDeducoes: 0,
+    descontoFaltas: 0,
+    diasFaltaDesconto: 0,
     liquido: 0,
     status: 'Emitido',
   });
@@ -66,7 +68,8 @@ export default function RecibosPage() {
     }
     try {
       // O escalão do IRT segue o salário base do colaborador (mesma regra que o cálculo), não o vencimento gravado no recibo.
-      const salarioBaseIrt = col.salarioBase ?? r.vencimentoBase;
+      const salarioBaseNominal = col.salarioBase ?? r.vencimentoBase;
+      const salarioBaseIrt = salarioBaseParaEscalaoIrtAposFaltas(salarioBaseNominal, r.diasFaltaDesconto ?? 0);
       const tabelaIrt = irtEscalaes?.length ? irtEscalaes : IRT_ESCALOES_FALLBACK;
       const esc = selecionarEscalaoIrtPorSalarioBase(salarioBaseIrt, tabelaIrt);
       const blobUrl = gerarPdfRecibo(r, col, { irtTaxaPercent: esc?.taxaPercent ?? null });
@@ -88,7 +91,8 @@ export default function RecibosPage() {
 
   const calcLiquido = (f: Omit<ReciboSalario, 'id'>) => {
     const bruto = f.vencimentoBase + f.subsidioAlimentacao + f.subsidioTransporte + f.outrosSubsidios;
-    const deducoes = f.inss + f.irt + f.outrasDeducoes;
+    const descFaltas = f.descontoFaltas ?? 0;
+    const deducoes = descFaltas + f.inss + f.irt + f.outrasDeducoes;
     return Math.max(0, bruto - deducoes);
   };
 
@@ -99,19 +103,22 @@ export default function RecibosPage() {
     const subsidioTransporte = colab?.subsidioTransporte ?? 20000;
     const outrosSubsidios = colab?.outrosSubsidios ?? 0;
     const mesAno = `${anoFilter && anoFilter !== 'todos' ? anoFilter : ANO_ACTUAL}-${mesFilter && mesFilter !== 'todos' ? mesFilter : '01'}`;
-    setForm({
+    const draft: Omit<ReciboSalario, 'id'> = {
       colaboradorId: colab?.id ?? 0,
       mesAno,
       vencimentoBase: base,
       subsidioAlimentacao,
       subsidioTransporte,
       outrosSubsidios,
+      descontoFaltas: 0,
+      diasFaltaDesconto: 0,
       inss: 0,
       irt: 0,
       outrasDeducoes: 0,
-      liquido: base + subsidioAlimentacao + subsidioTransporte + outrosSubsidios,
+      liquido: 0,
       status: 'Emitido',
-    });
+    };
+    setForm({ ...draft, liquido: calcLiquido(draft) });
     setDialogOpen(true);
   };
 
@@ -205,7 +212,9 @@ export default function RecibosPage() {
                 <td className="py-3 px-5 text-muted-foreground">{r.mesAno}</td>
                 <td className="py-3 px-5 text-right font-mono">{formatKz(r.vencimentoBase)}</td>
                 <td className="py-3 px-5 text-right font-mono">{formatKz(r.subsidioAlimentacao + r.subsidioTransporte + r.outrosSubsidios)}</td>
-                <td className="py-3 px-5 text-right font-mono">{formatKz(r.inss + r.irt + r.outrasDeducoes)}</td>
+                <td className="py-3 px-5 text-right font-mono">
+                  {formatKz((r.descontoFaltas ?? 0) + r.inss + r.irt + r.outrasDeducoes)}
+                </td>
                 <td className="py-3 px-5 text-right font-mono font-medium">{formatKz(r.liquido)}</td>
                 <td className="py-3 px-5"><StatusBadge status={r.status} /></td>
                 <td className="py-3 px-5 text-right">
@@ -349,6 +358,12 @@ export default function RecibosPage() {
                 <p><span className="text-muted-foreground">Subs. alimentação:</span> {formatKz(viewItem.subsidioAlimentacao)}</p>
                 <p><span className="text-muted-foreground">Subs. transporte:</span> {formatKz(viewItem.subsidioTransporte)}</p>
                 <p><span className="text-muted-foreground">Outros subsídios:</span> {formatKz(viewItem.outrosSubsidios)}</p>
+                {(viewItem.descontoFaltas ?? 0) > 0 ? (
+                  <p>
+                    <span className="text-muted-foreground">Desconto faltas ({viewItem.diasFaltaDesconto ?? 0} d.):</span>{' '}
+                    {formatKz(viewItem.descontoFaltas ?? 0)}
+                  </p>
+                ) : null}
                 <p><span className="text-muted-foreground">INSS:</span> {formatKz(viewItem.inss)}</p>
                 <p><span className="text-muted-foreground">IRT:</span> {formatKz(viewItem.irt)}</p>
                 <p><span className="text-muted-foreground">Outras deduções:</span> {formatKz(viewItem.outrasDeducoes)}</p>

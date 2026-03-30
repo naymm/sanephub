@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import type { RelatorioMensalPlaneamento, LinhaPlaneamento, SaldoBancario, PendenteValor } from '@/types';
 import { totalVendas, totalCMV, totalServicosExternos, totalGastosPessoal, calcularEbitda } from '@/utils/planeamentoCalculos';
+import { formatPlaneamentoTextListForDisplay } from '@/utils/planeamentoTextLists';
 
 const MARGIN = 14;
 const PAGE_WIDTH = 210;
@@ -218,10 +219,30 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
 
   // ——— 1. Análise da Empresa e do Negócio ———
   y = sectionTitle(doc, '1. Análise da Empresa e do Negócio', y);
-  y = textBlock(doc, 'Actividades comerciais desenvolvidas no período', rel.actividadesComerciais, y);
-  y = textBlock(doc, 'Principais constrangimentos identificados', rel.principaisConstrangimentos, y);
-  y = textBlock(doc, 'Estratégias para aumento de receitas', rel.estrategiasReceitas, y);
-  y = textBlock(doc, 'Estratégias para redução de custos', rel.estrategiasCustos, y);
+  y = textBlock(
+    doc,
+    'Actividades comerciais desenvolvidas no período',
+    formatPlaneamentoTextListForDisplay(rel.actividadesComerciais),
+    y,
+  );
+  y = textBlock(
+    doc,
+    'Principais constrangimentos identificados',
+    formatPlaneamentoTextListForDisplay(rel.principaisConstrangimentos),
+    y,
+  );
+  y = textBlock(
+    doc,
+    'Estratégias para aumento de receitas',
+    formatPlaneamentoTextListForDisplay(rel.estrategiasReceitas),
+    y,
+  );
+  y = textBlock(
+    doc,
+    'Estratégias para redução de custos',
+    formatPlaneamentoTextListForDisplay(rel.estrategiasCustos),
+    y,
+  );
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.text('Ciclo de vida da empresa:', MARGIN, y);

@@ -1,4 +1,5 @@
 import type { Empresa, Usuario, Colaborador, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Notificacao, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Banco } from '@/types';
+import { MODULOS_ATIVOS_PADRAO_GRUPO } from '@/utils/empresaModulos';
 
 /** Bancos de exemplo (catálogo global); inserir após empresas no seed. */
 export const BANCOS_SEED: Pick<Banco, 'nome' | 'codigo' | 'activo'>[] = [
@@ -8,13 +9,14 @@ export const BANCOS_SEED: Pick<Banco, 'nome' | 'codigo' | 'activo'>[] = [
   { nome: 'Banco Keve', codigo: 'KEVE', activo: true },
 ];
 
-/** Holding = principal; demais = unidades de negócio. */
+/** Holding = principal; demais = unidades de negócio. Todas partilham o mesmo pacote de módulos que Sanep SGPS. */
+const MODULOS_GRUPO = [...MODULOS_ATIVOS_PADRAO_GRUPO] as string[];
 export const EMPRESAS_SEED: Empresa[] = [
-  { id: 1, codigo: 'SANEP-SGPS', nome: 'Sanep SGPS, S.A.', nif: '501234567', morada: 'Lisboa, Portugal', activo: true, modulosAtivos: ['dashboard', 'financas', 'contabilidade', 'portal-colaborador', 'comunicacao-interna'] },
-  { id: 2, codigo: 'CREDIANGOLAR', nome: 'Crediangolar', nif: '501234568', morada: 'Lisboa, Portugal', activo: true, modulosAtivos: ['dashboard', 'financas', 'contabilidade', 'portal-colaborador', 'comunicacao-interna'] },
-  { id: 3, codigo: 'NOVA-FIBREX', nome: 'Nova Fibrex', nif: '501234569', morada: 'Portugal', activo: true, modulosAtivos: ['dashboard', 'capital-humano', 'portal-colaborador', 'comunicacao-interna'] },
-  { id: 4, codigo: 'SANEP-LDA', nome: 'Sanep LDA', nif: '5417626708', morada: 'Rua Direita da Samba, Ed. LGT, 1º Andar, Luanda', activo: true },
-  { id: 5, codigo: 'SANEP-VIDA', nome: 'Sanep Vida', nif: '5417626710', morada: 'Luanda', activo: true },
+  { id: 1, codigo: 'SANEP-SGPS', nome: 'Sanep SGPS, S.A.', nif: '501234567', morada: 'Lisboa, Portugal', activo: true, modulosAtivos: MODULOS_GRUPO },
+  { id: 2, codigo: 'CREDIANGOLAR', nome: 'Crediangolar', nif: '501234568', morada: 'Lisboa, Portugal', activo: true, modulosAtivos: MODULOS_GRUPO },
+  { id: 3, codigo: 'NOVA-FIBREX', nome: 'Nova Fibrex', nif: '501234569', morada: 'Portugal', activo: true, modulosAtivos: MODULOS_GRUPO },
+  { id: 4, codigo: 'SANEP-LDA', nome: 'Sanep LDA', nif: '5417626708', morada: 'Rua Direita da Samba, Ed. LGT, 1º Andar, Luanda', activo: true, modulosAtivos: MODULOS_GRUPO },
+  { id: 5, codigo: 'SANEP-VIDA', nome: 'Sanep Vida', nif: '5417626710', morada: 'Luanda', activo: true, modulosAtivos: MODULOS_GRUPO },
 ];
 
 export const DEPARTAMENTOS_SEED: Departamento[] = [
@@ -92,14 +94,14 @@ export const FALTAS_SEED: Falta[] = [
 ];
 
 export const RECIBOS_SEED: ReciboSalario[] = [
-  { id: 1, colaboradorId: 1, mesAno: "2024-11", vencimentoBase: 1500000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 45000, irt: 225000, outrasDeducoes: 0, liquido: 1275000, status: "Pago" },
-  { id: 2, colaboradorId: 2, mesAno: "2024-11", vencimentoBase: 850000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 25500, irt: 105000, outrasDeducoes: 0, liquido: 764500, status: "Pago" },
-  { id: 3, colaboradorId: 3, mesAno: "2024-11", vencimentoBase: 950000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 28500, irt: 127500, outrasDeducoes: 0, liquido: 839000, status: "Pago" },
-  { id: 4, colaboradorId: 7, mesAno: "2024-11", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
-  { id: 5, colaboradorId: 7, mesAno: "2024-12", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
-  { id: 6, colaboradorId: 7, mesAno: "2025-01", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
-  { id: 7, colaboradorId: 8, mesAno: "2024-11", vencimentoBase: 350000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 10500, irt: 26250, outrasDeducoes: 0, liquido: 338250, status: "Pago" },
-  { id: 8, colaboradorId: 8, mesAno: "2024-12", vencimentoBase: 350000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, inss: 10500, irt: 26250, outrasDeducoes: 0, liquido: 338250, status: "Pago" },
+  { id: 1, colaboradorId: 1, mesAno: "2024-11", vencimentoBase: 1500000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 45000, irt: 225000, outrasDeducoes: 0, liquido: 1275000, status: "Pago" },
+  { id: 2, colaboradorId: 2, mesAno: "2024-11", vencimentoBase: 850000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 25500, irt: 105000, outrasDeducoes: 0, liquido: 764500, status: "Pago" },
+  { id: 3, colaboradorId: 3, mesAno: "2024-11", vencimentoBase: 950000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 28500, irt: 127500, outrasDeducoes: 0, liquido: 839000, status: "Pago" },
+  { id: 4, colaboradorId: 7, mesAno: "2024-11", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
+  { id: 5, colaboradorId: 7, mesAno: "2024-12", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
+  { id: 6, colaboradorId: 7, mesAno: "2025-01", vencimentoBase: 450000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 13500, irt: 37500, outrasDeducoes: 0, liquido: 444000, status: "Pago" },
+  { id: 7, colaboradorId: 8, mesAno: "2024-11", vencimentoBase: 350000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 10500, irt: 26250, outrasDeducoes: 0, liquido: 338250, status: "Pago" },
+  { id: 8, colaboradorId: 8, mesAno: "2024-12", vencimentoBase: 350000, subsidioAlimentacao: 25000, subsidioTransporte: 20000, outrosSubsidios: 0, descontoFaltas: 0, diasFaltaDesconto: 0, inss: 10500, irt: 26250, outrasDeducoes: 0, liquido: 338250, status: "Pago" },
 ];
 
 export const DECLARACOES_SEED: Declaracao[] = [
@@ -341,10 +343,13 @@ export const RELATORIOS_PLANEAMENTO_SEED: RelatorioMensalPlaneamento[] = [
     empresaId: 1,
     mesAno: '2024-11',
     status: 'Submetido',
-    actividadesComerciais: 'Vendas de equipamento e prestação de serviços de manutenção. Expansão comercial no sul.',
-    principaisConstrangimentos: 'Atrasos na cadeia de aprovisionamento.',
-    estrategiasReceitas: 'Novos contratos de manutenção; parcerias com distribuidores.',
-    estrategiasCustos: 'Negociação com fornecedores; optimização de stocks.',
+    actividadesComerciais: [
+      'Vendas de equipamento e prestação de serviços de manutenção.',
+      'Expansão comercial no sul.',
+    ],
+    principaisConstrangimentos: ['Atrasos na cadeia de aprovisionamento.'],
+    estrategiasReceitas: ['Novos contratos de manutenção.', 'Parcerias com distribuidores.'],
+    estrategiasCustos: ['Negociação com fornecedores.', 'Optimização de stocks.'],
     cicloVida: 'Crescimento',
     necessidadesInvestimento: [
       { descricao: 'Equipamento informático', quantidade: 5, precoUnitario: 500000, total: 2500000 },

@@ -189,6 +189,10 @@ export interface ReciboSalario {
   subsidioAlimentacao: number;
   subsidioTransporte: number;
   outrosSubsidios: number;
+  /** Desconto no bruto por faltas (soma base/22 + alim./22 + transp./22) por dia, antes de impostos. */
+  descontoFaltas: number;
+  /** Dias de falta contados (Injustificada e Por atrasos no mês do recibo). */
+  diasFaltaDesconto: number;
   inss: number;
   irt: number;
   outrasDeducoes: number;
@@ -793,11 +797,11 @@ export interface RelatorioMensalPlaneamento {
   empresaId: number;
   mesAno: string;
   status: StatusRelatorioPlaneamento;
-  /** Secção 1: Análise da Empresa e do Negócio */
-  actividadesComerciais: string;
-  principaisConstrangimentos: string;
-  estrategiasReceitas: string;
-  estrategiasCustos: string;
+  /** Secção 1: Análise da Empresa e do Negócio (itens editáveis em lista) */
+  actividadesComerciais: string[];
+  principaisConstrangimentos: string[];
+  estrategiasReceitas: string[];
+  estrategiasCustos: string[];
   cicloVida: CicloVidaEmpresa;
   /** Secção 2: Necessidades de investimento */
   necessidadesInvestimento: LinhaPlaneamento[];

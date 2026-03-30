@@ -4,6 +4,7 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { PORTAL_MENU_ITEMS } from '@/navigation/portalMenu';
 import {
   Users,
   Palmtree,
@@ -139,13 +140,7 @@ const MODULE_GROUPS: MenuGroup[] = [
   },
 ];
 
-const PORTAL_ITEMS: MenuChild[] = [
-  { label: 'As Minhas Férias', path: '/portal/ferias', module: 'portal-colaborador' },
-  { label: 'As Minhas Faltas', path: '/portal/faltas', module: 'portal-colaborador' },
-  { label: 'Os Meus Recibos', path: '/portal/recibos', module: 'portal-colaborador' },
-  { label: 'As Minhas Declarações', path: '/portal/declaracoes', module: 'portal-colaborador' },
-  { label: 'Requisição à Área Financeira', path: '/portal/requisicoes', module: 'portal-colaborador' },
-];
+const PORTAL_ITEMS: MenuChild[] = [...PORTAL_MENU_ITEMS];
 
 export function HorizontalMenu() {
   const { user } = useAuth();
@@ -261,6 +256,21 @@ export function HorizontalMenu() {
               >
                 {iconByPath[item.path] ? iconByPath[item.path] : <span>{item.label.split(' ')[0]}</span>}
                 <span className="hidden sm:inline">{item.label}</span>
+              </NavLink>
+            ))}
+
+            {/* Portal: no ramo «flat» (Colaborador com portal + outros módulos) estes itens não vinham de MODULE_GROUPS — era preciso listá-los aqui. */}
+            {portalItems.map(item => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) => itemClass(isActive || location.pathname === item.path)}
+              >
+                {iconByPath[item.path] ? iconByPath[item.path] : (
+                  <span className="text-[11px] font-bold">{item.label.split(' ')[0].slice(0, 1)}</span>
+                )}
+                <span className="hidden sm:inline">{item.label}</span>
+                <span className="sm:hidden">{item.label.split(' ')[0]}</span>
               </NavLink>
             ))}
 

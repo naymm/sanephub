@@ -364,7 +364,9 @@ export default function UtilizadoresPage() {
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar utilizador' : 'Novo utilizador'}</DialogTitle>
             <DialogDescription>
-              Dados do utilizador e módulos a que tem acesso. Se não seleccionar módulos, o acesso segue o perfil.
+              Dados do utilizador. Para perfis de direcção e áreas (Director, PCA, RH, etc.), os módulos marcados{' '}
+              <strong>somam-se</strong> ao acesso definido pelo perfil — não substituem esse acesso. Para Colaborador, a lista
+              de módulos é a referência principal (junto com o portal).
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">

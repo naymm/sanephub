@@ -312,7 +312,13 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
   'configuracoes': ['Admin'],
 };
 
-/** Verifica se o utilizador tem acesso ao módulo. Admin tem sempre acesso. Colaborador: se modulos estiver vazio/indefinido usa perfil (portal); senão usa a lista. */
+/**
+ * Verifica se o utilizador tem acesso ao módulo.
+ * - Admin: sempre.
+ * - Colaborador: lista `modulos` em exclusivo (vazio → fallback por perfil); portal obrigatório noutros fluxos.
+ * - Outros perfis (PCA, Director, RH, …): a lista `modulos` **não substitui** o perfil — faz união (OR).
+ *   Assim, marcar só «Dashboard» não deixa o menu de aplicações vazio; o acesso base do perfil mantém-se.
+ */
 export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (!user) return false;
   if (user.perfil === 'Admin') return true;
@@ -325,9 +331,12 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
     if (module === 'gestao-documentos' && user.modulos.includes('secretaria')) return true;
     return user.modulos.includes(module);
   }
-  if (Array.isArray(user.modulos) && user.modulos.length > 0) {
-    if (module === 'gestao-documentos' && user.modulos.includes('secretaria')) return true;
-    return user.modulos.includes(module);
+
+  const porPerfil = MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;
+  if (!Array.isArray(user.modulos) || user.modulos.length === 0) {
+    return porPerfil;
   }
-  return MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;
+  if (module === 'gestao-documentos' && user.modulos.includes('secretaria')) return true;
+  if (user.modulos.includes(module)) return true;
+  return porPerfil;
 }

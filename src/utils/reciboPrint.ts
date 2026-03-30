@@ -1,5 +1,4 @@
-import type { ReciboSalario } from '@/types';
-import type { Colaborador } from '@/types';
+import type { ReciboSalario, Colaborador } from '@/types';
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
@@ -232,8 +231,10 @@ function escapeHtml(s: string): string {
 }
 
 export function getReciboPrintHtml(recibo: ReciboSalario, colaborador: Colaborador): string {
+  const descontoFaltas = recibo.descontoFaltas ?? 0;
+  const diasFalta = recibo.diasFaltaDesconto ?? 0;
   const totalRemun = recibo.vencimentoBase + recibo.subsidioAlimentacao + recibo.subsidioTransporte + recibo.outrosSubsidios;
-  const totalDeducoes = recibo.inss + recibo.irt + recibo.outrasDeducoes;
+  const totalDeducoes = descontoFaltas + recibo.inss + recibo.irt + recibo.outrasDeducoes;
   const vencHora = DIAS_MES > 0 ? recibo.vencimentoBase / (DIAS_MES * 8) : 0;
   const dataCod = dataCodigo(recibo.mesAno);
   const numMecan = 100 + colaborador.id;
@@ -247,6 +248,14 @@ export function getReciboPrintHtml(recibo: ReciboSalario, colaborador: Colaborad
   ];
   if (recibo.outrosSubsidios > 0) {
     linhas.push({ cod: 'R14', desc: 'Subsídio de disponibilidade', remun: recibo.outrosSubsidios, descVal: 0 });
+  }
+  if (descontoFaltas > 0) {
+    linhas.push({
+      cod: 'D00',
+      desc: `Desconto por faltas`,
+      remun: 0,
+      descVal: descontoFaltas,
+    });
   }
   linhas.push(
     { cod: 'D01', desc: 'Segurança Social (3%)', remun: 0, descVal: recibo.inss },

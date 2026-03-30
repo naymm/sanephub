@@ -1,9 +1,32 @@
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
+import { PORTAL_MENU_ITEMS, labelPortalMenuItem } from '@/navigation/portalMenu';
+import { PORTAL_PATH_ICONS } from '@/navigation/portalMenuIcons';
 import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Crown, DollarSign, FileText, LayoutGrid, LogOut, Palmtree, Search, Settings, Scale, Stamp, Target, Users, User, MessageCircle, Megaphone, CalendarDays, Cake, FolderArchive } from 'lucide-react';
+import {
+  Bell,
+  Cake,
+  CalendarDays,
+  Crown,
+  DollarSign,
+  FileText,
+  FolderArchive,
+  LayoutGrid,
+  LogOut,
+  Megaphone,
+  MessageCircle,
+  Palmtree,
+  Scale,
+  Search,
+  Settings,
+  Stamp,
+  Target,
+  User,
+  UserCircle,
+  Users,
+} from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -59,6 +82,9 @@ export function IntranetTopbar() {
       label: string;
       icon: JSX.Element;
     }> = [
+      ...(canShowModule('portal-colaborador')
+        ? [{ moduleId: 'portal-colaborador', label: 'Portal Colaborador', icon: <UserCircle className="h-4 w-4" /> }]
+        : []),
       { moduleId: 'capital-humano', label: 'Capital Humano', icon: <Users className="h-4 w-4" /> },
       { moduleId: 'financas', label: 'Finanças', icon: <DollarSign className="h-4 w-4" /> },
       { moduleId: 'contabilidade', label: 'Contabilidade', icon: <FileText className="h-4 w-4" /> },
@@ -80,6 +106,14 @@ export function IntranetTopbar() {
         path: string;
       }>
     > = {
+      'portal-colaborador': [
+        { key: 'portal-dados', label: 'Os Meus Dados', path: '/portal/dados' },
+        ...PORTAL_MENU_ITEMS.map((item) => ({
+          key: `portal-${item.path.replace(/\//g, '-')}`,
+          label: labelPortalMenuItem(item, user.modulos),
+          path: item.path,
+        })),
+      ],
       'capital-humano': [
         { key: 'capital-humano-colaboradores', label: 'Colaboradores', path: '/capital-humano/colaboradores' },
         { key: 'capital-humano-faltas', label: 'Faltas', path: '/capital-humano/faltas' },
@@ -130,7 +164,7 @@ export function IntranetTopbar() {
     };
 
     return items;
-  }, [user.perfil]);
+  }, [user.perfil, user.modulos]);
 
   const selectedPrincipalModuleLabel = useMemo(() => {
     if (!selectedPrincipalModuleId) return '';
@@ -381,31 +415,24 @@ export function IntranetTopbar() {
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="min-w-[13rem] w-56">
               <DropdownMenuItem onClick={() => navigate('/portal/dados')}>
                 <User className="mr-2 h-4 w-4" />
                 Ver Perfil
               </DropdownMenuItem>
 
-              {user.perfil === 'Colaborador' && hasModuleAccess(user, 'portal-colaborador') && (
+              {canShowModule('portal-colaborador') && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => navigate('/portal/ferias')}>
-                    <Palmtree className="mr-2 h-4 w-4" />Férias
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => navigate('/portal/faltas')}>
-                    <User className="mr-2 h-4 w-4" />Faltas
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => navigate('/portal/recibos')}>
-                    <FileText className="mr-2 h-4 w-4" />Recibos
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => navigate('/portal/declaracoes')}>
-                    <FileText className="mr-2 h-4 w-4" />Declarações
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => navigate('/portal/requisicoes')}>
-                    <DollarSign className="mr-2 h-4 w-4" />
-                    {user.modulos?.includes('financas') ? 'Requisição Finanças' : 'Requisição à Área Financeira'}
-                  </DropdownMenuItem>
+                  {PORTAL_MENU_ITEMS.map(item => {
+                    const Icon = PORTAL_PATH_ICONS[item.path] ?? FileText;
+                    return (
+                      <DropdownMenuItem key={item.path} onSelect={() => navigate(item.path)}>
+                        <Icon className="mr-2 h-4 w-4" />
+                        {labelPortalMenuItem(item, user.modulos)}
+                      </DropdownMenuItem>
+                    );
+                  })}
 
                   {hasPortalColaborador && (
                     <>

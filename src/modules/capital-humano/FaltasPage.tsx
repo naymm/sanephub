@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { formatarDuracaoHorasMinutos, SEGUNDOS_ATRASO_POR_FALTA } from '@/lib/pontoHorario';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useAuth } from '@/context/AuthContext';
@@ -30,6 +32,37 @@ const TIPO_OPTIONS: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Mé
 /** «Por atrasos» é criada pelo sistema; não entra no select de registo manual. */
 const TIPO_OPTIONS_MANUAL: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Médico', 'Licença'];
 
+function chaveAtrasoMes(colaboradorId: number, mesAno: string): string {
+  return `${colaboradorId}|${mesAno}`;
+}
+
+/** Texto curto para grelha: total acumulado no mês e limiar de cada falta automática (8 h). */
+function textoAtrasoFaltaCelula(f: Falta, totaisMes: Map<string, number>): string {
+  if (f.tipo !== 'Por atrasos') return '—';
+  const mes = f.referenciaMesAtrasos?.trim();
+  const limiar = formatarDuracaoHorasMinutos(SEGUNDOS_ATRASO_POR_FALTA);
+  if (!mes) return `1×${limiar} por falta`;
+  const total = totaisMes.get(chaveAtrasoMes(f.colaboradorId, mes));
+  if (total != null) {
+    return `${formatarDuracaoHorasMinutos(total)} acum. · +${limiar}/falta`;
+  }
+  return `+${limiar}/falta · ${mes}`;
+}
+
+function numeroFaltaAtrasoNoMes(f: Falta, todas: Falta[]): number | null {
+  if (f.tipo !== 'Por atrasos' || !f.referenciaMesAtrasos) return null;
+  const ordem = todas
+    .filter(
+      x =>
+        x.tipo === 'Por atrasos' &&
+        x.referenciaMesAtrasos === f.referenciaMesAtrasos &&
+        x.colaboradorId === f.colaboradorId,
+    )
+    .sort((a, b) => a.id - b.id);
+  const i = ordem.findIndex(x => x.id === f.id);
+  return i >= 0 ? i + 1 : null;
+}
+
 export default function FaltasPage() {
   const { user } = useAuth();
   const { faltas, addFalta, updateFalta, deleteFalta, colaboradores } = useData();
@@ -48,6 +81,56 @@ export default function FaltasPage() {
     motivo: '',
     registadoPor: user?.nome ?? '',
   });
+  const [totaisAtrasoMes, setTotaisAtrasoMes] = useState<Map<string, number>>(() => new Map());
+
+  const paresAtrasoConsulta = useMemo(() => {
+    const colIds = new Set<number>();
+    const meses = new Set<string>();
+    for (const f of faltas) {
+      if (f.tipo !== 'Por atrasos' || !f.referenciaMesAtrasos) continue;
+      colIds.add(f.colaboradorId);
+      meses.add(f.referenciaMesAtrasos.trim());
+    }
+    return { colIds: [...colIds], meses: [...meses] };
+  }, [faltas]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase || paresAtrasoConsulta.colIds.length === 0) {
+      setTotaisAtrasoMes(new Map());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('colaborador_mes_atraso')
+        .select('colaborador_id, mes_ano, total_segundos_atraso')
+        .in('colaborador_id', paresAtrasoConsulta.colIds)
+        .in('mes_ano', paresAtrasoConsulta.meses);
+      if (cancelled) return;
+      if (error) {
+        console.warn('[colaborador_mes_atraso]', error.message);
+        setTotaisAtrasoMes(new Map());
+        return;
+      }
+      const m = new Map<string, number>();
+      for (const row of data ?? []) {
+        const r = row as {
+          colaborador_id: number | string;
+          mes_ano: string;
+          total_segundos_atraso: number | string;
+        };
+        const cid = Number(r.colaborador_id);
+        const sec = Number(r.total_segundos_atraso);
+        if (Number.isFinite(cid) && r.mes_ano && Number.isFinite(sec)) {
+          m.set(chaveAtrasoMes(cid, r.mes_ano.trim()), sec);
+        }
+      }
+      setTotaisAtrasoMes(m);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [paresAtrasoConsulta]);
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
 
@@ -60,6 +143,14 @@ export default function FaltasPage() {
     return matchSearch && matchTipo && matchDate;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const viewAtrasoTotalSeg =
+    viewItem?.tipo === 'Por atrasos' && viewItem.referenciaMesAtrasos
+      ? totaisAtrasoMes.get(
+          chaveAtrasoMes(viewItem.colaboradorId, viewItem.referenciaMesAtrasos.trim()),
+        )
+      : undefined;
+  const viewAtrasoOrdem = viewItem ? numeroFaltaAtrasoNoMes(viewItem, faltas) : null;
 
   const openCreate = () => {
     setEditing(null);
@@ -146,6 +237,9 @@ export default function FaltasPage() {
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Colaborador</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tipo</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Atraso
+              </th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Motivo</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Registado por</th>
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
@@ -157,6 +251,9 @@ export default function FaltasPage() {
                 <td className="py-3 px-5 font-medium">{getColabName(f.colaboradorId)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(f.data)}</td>
                 <td className="py-3 px-5">{f.tipo}</td>
+                <td className="py-3 px-5 text-muted-foreground whitespace-nowrap max-w-[200px] text-xs sm:text-sm">
+                  {textoAtrasoFaltaCelula(f, totaisAtrasoMes)}
+                </td>
                 <td className="py-3 px-5 text-muted-foreground max-w-48 truncate">{f.motivo || '—'}</td>
                 <td className="py-3 px-5 text-muted-foreground">{f.registadoPor}</td>
                 <td className="py-3 px-5 text-right">
@@ -240,6 +337,28 @@ export default function FaltasPage() {
               <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
               <p><span className="text-muted-foreground">Motivo:</span> {viewItem.motivo || '—'}</p>
               <p><span className="text-muted-foreground">Registado por:</span> {viewItem.registadoPor}</p>
+              {viewItem.tipo === 'Por atrasos' ? (
+                <>
+                  <p>
+                    <span className="text-muted-foreground">Atraso no mês:</span>{' '}
+                    {viewItem.referenciaMesAtrasos ? (
+                      viewAtrasoTotalSeg != null
+                        ? `${formatarDuracaoHorasMinutos(viewAtrasoTotalSeg)} acumulados (após tolerância de 15 min, calendário Luanda).`
+                        : 'Total do mês indisponível (sem registo em colaborador_mes_atraso ou sem permissão).'
+                    ) : (
+                      '—'
+                    )}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Esta falta:</span>{' '}
+                    corresponde a ultrapassar mais um limiar de{' '}
+                    {formatarDuracaoHorasMinutos(SEGUNDOS_ATRASO_POR_FALTA)} de atraso acumulado no mês.
+                    {viewAtrasoOrdem != null
+                      ? ` (${viewAtrasoOrdem}.ª falta «Por atrasos» desse mês e colaborador.)`
+                      : null}
+                  </p>
+                </>
+              ) : null}
               {viewItem.referenciaMesAtrasos ? (
                 <p><span className="text-muted-foreground">Mês de referência (atrasos):</span> {viewItem.referenciaMesAtrasos}</p>
               ) : null}

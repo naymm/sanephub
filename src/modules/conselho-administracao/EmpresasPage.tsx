@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Empresa } from '@/types';
+import { MODULOS_ATIVOS_PADRAO_GRUPO } from '@/utils/empresaModulos';
 import { Building2, Users, FileText, Plus, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'juridico', label: 'Jurídico' },
   { id: 'conselho-administracao', label: 'Conselho de Administração' },
   { id: 'portal-colaborador', label: 'Portal Colaborador' },
+  { id: 'comunicacao-interna', label: 'Comunicação interna' },
 ];
 
 export default function EmpresasPage() {
@@ -67,7 +69,7 @@ export default function EmpresasPage() {
       nif: '',
       morada: '',
       activo: true,
-      modulosAtivos: undefined,
+      modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO],
     });
     setDialogOpen(true);
   };
@@ -219,7 +221,12 @@ export default function EmpresasPage() {
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar empresa' : 'Nova empresa'}</DialogTitle>
-            <DialogDescription>Preencha os dados da empresa do grupo. Código e nome são obrigatórios.</DialogDescription>
+            <DialogDescription>
+              Preencha os dados da empresa do grupo. Código e nome são obrigatórios.{' '}
+              {editing
+                ? 'O pacote de módulos pode ser ajustado; por defeito o grupo usa o mesmo conjunto em todas as unidades.'
+                : 'Os módulos vêm pré-preenchidos com o pacote padrão do grupo (igual ao da Sanep SGPS); pode alterar antes de guardar.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
@@ -251,7 +258,22 @@ export default function EmpresasPage() {
             </div>
             <div className="space-y-2 border-t border-border/80 pt-4">
               <Label>Módulos permitidos</Label>
-              <p className="text-xs text-muted-foreground">Se nenhum for seleccionado, a empresa tem acesso a todos os módulos do perfil do utilizador.</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Se nenhum for seleccionado, não restringe por empresa (ver perfil do utilizador).
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 text-xs h-8"
+                  onClick={() =>
+                    setForm(f => ({ ...f, modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO] }))
+                  }
+                >
+                  Pacote grupo (Sanep SGPS)
+                </Button>
+              </div>
               <div className="grid grid-cols-2 gap-2 pt-2">
                 {MODULOS_DISPONIVEIS.map(m => (
                   <div key={m.id} className="flex items-center gap-2">

@@ -1,3 +1,21 @@
+/**
+ * Módulos activos por defeito para todas as empresas do grupo SANEP (mesmo pacote que Sanep SGPS na intranet).
+ * Mantém paridade de acessos e funcionalidades entre unidades. Administrador pode ajustar por empresa em Empresas do Grupo.
+ */
+export const MODULOS_ATIVOS_PADRAO_GRUPO: readonly string[] = [
+  'dashboard',
+  'capital-humano',
+  'financas',
+  'contabilidade',
+  'planeamento',
+  'secretaria',
+  'gestao-documentos',
+  'juridico',
+  'conselho-administracao',
+  'portal-colaborador',
+  'comunicacao-interna',
+];
+
 /** Módulos activos na empresa actual; null = sem restrição (ex. contexto consolidado). */
 export function getModulosAtivosForContext(
   currentEmpresaId: 'consolidado' | number,
@@ -5,7 +23,11 @@ export function getModulosAtivosForContext(
 ): string[] | null {
   if (currentEmpresaId === 'consolidado' || typeof currentEmpresaId !== 'number') return null;
   const emp = empresas.find(e => e.id === currentEmpresaId);
-  return emp?.modulosAtivos ?? null;
+  const raw = emp?.modulosAtivos;
+  if (raw == null) return null;
+  // Array vazio na BD: tratar como «não configurado», não como «nenhum módulo activo» (evita menu vazio).
+  if (Array.isArray(raw) && raw.length === 0) return null;
+  return raw;
 }
 
 /**

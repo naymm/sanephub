@@ -9,7 +9,7 @@ import { calcularEbitda, calcularMargemBruta, calcularMargemEbitda, actualizarTo
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { deserializePlaneamentoTextList } from '@/utils/planeamentoTextLists';
 import {
   Select,
   SelectContent,
@@ -37,15 +37,27 @@ function emptyGastosItem(tipo: GastosPessoalItem['tipo']): GastosPessoalItem {
   return { tipo, descricao: '', quantidade: 0, precoUnitario: 0, total: 0 };
 }
 
+function normalizeRelatorioListFields<T extends RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number })>(
+  r: T,
+): T {
+  return {
+    ...r,
+    actividadesComerciais: deserializePlaneamentoTextList(r.actividadesComerciais as unknown),
+    principaisConstrangimentos: deserializePlaneamentoTextList(r.principaisConstrangimentos as unknown),
+    estrategiasReceitas: deserializePlaneamentoTextList(r.estrategiasReceitas as unknown),
+    estrategiasCustos: deserializePlaneamentoTextList(r.estrategiasCustos as unknown),
+  };
+}
+
 function emptyRelatorio(empresaId: number, mesAno: string): Omit<RelatorioMensalPlaneamento, 'id'> {
   return {
     empresaId,
     mesAno,
     status: 'Rascunho',
-    actividadesComerciais: '',
-    principaisConstrangimentos: '',
-    estrategiasReceitas: '',
-    estrategiasCustos: '',
+    actividadesComerciais: [],
+    principaisConstrangimentos: [],
+    estrategiasReceitas: [],
+    estrategiasCustos: [],
     cicloVida: 'Maturidade',
     necessidadesInvestimento: [],
     stockInicial: [],
@@ -118,6 +130,66 @@ function LinhasTable({
   );
 }
 
+function DynamicStringListField({
+  label,
+  items,
+  onChange,
+  readOnly,
+  addLabel,
+}: {
+  label: string;
+  items: string[];
+  onChange: (next: string[]) => void;
+  readOnly?: boolean;
+  addLabel?: string;
+}) {
+  const updateAt = (i: number, value: string) => {
+    const next = [...items];
+    next[i] = value;
+    onChange(next);
+  };
+  const removeAt = (i: number) => onChange(items.filter((_, j) => j !== i));
+  const add = () => onChange([...items, '']);
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="space-y-2">
+        {items.length === 0 && readOnly && <p className="text-sm text-muted-foreground">—</p>}
+        {items.map((val, i) => (
+          <div key={i} className="flex gap-2 items-center">
+            <Input
+              className="h-9 flex-1"
+              value={val}
+              onChange={e => updateAt(i, e.target.value)}
+              disabled={readOnly}
+              placeholder={`Ponto ${i + 1}`}
+            />
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 text-destructive"
+                onClick={() => removeAt(i)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+      {!readOnly && (
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          <Plus className="h-4 w-4 mr-1" />
+          {addLabel ?? 'Adicionar'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function PlaneamentoRelatorioFormPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -132,10 +204,11 @@ export default function PlaneamentoRelatorioFormPage() {
   const mesAnoParam = searchParams.get('mesAno') || new Date().toISOString().slice(0, 7);
 
   const existing = id && id !== 'novo' ? relatoriosPlaneamento.find(r => r.id === Number(id)) : null;
-  const initialForm: RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number }) | null =
+  const rawInitial: RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number }) | null =
     existing ? { ...existing } :
     isNew ? { ...emptyRelatorio(empresaIdParam, mesAnoParam), id: undefined } :
     null;
+  const initialForm = rawInitial ? normalizeRelatorioListFields(rawInitial) : null;
 
   const [form, setForm] = useState<RelatorioMensalPlaneamento | (Omit<RelatorioMensalPlaneamento, 'id'> & { id?: number }) | null>(initialForm);
 
@@ -185,23 +258,35 @@ export default function PlaneamentoRelatorioFormPage() {
       {/* Secção 1: Análise da Empresa e do Negócio */}
       <Card>
         <CardHeader><CardTitle className="text-base">1. Análise da Empresa e do Negócio</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Actividades comerciais desenvolvidas no período</Label>
-            <Textarea value={form.actividadesComerciais} onChange={e => setForm(f => f ? { ...f, actividadesComerciais: e.target.value } : f)} disabled={!editMode} rows={3} className="resize-none" />
-          </div>
-          <div className="space-y-2">
-            <Label>Principais constrangimentos identificados</Label>
-            <Textarea value={form.principaisConstrangimentos} onChange={e => setForm(f => f ? { ...f, principaisConstrangimentos: e.target.value } : f)} disabled={!editMode} rows={2} className="resize-none" />
-          </div>
-          <div className="space-y-2">
-            <Label>Estratégias implementadas para aumento de receitas</Label>
-            <Textarea value={form.estrategiasReceitas} onChange={e => setForm(f => f ? { ...f, estrategiasReceitas: e.target.value } : f)} disabled={!editMode} rows={2} className="resize-none" />
-          </div>
-          <div className="space-y-2">
-            <Label>Estratégias implementadas para redução de custos</Label>
-            <Textarea value={form.estrategiasCustos} onChange={e => setForm(f => f ? { ...f, estrategiasCustos: e.target.value } : f)} disabled={!editMode} rows={2} className="resize-none" />
-          </div>
+        <CardContent className="space-y-6">
+          <DynamicStringListField
+            label="Actividades comerciais desenvolvidas no período"
+            items={form.actividadesComerciais}
+            onChange={next => setForm(f => (f ? { ...f, actividadesComerciais: next } : f))}
+            readOnly={!editMode}
+            addLabel="Adicionar actividade"
+          />
+          <DynamicStringListField
+            label="Principais constrangimentos identificados"
+            items={form.principaisConstrangimentos}
+            onChange={next => setForm(f => (f ? { ...f, principaisConstrangimentos: next } : f))}
+            readOnly={!editMode}
+            addLabel="Adicionar constrangimento"
+          />
+          <DynamicStringListField
+            label="Estratégias implementadas para aumento de receitas"
+            items={form.estrategiasReceitas}
+            onChange={next => setForm(f => (f ? { ...f, estrategiasReceitas: next } : f))}
+            readOnly={!editMode}
+            addLabel="Adicionar estratégia"
+          />
+          <DynamicStringListField
+            label="Estratégias implementadas para redução de custos"
+            items={form.estrategiasCustos}
+            onChange={next => setForm(f => (f ? { ...f, estrategiasCustos: next } : f))}
+            readOnly={!editMode}
+            addLabel="Adicionar estratégia"
+          />
           <div className="space-y-2">
             <Label>Ciclo de vida da empresa</Label>
             <Select value={form.cicloVida} onValueChange={v => setForm(f => f ? { ...f, cicloVida: v as CicloVidaEmpresa } : f)} disabled={!editMode}>

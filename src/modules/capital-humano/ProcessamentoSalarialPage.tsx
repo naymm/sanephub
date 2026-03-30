@@ -1,8 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
-import type { Colaborador, ReciboSalario } from '@/types';
-import { calcularInssIrtLiquido, IRT_ESCALOES_FALLBACK } from '@/lib/irtCalculo';
+import type { Colaborador, Falta, ReciboSalario, TipoFalta } from '@/types';
+import {
+  calcularInssIrtLiquido,
+  DIAS_UTEIS_MES_NORMA_TRABALHO,
+  IRT_ESCALOES_FALLBACK,
+} from '@/lib/irtCalculo';
 import { formatKz } from '@/utils/formatters';
 
 import { Button } from '@/components/ui/button';
@@ -30,6 +34,21 @@ interface ResultadoProcessamento {
   inss: number;
   irt: number;
   liquido: number;
+  diasFaltaDesconto: number;
+  descontoFaltas: number;
+}
+
+/** Faltas que descontam no bruto antes de impostos (norma base 22 d.u.). */
+const TIPOS_FALTA_DESCONTO_SALARIO = new Set<TipoFalta>(['Injustificada', 'Por atrasos']);
+
+function contarDiasFaltaDescontoRecibo(colaboradorId: number, mesAno: string, faltas: Falta[]): number {
+  const prefix = mesAno.trim().slice(0, 7);
+  return faltas.filter(
+    f =>
+      f.colaboradorId === colaboradorId &&
+      f.data.startsWith(prefix) &&
+      TIPOS_FALTA_DESCONTO_SALARIO.has(f.tipo),
+  ).length;
 }
 
 function clampNumber(n: unknown): number {
@@ -38,7 +57,7 @@ function clampNumber(n: unknown): number {
 }
 
 export default function ProcessamentoSalarialPage() {
-  const { colaboradores, recibos, addRecibo, updateRecibo, irtEscalaes } = useData();
+  const { colaboradores, recibos, faltas, addRecibo, updateRecibo, irtEscalaes } = useData();
 
   const [modo, setModo] = useState<ModoProcessamento>('singular');
   const [ano, setAno] = useState(String(ANO_ACTUAL));
@@ -110,6 +129,7 @@ export default function ProcessamentoSalarialPage() {
   };
 
   const calcularParaColaborador = (col: Colaborador) => {
+    const diasFalta = contarDiasFaltaDescontoRecibo(col.id, mesAno, faltas);
     return calcularInssIrtLiquido(
       {
         salarioBase: col.salarioBase,
@@ -117,6 +137,7 @@ export default function ProcessamentoSalarialPage() {
         subsidioTransporte: col.subsidioTransporte ?? 0,
         outrosSubsidios: col.outrosSubsidios ?? 0,
         outrasDeducoes: outrasDeducoes,
+        diasFaltaDesconto: diasFalta,
       },
       irtEscalaesEfetivos,
     );
@@ -151,6 +172,8 @@ export default function ProcessamentoSalarialPage() {
           subsidioAlimentacao: col.subsidioAlimentacao ?? 0,
           subsidioTransporte: col.subsidioTransporte ?? 0,
           outrosSubsidios: col.outrosSubsidios ?? 0,
+          descontoFaltas: calc.descontoFaltas,
+          diasFaltaDesconto: calc.diasFaltaDesconto,
           inss: calc.inss,
           irt: calc.irt,
           outrasDeducoes: outrasDeducoes,
@@ -167,6 +190,8 @@ export default function ProcessamentoSalarialPage() {
               inss: calc.inss,
               irt: calc.irt,
               liquido: calc.liquido,
+              diasFaltaDesconto: calc.diasFaltaDesconto,
+              descontoFaltas: calc.descontoFaltas,
             });
             continue;
           }
@@ -179,6 +204,8 @@ export default function ProcessamentoSalarialPage() {
             inss: calc.inss,
             irt: calc.irt,
             liquido: calc.liquido,
+            diasFaltaDesconto: calc.diasFaltaDesconto,
+            descontoFaltas: calc.descontoFaltas,
           });
         } else {
           await addRecibo(payload);
@@ -189,6 +216,8 @@ export default function ProcessamentoSalarialPage() {
             inss: calc.inss,
             irt: calc.irt,
             liquido: calc.liquido,
+            diasFaltaDesconto: calc.diasFaltaDesconto,
+            descontoFaltas: calc.descontoFaltas,
           });
         }
       }
@@ -258,6 +287,19 @@ export default function ProcessamentoSalarialPage() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="rounded-md border bg-muted/20 px-4 py-3 text-sm text-muted-foreground space-y-2 max-w-4xl">
+        <p className="font-medium text-foreground">Desconto por faltas (bruto, antes de impostos)</p>
+        <p>
+          Conforme prática usual alinhada à Lei Geral do Trabalho, o valor de um dia de trabalho usa-se com base em{' '}
+          <strong>{DIAS_UTEIS_MES_NORMA_TRABALHO} dias úteis</strong>: desconta-se{' '}
+          <span className="font-mono">vencimento base ÷ {DIAS_UTEIS_MES_NORMA_TRABALHO}</span>,{' '}
+          <span className="font-mono">subsídio alimentação ÷ {DIAS_UTEIS_MES_NORMA_TRABALHO}</span> e{' '}
+          <span className="font-mono">subsídio transporte ÷ {DIAS_UTEIS_MES_NORMA_TRABALHO}</span> por cada dia de falta{' '}
+          <strong>injustificada</strong> ou <strong>Por atrasos</strong> registada no mesmo mês do recibo. O INSS e o IRT calculam-se sobre o bruto
+          já reduzido por esse desconto.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -440,6 +482,8 @@ export default function ProcessamentoSalarialPage() {
                 <tr className="border-b border-border/80">
                   <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Colaborador</th>
                   <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acção</th>
+                  <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Dias falta</th>
+                  <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Desc. faltas</th>
                   <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">INSS</th>
                   <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">IRT</th>
                   <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Líquido</th>
@@ -452,6 +496,8 @@ export default function ProcessamentoSalarialPage() {
                     <td className="py-2 px-5">
                       {r.acao === 'skip_existe' ? 'Skip (já existe)' : r.acao === 'criado' ? 'Criado' : 'Atualizado'}
                     </td>
+                    <td className="py-2 px-5 text-right font-mono tabular-nums">{r.diasFaltaDesconto}</td>
+                    <td className="py-2 px-5 text-right font-mono">{formatKz(r.descontoFaltas)}</td>
                     <td className="py-2 px-5 text-right font-mono">{formatKz(r.inss)}</td>
                     <td className="py-2 px-5 text-right font-mono">{formatKz(r.irt)}</td>
                     <td className="py-2 px-5 text-right font-mono">{formatKz(r.liquido)}</td>
@@ -485,6 +531,10 @@ export default function ProcessamentoSalarialPage() {
               <span className="text-muted-foreground">Outras deduções</span>
               <span className="font-medium tabular-nums">{formatKz(outrasDeducoes)}</span>
             </div>
+            <p className="text-xs text-muted-foreground border-t pt-2 mt-1">
+              O desconto por faltas (base {DIAS_UTEIS_MES_NORMA_TRABALHO} d.u.) calcula-se automaticamente a partir das faltas{' '}
+              «Injustificada» e «Por atrasos» no mês do recibo, antes de INSS e IRT.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={processing}>

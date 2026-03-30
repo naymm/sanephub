@@ -3,6 +3,12 @@ import type { IRTEscalao } from '@/types';
 const LIMITE_SUBSIDIO_TRIBUTAVEL = 30000;
 const TAXA_SEGURANCA_SOCIAL = 0.03;
 
+/**
+ * Referência de dias úteis por mês para valorizar um dia de falta no bruto (prática usual alinhada à LGT).
+ * Valor do dia = componente / DIAS_UTEIS_MES_NORMA_TRABALHO.
+ */
+export const DIAS_UTEIS_MES_NORMA_TRABALHO = 22;
+
 /** Fallback local para não bloquear processamento quando `irt_escalaes` não estiver carregada. */
 export const IRT_ESCALOES_FALLBACK: IRTEscalao[] = [
   { id: -1, ordem: 1, valorMin: 0, valorMax: 150000, parcelaFixa: 0, taxaPercent: 0, excessoDe: 0 },
@@ -123,6 +129,55 @@ export interface ProcessamentoSalarialInput {
   subsidioTransporte: number;
   outrosSubsidios: number;
   outrasDeducoes?: number;
+  /** Faltas Injustificada e «Por atrasos» no mês: desconto (base+alim.+transp.)/22 por dia antes de impostos. */
+  diasFaltaDesconto?: number;
+}
+
+export interface ComponentesAposFaltas {
+  salarioBaseEfetivo: number;
+  subsidioAlimentacaoEfetivo: number;
+  subsidioTransporteEfetivo: number;
+  descontoBase: number;
+  descontoAlimentacao: number;
+  descontoTransporte: number;
+  totalDescontoFaltas: number;
+}
+
+export function calcularComponentesAposFaltas(
+  salarioBase: number,
+  subsidioAlimentacao: number,
+  subsidioTransporte: number,
+  diasFalta: number,
+  diasUteisRef: number = DIAS_UTEIS_MES_NORMA_TRABALHO,
+): ComponentesAposFaltas {
+  const n = Math.max(0, Math.floor(diasFalta));
+  const d = diasUteisRef > 0 ? diasUteisRef : DIAS_UTEIS_MES_NORMA_TRABALHO;
+  const descontoBase = arredondar2((Math.max(0, salarioBase) / d) * n);
+  const descontoAlimentacao = arredondar2((Math.max(0, subsidioAlimentacao) / d) * n);
+  const descontoTransporte = arredondar2((Math.max(0, subsidioTransporte) / d) * n);
+  const totalDescontoFaltas = arredondar2(descontoBase + descontoAlimentacao + descontoTransporte);
+
+  return {
+    salarioBaseEfetivo: Math.max(0, arredondar2(salarioBase - descontoBase)),
+    subsidioAlimentacaoEfetivo: Math.max(0, arredondar2(subsidioAlimentacao - descontoAlimentacao)),
+    subsidioTransporteEfetivo: Math.max(0, arredondar2(subsidioTransporte - descontoTransporte)),
+    descontoBase,
+    descontoAlimentacao,
+    descontoTransporte,
+    totalDescontoFaltas,
+  };
+}
+
+/** Salário base após desconto proporcional por faltas — para selecção de escalão IRT coerente com o processamento. */
+export function salarioBaseParaEscalaoIrtAposFaltas(
+  vencimentoBaseNominal: number,
+  diasFaltaDesconto: number,
+  diasUteisRef: number = DIAS_UTEIS_MES_NORMA_TRABALHO,
+): number {
+  const n = Math.max(0, Math.floor(diasFaltaDesconto));
+  if (n === 0) return Math.max(0, vencimentoBaseNominal);
+  const c = calcularComponentesAposFaltas(vencimentoBaseNominal, 0, 0, n, diasUteisRef);
+  return c.salarioBaseEfetivo;
 }
 
 export interface ProcessamentoSalarialResultado {
@@ -131,6 +186,8 @@ export interface ProcessamentoSalarialResultado {
   irt: number;
   liquido: number;
   escalonIrt?: IRTEscalao | null;
+  descontoFaltas: number;
+  diasFaltaDesconto: number;
 }
 
 export function calcularInssIrtLiquido(
@@ -143,16 +200,20 @@ export function calcularInssIrtLiquido(
     subsidioTransporte,
     outrosSubsidios,
     outrasDeducoes = 0,
+    diasFaltaDesconto: diasFaltaBruto = 0,
   } = input;
 
+  const diasFalta = Math.max(0, Math.floor(diasFaltaBruto));
+  const apos = calcularComponentesAposFaltas(salarioBase, subsidioAlimentacao, subsidioTransporte, diasFalta);
+
   const { salarioBruto, segurancaSocialRounded, materiaColetavel } = calcularMateriaColetavel({
-    salarioBase,
-    subsidioAlimentacao,
-    subsidioTransporte,
+    salarioBase: apos.salarioBaseEfetivo,
+    subsidioAlimentacao: apos.subsidioAlimentacaoEfetivo,
+    subsidioTransporte: apos.subsidioTransporteEfetivo,
     outrosSubsidios,
   });
 
-  const { irt, escalon } = calcularIrt(materiaColetavel, salarioBase, irtEscalaes);
+  const { irt, escalon } = calcularIrt(materiaColetavel, apos.salarioBaseEfetivo, irtEscalaes);
   const liquido = Math.max(0, arredondar2(salarioBruto - segurancaSocialRounded - irt - outrasDeducoes));
 
   return {
@@ -161,6 +222,8 @@ export function calcularInssIrtLiquido(
     irt,
     liquido,
     escalonIrt: escalon,
+    descontoFaltas: apos.totalDescontoFaltas,
+    diasFaltaDesconto: diasFalta,
   };
 }
 
