@@ -19,6 +19,7 @@ import RecibosPage from "@/modules/capital-humano/RecibosPage";
 import DeclaracoesPage from "@/modules/capital-humano/DeclaracoesPage";
 import ProcessamentoSalarialPage from "@/modules/capital-humano/ProcessamentoSalarialPage";
 import TimePunchesPage from "@/modules/capital-humano/TimePunchesPage";
+import GeofencesPage from "@/modules/capital-humano/GeofencesPage";
 import RequisicoesPage from "@/modules/financas/RequisicoesPage";
 import TesourariaPage from "@/modules/financas/TesourariaPage";
 import BancosPage from "@/modules/financas/BancosPage";
@@ -108,6 +109,7 @@ const App = () => (
                   <Route path="/capital-humano/declaracoes" element={<DeclaracoesPage />} />
                   <Route path="/capital-humano/processamento-salarial" element={<ProcessamentoSalarialPage />} />
                   <Route path="/capital-humano/marcacoes-ponto" element={<TimePunchesPage />} />
+                  <Route path="/capital-humano/zonas-trabalho" element={<GeofencesPage />} />
                   {/* Finanças */}
                   <Route path="/financas/requisicoes" element={<RequisicoesPage />} />
                   <Route path="/financas/bancos" element={<BancosPage />} />

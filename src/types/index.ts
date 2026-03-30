@@ -99,6 +99,35 @@ export interface Colaborador {
   contactoEmergenciaNome?: string;
   contactoEmergenciaTelefone?: string;
   status: StatusColaborador;
+  /** Hora normal de entrada (HH:mm ou HH:mm:ss); tolerância de 15 min aplicada no cálculo de atrasos. */
+  horarioEntrada?: string;
+  /** Fim do horário de trabalho (HH:mm ou HH:mm:ss). */
+  horarioSaida?: string;
+  /** Se true, atrasos não acumulam e não geram faltas automáticas por atraso. */
+  isencaoHorario?: boolean;
+  /** Zonas de ponto permitidas (`colaborador_geofences`); preenchido no cliente, não é coluna em `colaboradores`. */
+  geofenceIds?: number[];
+}
+
+/** Zona de trabalho / geofence (tabela `geofences`). */
+export interface Geofence {
+  id: number;
+  empresaId: number;
+  nome: string;
+  centerLat: number;
+  centerLng: number;
+  radiusMeters: number;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Permissão de colaborador para marcar ponto numa zona (tabela `colaborador_geofences`). */
+export interface ColaboradorGeofenceLink {
+  id: number;
+  colaboradorId: number;
+  geofenceId: number;
+  createdAt: string;
 }
 
 export type StatusFerias = 'Pendente' | 'Aprovado' | 'Rejeitado' | 'Cancelado';
@@ -114,7 +143,7 @@ export interface Ferias {
   solicitadoEm: string;
 }
 
-export type TipoFalta = 'Justificada' | 'Injustificada' | 'Atestado Médico' | 'Licença';
+export type TipoFalta = 'Justificada' | 'Injustificada' | 'Atestado Médico' | 'Licença' | 'Por atrasos';
 
 export interface Falta {
   id: number;
@@ -123,6 +152,8 @@ export interface Falta {
   tipo: TipoFalta;
   motivo: string;
   registadoPor: string;
+  /** YYYY-MM para faltas geradas pelo sistema por acumulado de atrasos. */
+  referenciaMesAtrasos?: string | null;
 }
 
 /** Marcação de ponto (tabela `time_punches` no Supabase). Enums DB: punch_kind, verification_method, punch_status. */
@@ -130,6 +161,8 @@ export interface TimePunch {
   id: number;
   authUserId: string;
   colaboradorId: number | null;
+  /** Preenchido pelo `select` com join a `colaboradores(nome)` quando disponível. */
+  colaboradorNome?: string | null;
   empresaId: number | null;
   kind: string;
   occurredAt: string;

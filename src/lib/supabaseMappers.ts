@@ -45,6 +45,8 @@ function ensureNumbers<T extends Record<string, unknown>>(row: T, numericKeys: s
 export const NUMERIC_KEYS: Record<string, string[]> = {
   empresas: ['id'],
   departamentos: ['id'],
+  geofences: ['id', 'empresaId', 'centerLat', 'centerLng', 'radiusMeters'],
+  colaborador_geofences: ['id', 'colaboradorId', 'geofenceId'],
   colaboradores: [
     'id',
     'empresaId',

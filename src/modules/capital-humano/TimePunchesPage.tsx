@@ -6,7 +6,8 @@ import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
-import type { TimePunch } from '@/types';
+import type { TimePunch, Colaborador } from '@/types';
+import { textoReferenciaHorarioColaborador } from '@/lib/pontoHorario';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { Input } from '@/components/ui/input';
@@ -40,8 +41,32 @@ function formatOccurredAt(iso: string): string {
   }
 }
 
+function extrairNomeColaboradorEmbutido(raw: Record<string, unknown>): string | null {
+  const emb = raw.colaboradores;
+  if (emb && typeof emb === 'object' && !Array.isArray(emb)) {
+    const n = (emb as Record<string, unknown>).nome;
+    const s = n != null ? String(n).trim() : '';
+    return s || null;
+  }
+  if (Array.isArray(emb) && emb[0] && typeof emb[0] === 'object') {
+    const n = (emb[0] as Record<string, unknown>).nome;
+    const s = n != null ? String(n).trim() : '';
+    return s || null;
+  }
+  return null;
+}
+
+function nomeColaboradorNaMarcacao(p: TimePunch, colabById: Map<number, Colaborador>): string {
+  const join = p.colaboradorNome?.trim();
+  if (join) return join;
+  if (p.colaboradorId == null) return '—';
+  const id = Number(p.colaboradorId);
+  if (!Number.isFinite(id)) return '—';
+  return colabById.get(id)?.nome?.trim() || `#${id}`;
+}
+
 export default function TimePunchesPage() {
-  const { colaboradores, empresas } = useData();
+  const { colaboradoresTodos, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const [rows, setRows] = useState<TimePunch[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,7 +78,13 @@ export default function TimePunchesPage() {
   const [viewItem, setViewItem] = useState<TimePunch | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
 
-  const colabById = useMemo(() => new Map(colaboradores.map(c => [c.id, c])), [colaboradores]);
+  const colabById = useMemo(() => {
+    const m = new Map<number, Colaborador>();
+    for (const c of colaboradoresTodos) {
+      m.set(Number(c.id), c);
+    }
+    return m;
+  }, [colaboradoresTodos]);
 
   const empresaLabel = (empresaId: number | null) => {
     if (empresaId == null) return '—';
@@ -61,17 +92,18 @@ export default function TimePunchesPage() {
   };
 
   const punchesNoTenant = useMemo(() => {
-    const colabIds = new Set(colaboradores.map(c => c.id));
+    const colabIds = new Set(colaboradoresTodos.map(c => Number(c.id)));
     return rows.filter(p => {
       if (currentEmpresaId === 'consolidado') return true;
       if (p.empresaId === currentEmpresaId) return true;
-      if (p.colaboradorId != null && colabIds.has(p.colaboradorId)) {
-        const c = colabById.get(p.colaboradorId);
+      const cid = p.colaboradorId != null ? Number(p.colaboradorId) : NaN;
+      if (Number.isFinite(cid) && colabIds.has(cid)) {
+        const c = colabById.get(cid);
         return c?.empresaId === currentEmpresaId;
       }
       return false;
     });
-  }, [rows, currentEmpresaId, colaboradores, colabById]);
+  }, [rows, currentEmpresaId, colaboradoresTodos, colabById]);
 
   const kinds = useMemo(() => {
     const s = new Set<string>();
@@ -94,13 +126,16 @@ export default function TimePunchesPage() {
     try {
       const { data, error } = await supabase
         .from('time_punches')
-        .select('*')
+        .select('*, colaboradores(nome)')
         .order('occurred_at', { ascending: false })
         .limit(FETCH_LIMIT);
       if (error) throw new Error(error.message);
-      const mapped = (data ?? []).map(r =>
-        mapRowFromDb<TimePunch>('time_punches', r as Record<string, unknown>),
-      );
+      const mapped = (data ?? []).map((r: Record<string, unknown>) => {
+        const nomeJoin = extrairNomeColaboradorEmbutido(r);
+        const { colaboradores: _emb, ...rest } = r;
+        const row = mapRowFromDb<TimePunch>('time_punches', rest);
+        return { ...row, colaboradorNome: nomeJoin };
+      });
       setRows(mapped);
     } catch (e) {
       console.error('[time_punches]', e);
@@ -117,7 +152,7 @@ export default function TimePunchesPage() {
 
   const filtered = useMemo(() => {
     return punchesNoTenant.filter(p => {
-      const nome = p.colaboradorId != null ? colabById.get(p.colaboradorId)?.nome ?? '' : '';
+      const nome = nomeColaboradorNaMarcacao(p, colabById);
       const matchSearch =
         !search.trim() ||
         nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -150,7 +185,9 @@ export default function TimePunchesPage() {
         <div>
           <h1 className="page-header">Marcações de ponto</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Consulta das marcações registadas (últimos {FETCH_LIMIT} eventos). Filtro por empresa conforme o contexto actual.
+            Consulta das marcações registadas (últimos {FETCH_LIMIT} eventos). O cálculo de atrasos e faltas automáticas usa o
+            horário de entrada definido no colaborador, tolerância de 15 min e fuso Africa/Luanda (ver Capital Humano →
+            Colaboradores).
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void fetchPunches()} disabled={loading}>
@@ -250,9 +287,7 @@ export default function TimePunchesPage() {
                 <td className="py-3 px-4 whitespace-nowrap tabular-nums text-muted-foreground">
                   {formatOccurredAt(p.occurredAt)}
                 </td>
-                <td className="py-3 px-4 font-medium">
-                  {p.colaboradorId != null ? colabById.get(p.colaboradorId)?.nome ?? `#${p.colaboradorId}` : '—'}
-                </td>
+                <td className="py-3 px-4 font-medium">{nomeColaboradorNaMarcacao(p, colabById)}</td>
                 <td className="py-3 px-4 text-muted-foreground">{empresaLabel(p.empresaId)}</td>
                 <td className="py-3 px-4">{p.kind}</td>
                 <td className="py-3 px-4">{p.status}</td>
@@ -306,10 +341,18 @@ export default function TimePunchesPage() {
             <div className="space-y-3 text-sm">
               <p>
                 <span className="text-muted-foreground">Colaborador:</span>{' '}
-                {viewItem.colaboradorId != null
-                  ? colabById.get(viewItem.colaboradorId)?.nome ?? `#${viewItem.colaboradorId}`
-                  : '—'}
+                {nomeColaboradorNaMarcacao(viewItem, colabById)}
               </p>
+              {(() => {
+                const cid =
+                  viewItem.colaboradorId != null ? Number(viewItem.colaboradorId) : NaN;
+                const ref = Number.isFinite(cid)
+                  ? textoReferenciaHorarioColaborador(colabById.get(cid))
+                  : null;
+                return ref ? (
+                  <p className="text-muted-foreground border-l-2 border-primary/30 pl-3">{ref}</p>
+                ) : null;
+              })()}
               <p>
                 <span className="text-muted-foreground">Empresa (registo):</span> {empresaLabel(viewItem.empresaId)}
               </p>

@@ -88,6 +88,7 @@ export function IntranetTopbar() {
         { key: 'capital-humano-processamento-salarial', label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial' },
         { key: 'capital-humano-declaracoes', label: 'Declarações', path: '/capital-humano/declaracoes' },
         { key: 'capital-humano-marcacoes', label: 'Marcações de ponto', path: '/capital-humano/marcacoes-ponto' },
+        { key: 'capital-humano-zonas', label: 'Zonas de trabalho', path: '/capital-humano/zonas-trabalho' },
       ],
       financas: [
         { key: 'financas-requisicoes', label: 'Requisições', path: '/financas/requisicoes' },

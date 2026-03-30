@@ -26,7 +26,9 @@ import {
 } from '@/components/ui/select';
 import { Search, Plus, Pencil, Eye } from 'lucide-react';
 
-const TIPO_OPTIONS: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Médico', 'Licença'];
+const TIPO_OPTIONS: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Médico', 'Licença', 'Por atrasos'];
+/** «Por atrasos» é criada pelo sistema; não entra no select de registo manual. */
+const TIPO_OPTIONS_MANUAL: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Médico', 'Licença'];
 
 export default function FaltasPage() {
   const { user } = useAuth();
@@ -113,6 +115,11 @@ export default function FaltasPage() {
           <Plus className="h-4 w-4 mr-2" /> Registar Falta
         </Button>
       </div>
+      <p className="text-sm text-muted-foreground max-w-3xl">
+        Atrasos após o horário de entrada + 15 min são acumulados por mês (exceto colaboradores com isenção de horário).
+        Cada 8 h de atraso acumulado gera uma falta do tipo «Por atrasos», registada pelo sistema com base nas marcações de
+        ponto.
+      </p>
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-xs">
@@ -191,10 +198,14 @@ export default function FaltasPage() {
               </div>
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoFalta }))}>
+                <Select
+                  value={form.tipo}
+                  onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoFalta }))}
+                  disabled={editing?.tipo === 'Por atrasos'}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {TIPO_OPTIONS.map(t => (
+                    {(editing?.tipo === 'Por atrasos' ? (['Por atrasos'] as TipoFalta[]) : TIPO_OPTIONS_MANUAL).map(t => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
@@ -229,6 +240,9 @@ export default function FaltasPage() {
               <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
               <p><span className="text-muted-foreground">Motivo:</span> {viewItem.motivo || '—'}</p>
               <p><span className="text-muted-foreground">Registado por:</span> {viewItem.registadoPor}</p>
+              {viewItem.referenciaMesAtrasos ? (
+                <p><span className="text-muted-foreground">Mês de referência (atrasos):</span> {viewItem.referenciaMesAtrasos}</p>
+              ) : null}
             </div>
           )}
         </DialogContent>

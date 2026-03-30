@@ -33,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial' },
       { label: 'Declarações', path: '/capital-humano/declaracoes' },
       { label: 'Marcações de ponto', path: '/capital-humano/marcacoes-ponto' },
+      { label: 'Zonas de trabalho', path: '/capital-humano/zonas-trabalho' },
     ]
   },
   {

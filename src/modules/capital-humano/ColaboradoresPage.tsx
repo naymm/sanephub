@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, User, X, GraduationCap, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -123,7 +124,21 @@ const emptyForm: Omit<Colaborador, 'id'> = {
   emailCorporativo: '',
   telefonePrincipal: '',
   status: 'Activo',
+  horarioEntrada: '08:00',
+  horarioSaida: '17:00',
+  isencaoHorario: false,
 };
+
+/** Normaliza `HH:mm:ss` ou `HH:mm` vindos da BD para `<input type="time">`. */
+function horarioParaInput(valor: string | undefined, fallback: string): string {
+  const v = (valor ?? '').trim();
+  if (!v) return fallback.slice(0, 5);
+  const m = v.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return fallback.slice(0, 5);
+  const h = String(Math.min(23, parseInt(m[1], 10))).padStart(2, '0');
+  const min = String(Math.min(59, parseInt(m[2], 10))).padStart(2, '0');
+  return `${h}:${min}`;
+}
 
 type SubsidioKey =
   | 'subsidioAlimentacao'
@@ -280,7 +295,18 @@ function parseEmpresaIdGestao(...candidates: unknown[]): number {
 }
 
 export default function ColaboradoresPage() {
-  const { colaboradores, addColaborador, updateColaborador, deleteColaborador, empresas, departamentos: departamentosCatalogo, refetch } = useData();
+  const {
+    colaboradores,
+    addColaborador,
+    updateColaborador,
+    deleteColaborador,
+    empresas,
+    geofences,
+    colaboradorGeofenceLinks,
+    syncColaboradorGeofenceLinksForColaborador,
+    departamentos: departamentosCatalogo,
+    refetch,
+  } = useData();
   const { usuarios, user } = useAuth();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
@@ -310,6 +336,22 @@ export default function ColaboradoresPage() {
   /** Se true, grava `foto_perfil_url` = null na BD (sem novo ficheiro). */
   const [fotoPerfilRemovida, setFotoPerfilRemovida] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [formGeofenceIds, setFormGeofenceIds] = useState<number[]>([]);
+
+  const geofenceIdsByColaborador = useMemo(() => {
+    const m = new Map<number, number[]>();
+    for (const row of colaboradorGeofenceLinks) {
+      const arr = m.get(row.colaboradorId) ?? [];
+      arr.push(row.geofenceId);
+      m.set(row.colaboradorId, arr);
+    }
+    return m;
+  }, [colaboradorGeofenceLinks]);
+
+  const geofencesForFormEmpresa = useMemo(
+    () => geofences.filter(g => g.empresaId === form.empresaId),
+    [geofences, form.empresaId],
+  );
 
   const usePaginated = isSupabaseConfigured() && !!supabase;
   const [page, setPage] = useState(0);
@@ -468,6 +510,7 @@ export default function ColaboradoresPage() {
     setSubsidiosAtivos([]);
     setSubsidioParaAdicionar('__none__');
     setEditandoSubsidio(null);
+    setFormGeofenceIds([]);
   }, [empresaIdForNew, limparPreviewFoto]);
 
   const openCreate = () => {
@@ -485,6 +528,7 @@ export default function ColaboradoresPage() {
     setSubsidiosAtivos([]);
     setSubsidioParaAdicionar('__none__');
     setEditandoSubsidio(null);
+    setFormGeofenceIds([]);
     setDialogOpen(true);
   };
 
@@ -534,6 +578,9 @@ export default function ColaboradoresPage() {
       contactoEmergenciaNome: c.contactoEmergenciaNome,
       contactoEmergenciaTelefone: c.contactoEmergenciaTelefone,
       status: c.status,
+      horarioEntrada: horarioParaInput(c.horarioEntrada, '08:00'),
+      horarioSaida: horarioParaInput(c.horarioSaida, '17:00'),
+      isencaoHorario: c.isencaoHorario === true,
     });
     setSalarioBaseText(formatKzInput(c.salarioBase ?? 0));
     setSubsidioTextByKey({});
@@ -541,6 +588,7 @@ export default function ColaboradoresPage() {
     setSubsidiosAtivos(activos);
     setSubsidioParaAdicionar('__none__');
     setEditandoSubsidio(null);
+    setFormGeofenceIds(geofenceIdsByColaborador.get(c.id) ?? []);
     setDialogOpen(true);
   };
 
@@ -693,6 +741,21 @@ export default function ColaboradoresPage() {
             .update({ colaborador_id: colaboradorId })
             .eq('id', associarUtilizadorId);
           if (linkErr) throw new Error(linkErr.message);
+        }
+      }
+
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          await syncColaboradorGeofenceLinksForColaborador(
+            colaboradorId,
+            formGeofenceIds,
+            Number(payloadColaborador.empresaId ?? empresaIdForNew),
+          );
+        } catch (ze) {
+          toast.error(
+            ze instanceof Error ? ze.message : 'Não foi possível guardar as zonas de ponto permitidas.',
+            { duration: 10_000 },
+          );
         }
       }
 
@@ -1111,6 +1174,83 @@ export default function ColaboradoresPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div>
+                <Label className="text-base">Horário de trabalho (ponto)</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Entrada e tolerância de 15 min definem o limite para contagem de atrasos; o fim do horário serve de referência à
+                  saída. Quem tem isenção de horário não acumula atrasos nem recebe faltas automáticas por atraso.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Hora normal de entrada</Label>
+                  <Input
+                    type="time"
+                    step={60}
+                    value={form.horarioEntrada ?? '08:00'}
+                    onChange={e => setForm(f => ({ ...f, horarioEntrada: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Até (fim do horário)</Label>
+                  <Input
+                    type="time"
+                    step={60}
+                    value={form.horarioSaida ?? '17:00'}
+                    onChange={e => setForm(f => ({ ...f, horarioSaida: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Isenção de horário</Label>
+                <Select
+                  value={form.isencaoHorario === true ? 'sim' : 'nao'}
+                  onValueChange={(v) => setForm(f => ({ ...f, isencaoHorario: v === 'sim' }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nao">Não — atrasos contam para o mês</SelectItem>
+                    <SelectItem value="sim">Sim — sem acumulação de atrasos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+              <Label>Zonas de ponto permitidas</Label>
+              <p className="text-xs text-muted-foreground">
+                Cadastre zonas em Capital Humano → Zonas de trabalho. Só aparecem zonas da empresa deste colaborador.
+              </p>
+              {geofencesForFormEmpresa.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhuma zona para esta empresa.</p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {geofencesForFormEmpresa.map(g => (
+                    <label
+                      key={g.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md border border-border/50 bg-background/80 px-3 py-2 text-sm"
+                    >
+                      <Checkbox
+                        checked={formGeofenceIds.includes(g.id)}
+                        onCheckedChange={checked => {
+                          setFormGeofenceIds(prev =>
+                            checked === true
+                              ? [...new Set([...prev, g.id])]
+                              : prev.filter(x => x !== g.id),
+                          );
+                        }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        {g.nome}
+                        {!g.activo ? <span className="text-muted-foreground"> (inactiva)</span> : null}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -1610,6 +1750,27 @@ export default function ColaboradoresPage() {
                         value={formatKz(viewItem.subsidioRepresentacao ?? 0)}
                       />
                       <ColaboradorDetailField label="Estado" value={<StatusBadge status={viewItem.status} />} />
+                      <ColaboradorDetailField
+                        label="Horário entrada (nominal)"
+                        value={horarioParaInput(viewItem.horarioEntrada, '08:00')}
+                      />
+                      <ColaboradorDetailField
+                        label="Fim do horário"
+                        value={horarioParaInput(viewItem.horarioSaida, '17:00')}
+                      />
+                      <ColaboradorDetailField
+                        label="Isenção de horário"
+                        value={viewItem.isencaoHorario === true ? 'Sim' : 'Não'}
+                      />
+                      <ColaboradorDetailField
+                        label="Zonas de ponto permitidas"
+                        value={
+                          (geofenceIdsByColaborador.get(viewItem.id) ?? [])
+                            .map(id => geofences.find(z => z.id === id)?.nome)
+                            .filter(Boolean)
+                            .join(', ') || '—'
+                        }
+                      />
                     </div>
                   </ColaboradorSectionCard>
 

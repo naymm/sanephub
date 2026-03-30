@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, ReactNode } from 'react';
-import type { Colaborador, Empresa, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
+import type { Colaborador, Empresa, Geofence, ColaboradorGeofenceLink, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { loadAllTables, db } from '@/lib/supabaseData';
+import { loadAllTables, db, fetchColaboradorGeofenceLinks, syncColaboradorGeofenceLinks as syncColaboradorGeofenceLinksApi } from '@/lib/supabaseData';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
 import { nextReferenciaTesouraria } from '@/utils/tesourariaReferencia';
 
@@ -90,6 +90,19 @@ interface DataContextType {
   setProcessosDisciplinares: React.Dispatch<React.SetStateAction<ProcessoDisciplinar[]>>;
   rescissoesContrato: RescisaoContrato[];
   setRescissoesContrato: React.Dispatch<React.SetStateAction<RescisaoContrato[]>>;
+  geofences: Geofence[];
+  setGeofences: React.Dispatch<React.SetStateAction<Geofence[]>>;
+  colaboradorGeofenceLinks: ColaboradorGeofenceLink[];
+  setColaboradorGeofenceLinks: React.Dispatch<React.SetStateAction<ColaboradorGeofenceLink[]>>;
+  addGeofence: (p: Partial<Geofence>) => Promise<Geofence>;
+  updateGeofence: (id: number, p: Partial<Geofence>) => Promise<Geofence>;
+  deleteGeofence: (id: number) => Promise<void>;
+  /** Grava `colaborador_geofences` para um colaborador (substitui lista). */
+  syncColaboradorGeofenceLinksForColaborador: (
+    colaboradorId: number,
+    geofenceIds: number[],
+    colaboradorEmpresaId: number,
+  ) => Promise<void>;
   addContrato: (p: Partial<Contrato>) => Promise<Contrato>;
   updateContrato: (id: number, p: Partial<Contrato>) => Promise<Contrato>;
   deleteContrato: (id: number) => Promise<void>;
@@ -202,6 +215,8 @@ const emptyArrays = {
   eventos: [] as Evento[],
   processosDisciplinares: [] as ProcessoDisciplinar[],
   rescissoesContrato: [] as RescisaoContrato[],
+  geofences: [] as Geofence[],
+  colaboradorGeofenceLinks: [] as ColaboradorGeofenceLink[],
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -237,6 +252,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [eventos, setEventos] = useState<Evento[]>(emptyArrays.eventos);
   const [processosDisciplinares, setProcessosDisciplinares] = useState<ProcessoDisciplinar[]>(emptyArrays.processosDisciplinares);
   const [rescissoesContrato, setRescissoesContrato] = useState<RescisaoContrato[]>(emptyArrays.rescissoesContrato);
+  const [geofences, setGeofences] = useState<Geofence[]>(emptyArrays.geofences);
+  const [colaboradorGeofenceLinks, setColaboradorGeofenceLinks] = useState<ColaboradorGeofenceLink[]>(
+    emptyArrays.colaboradorGeofenceLinks,
+  );
 
   // Realtime: mantém os arrays do DataContext sincronizados sem refresh/polling.
   const empresasRT = useRealtimeTable<Empresa>('empresas', 'id');
@@ -267,6 +286,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const relatoriosPlaneamentoRT = useRealtimeTable<RelatorioMensalPlaneamento>('relatorios_planeamento', 'id');
   const processosDisciplinaresRT = useRealtimeTable<ProcessoDisciplinar>('processos_disciplinares', 'id');
   const rescissoesContratoRT = useRealtimeTable<RescisaoContrato>('rescisoes_contrato', 'id');
+  const geofencesRT = useRealtimeTable<Geofence>('geofences', 'id');
+  const colaboradorGeofencesRT = useRealtimeTable<ColaboradorGeofenceLink>('colaborador_geofences', 'id');
 
   const realtimeLoading =
     empresasRT.isLoading ||
@@ -296,7 +317,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     contasBancariasRT.isLoading ||
     relatoriosPlaneamentoRT.isLoading ||
     processosDisciplinaresRT.isLoading ||
-    rescissoesContratoRT.isLoading;
+    rescissoesContratoRT.isLoading ||
+    geofencesRT.isLoading ||
+    colaboradorGeofencesRT.isLoading;
 
   useEffect(() => {
     setDataLoading(realtimeLoading);
@@ -331,6 +354,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => setRelatoriosPlaneamento(relatoriosPlaneamentoRT.rows), [relatoriosPlaneamentoRT.rows]);
   useEffect(() => setProcessosDisciplinares(processosDisciplinaresRT.rows), [processosDisciplinaresRT.rows]);
   useEffect(() => setRescissoesContrato(rescissoesContratoRT.rows), [rescissoesContratoRT.rows]);
+  useEffect(() => setGeofences(geofencesRT.rows), [geofencesRT.rows]);
+  useEffect(() => setColaboradorGeofenceLinks(colaboradorGeofencesRT.rows), [colaboradorGeofencesRT.rows]);
 
   const refetch = useCallback(async () => {
     if (!supabase || !isSupabaseConfigured()) {
@@ -370,6 +395,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setEventos(data.eventos);
       setProcessosDisciplinares(data.processosDisciplinares);
       setRescissoesContrato(data.rescissoesContrato);
+      setGeofences(data.geofences);
+      setColaboradorGeofenceLinks(data.colaboradorGeofenceLinks);
     } catch (e) {
       setDataError(e instanceof Error ? e.message : 'Erro ao carregar dados');
     } finally {
@@ -537,6 +564,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     (id: number) =>
       runMutation(() => (db.colaboradores.delete(supabase!, id) as Promise<void>), () => setColaboradores(prev => prev.filter(c => c.id !== id))),
     [runMutation]
+  );
+
+  const addGeofence = useCallback(
+    (p: Partial<Geofence>) =>
+      runMutation(() => db.geofences.insert(supabase!, p), row => setGeofences(prev => [...prev, row])),
+    [runMutation]
+  );
+  const updateGeofence = useCallback(
+    (id: number, p: Partial<Geofence>) =>
+      runMutation(() => db.geofences.update(supabase!, id, p), row => setGeofences(prev => prev.map(g => (g.id === id ? row : g)))),
+    [runMutation]
+  );
+  const deleteGeofence = useCallback(
+    (id: number) =>
+      runMutation(
+        () => db.geofences.delete(supabase!, id) as Promise<void>,
+        () => {
+          setGeofences(prev => prev.filter(g => g.id !== id));
+          setColaboradorGeofenceLinks(prev => prev.filter(l => l.geofenceId !== id));
+        },
+      ),
+    [runMutation]
+  );
+
+  const syncColaboradorGeofenceLinksForColaborador = useCallback(
+    async (colaboradorId: number, geofenceIds: number[], colaboradorEmpresaId: number) => {
+      if (!supabase || !isSupabaseConfigured()) throw new Error('Supabase não configurado');
+      await syncColaboradorGeofenceLinksApi(supabase, colaboradorId, geofenceIds, colaboradorEmpresaId);
+      const links = await fetchColaboradorGeofenceLinks(supabase);
+      setColaboradorGeofenceLinks(links);
+    },
+    [],
   );
 
   const addFerias = useCallback(
@@ -946,6 +1005,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setProcessosDisciplinares,
       rescissoesContrato: filtered.rescissoesContrato,
       setRescissoesContrato,
+      geofences: currentEmpresaId === 'consolidado' ? geofences : geofences.filter(g => g.empresaId === currentEmpresaId),
+      setGeofences,
+      colaboradorGeofenceLinks,
+      setColaboradorGeofenceLinks,
+      addGeofence,
+      updateGeofence,
+      deleteGeofence,
+      syncColaboradorGeofenceLinksForColaborador,
       addContrato,
       updateContrato,
       deleteContrato,
@@ -1033,6 +1100,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       empresas,
       bancos,
       filtered,
+      currentEmpresaId,
+      geofences,
+      colaboradorGeofenceLinks,
+      addGeofence,
+      updateGeofence,
+      deleteGeofence,
+      syncColaboradorGeofenceLinksForColaborador,
       colaboradores,
       reunioes,
       actas,

@@ -62,7 +62,18 @@ export function useRealtimeTable<T>(
         .select('*');
 
       if (error) {
-        console.error(`[useRealtimeTable] Initial fetch failed for ${String(table)}`, error);
+        const blob = `${error.message ?? ''} ${error.code ?? ''}`.toLowerCase();
+        const tabelaGeofences404 =
+          String(table) === 'colaborador_geofences' &&
+          (blob.includes('404') || blob.includes('not found') || blob.includes('does not exist') || error.code === 'PGRST205');
+        if (tabelaGeofences404) {
+          console.warn(
+            `[useRealtimeTable] ${String(table)} indisponível (tabela não criada ou API sem reload). Aplique migrações 20260328140000 / 20260329000000.`,
+            error.message,
+          );
+        } else {
+          console.error(`[useRealtimeTable] Initial fetch failed for ${String(table)}`, error);
+        }
         if (!cancelled) setRows([]);
         if (!cancelled) setIsLoading(false);
         return;

@@ -124,6 +124,16 @@ export interface Database {
           updated_at?: string;
         };
       };
+      geofences: {
+        Row: Record<string, unknown>;
+        Insert: Record<string, unknown>;
+        Update: Record<string, unknown>;
+      };
+      colaborador_geofences: {
+        Row: Record<string, unknown>;
+        Insert: Record<string, unknown>;
+        Update: Record<string, unknown>;
+      };
       intranet_chat_messages: {
         Row: {
           id: string;

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
-import type { Empresa, Departamento, Colaborador, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
+import type { Empresa, Departamento, Colaborador, Geofence, ColaboradorGeofenceLink, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
 
 const TABLE_NAMES = {
   empresas: 'empresas',
@@ -32,10 +32,32 @@ const TABLE_NAMES = {
   eventos: 'eventos',
   bancos: 'bancos',
   contas_bancarias: 'contas_bancarias',
+  geofences: 'geofences',
 } as const;
 
 function num(id: number | string): number {
   return typeof id === 'string' ? parseInt(id, 10) : id;
+}
+
+/** Mensagem quando REST devolve 404 (tabela inexistente ou PostgREST sem reload). */
+function erroColaboradorGeofencesIndisponivel(origem: string): Error {
+  return new Error(
+    `${origem}: tabela «colaborador_geofences» não está exposta (ex.: HTTP 404). ` +
+      'Corra as migrações Supabase (20260328140000 e, se necessário, 20260329000000). ' +
+      'Em local: `supabase db reset` ou `supabase migration up`; depois reinicie `supabase stop` e `supabase start` se o 404 persistir.',
+  );
+}
+
+function isProvavelTabelaGeofencesInexistente(err: { message?: string; code?: string; details?: string }): boolean {
+  const blob = `${err.message ?? ''} ${err.details ?? ''} ${err.code ?? ''}`.toLowerCase();
+  return (
+    blob.includes('404') ||
+    blob.includes('not found') ||
+    blob.includes('does not exist') ||
+    blob.includes('schema cache') ||
+    err.code === '42P01' ||
+    err.code === 'PGRST205'
+  );
 }
 
 export async function loadAllTables(supabase: SupabaseClient) {
@@ -69,6 +91,7 @@ export async function loadAllTables(supabase: SupabaseClient) {
     { data: bancos },
     { data: contasBancarias },
     { data: irtEscalaes },
+    { data: geofences },
   ] = await Promise.all([
     supabase.from('empresas').select('*'),
     supabase.from('departamentos').select('*'),
@@ -99,7 +122,17 @@ export async function loadAllTables(supabase: SupabaseClient) {
     supabase.from('bancos').select('*'),
     supabase.from('contas_bancarias').select('*'),
     supabase.from('irt_escalaes').select('*'),
+    supabase.from('geofences').select('*'),
   ]);
+
+  const colaboradorGeofencesRes = await supabase.from('colaborador_geofences').select('*');
+  const colaboradorGeofences =
+    colaboradorGeofencesRes.error && isProvavelTabelaGeofencesInexistente(colaboradorGeofencesRes.error)
+      ? ([] as Record<string, unknown>[])
+      : colaboradorGeofencesRes.data ?? [];
+  if (colaboradorGeofencesRes.error && !isProvavelTabelaGeofencesInexistente(colaboradorGeofencesRes.error)) {
+    throw colaboradorGeofencesRes.error;
+  }
 
   return {
     empresas: mapRowsFromDb<Empresa>('empresas', empresas ?? []),
@@ -131,7 +164,52 @@ export async function loadAllTables(supabase: SupabaseClient) {
     bancos: mapRowsFromDb<Banco>('bancos', bancos ?? []),
     contasBancarias: mapRowsFromDb<ContaBancaria>('contas_bancarias', contasBancarias ?? []),
     irtEscalaes: mapRowsFromDb<IRTEscalao>('irt_escalaes', irtEscalaes ?? []),
+    geofences: mapRowsFromDb<Geofence>('geofences', geofences ?? []),
+    colaboradorGeofenceLinks: mapRowsFromDb<ColaboradorGeofenceLink>('colaborador_geofences', colaboradorGeofences ?? []),
   };
+}
+
+export async function fetchColaboradorGeofenceLinks(supabase: SupabaseClient): Promise<ColaboradorGeofenceLink[]> {
+  const { data, error } = await supabase.from('colaborador_geofences').select('*');
+  if (error) {
+    if (isProvavelTabelaGeofencesInexistente(error)) throw erroColaboradorGeofencesIndisponivel('fetchColaboradorGeofenceLinks');
+    throw error;
+  }
+  return mapRowsFromDb<ColaboradorGeofenceLink>('colaborador_geofences', (data ?? []) as Record<string, unknown>[]);
+}
+
+/** Substitui as ligações colaborador ↔ zonas; só mantém geofences da mesma empresa do colaborador. */
+export async function syncColaboradorGeofenceLinks(
+  supabase: SupabaseClient,
+  colaboradorId: number,
+  geofenceIds: number[],
+  colaboradorEmpresaId: number,
+): Promise<void> {
+  const unique = [...new Set(geofenceIds.filter(id => Number.isFinite(id) && id > 0))];
+  let valid = unique;
+  if (unique.length > 0) {
+    const { data: zones, error: zErr } = await supabase
+      .from('geofences')
+      .select('id')
+      .in('id', unique)
+      .eq('empresa_id', colaboradorEmpresaId);
+    if (zErr) throw zErr;
+    const allowed = new Set((zones ?? []).map((r: { id: number | string }) => Number(r.id)));
+    valid = unique.filter(id => allowed.has(id));
+  }
+  const { error: delErr } = await supabase.from('colaborador_geofences').delete().eq('colaborador_id', colaboradorId);
+  if (delErr) {
+    if (isProvavelTabelaGeofencesInexistente(delErr)) throw erroColaboradorGeofencesIndisponivel('syncColaboradorGeofenceLinks (delete)');
+    throw delErr;
+  }
+  if (valid.length === 0) return;
+  const { error: insErr } = await supabase.from('colaborador_geofences').insert(
+    valid.map(geofence_id => ({ colaborador_id: colaboradorId, geofence_id })),
+  );
+  if (insErr) {
+    if (isProvavelTabelaGeofencesInexistente(insErr)) throw erroColaboradorGeofencesIndisponivel('syncColaboradorGeofenceLinks (insert)');
+    throw insErr;
+  }
 }
 
 export interface ColaboradoresPaginatedParams {
@@ -305,9 +383,20 @@ export const db = {
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'departamentos', id),
   },
   colaboradores: {
-    insert: (s: SupabaseClient, p: Partial<Colaborador>) => insertOne<Colaborador>(s, 'colaboradores', p as Record<string, unknown>, 'colaboradores'),
-    update: (s: SupabaseClient, id: number, p: Partial<Colaborador>) => updateOne<Colaborador>(s, 'colaboradores', id, p as Record<string, unknown>, 'colaboradores'),
+    insert: (s: SupabaseClient, p: Partial<Colaborador>) => {
+      const { geofenceIds: _gf, ...rest } = p as Partial<Colaborador> & { geofenceIds?: number[] };
+      return insertOne<Colaborador>(s, 'colaboradores', rest as Record<string, unknown>, 'colaboradores');
+    },
+    update: (s: SupabaseClient, id: number, p: Partial<Colaborador>) => {
+      const { geofenceIds: _gf, ...rest } = p as Partial<Colaborador> & { geofenceIds?: number[] };
+      return updateOne<Colaborador>(s, 'colaboradores', id, rest as Record<string, unknown>, 'colaboradores');
+    },
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'colaboradores', id),
+  },
+  geofences: {
+    insert: (s: SupabaseClient, p: Partial<Geofence>) => insertOne<Geofence>(s, 'geofences', p as Record<string, unknown>, 'geofences'),
+    update: (s: SupabaseClient, id: number, p: Partial<Geofence>) => updateOne<Geofence>(s, 'geofences', id, p as Record<string, unknown>, 'geofences'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'geofences', id),
   },
   centros_custo: {
     insert: (s: SupabaseClient, p: Partial<CentroCusto>) => insertOne<CentroCusto>(s, 'centros_custo', p as Record<string, unknown>, 'centros_custo'),
