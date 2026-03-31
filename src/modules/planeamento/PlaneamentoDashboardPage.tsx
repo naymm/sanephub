@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { formatKz } from '@/utils/formatters';
@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { TrendingUp, Building2, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Building2, AlertTriangle, Scale } from 'lucide-react';
 import type { RelatorioMensalPlaneamento } from '@/types';
 
 function mesAnoLabel(mesAno: string): string {
@@ -64,12 +64,80 @@ function totaisGrupo(relatorios: RelatorioMensalPlaneamento[]) {
   return { receita, custos, ebitda, resultadoLiquido, margemLiquida };
 }
 
+function formatDeltaPct(atual: number, base: number, invertGood: boolean): { text: string; className: string } | null {
+  if (base === 0) return atual === 0 ? { text: '0%', className: 'text-muted-foreground' } : null;
+  const pct = ((atual - base) / Math.abs(base)) * 100;
+  const rounded = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+  const improved = invertGood ? pct < 0 : pct > 0;
+  const worse = invertGood ? pct > 0 : pct < 0;
+  const className = improved
+    ? 'text-green-700 dark:text-green-400'
+    : worse
+      ? 'text-red-700 dark:text-red-400'
+      : 'text-muted-foreground';
+  return { text: rounded, className };
+}
+
+function DeltaLinhaMoeda({
+  mesCompLabel,
+  valorComp,
+  valorRef,
+  invertGood,
+}: {
+  mesCompLabel: string;
+  valorComp: number;
+  valorRef: number;
+  invertGood: boolean;
+}) {
+  const delta = valorRef - valorComp;
+  const pctFmt = formatDeltaPct(valorRef, valorComp, invertGood);
+  return (
+    <div className="mt-3 pt-3 border-t border-border/60 space-y-2 text-sm">
+      <div className="flex justify-between gap-3">
+        <span className="text-muted-foreground shrink-0">{mesCompLabel}</span>
+        <span className="font-mono text-right">{formatKz(valorComp)}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-muted-foreground">Variação</span>
+        <span className="font-mono">{formatKz(delta)}</span>
+        {pctFmt && <span className={`font-medium ${pctFmt.className}`}>({pctFmt.text})</span>}
+      </div>
+    </div>
+  );
+}
+
+function DeltaLinhaMargem({ mesCompLabel, valorComp, valorRef }: { mesCompLabel: string; valorComp: number; valorRef: number }) {
+  const deltaPp = (valorRef - valorComp) * 100;
+  const pctFmt = formatDeltaPct(valorRef, valorComp, false);
+  const pos = deltaPp > 0;
+  const neg = deltaPp < 0;
+  const cls = pos ? 'text-green-700 dark:text-green-400' : neg ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground';
+  return (
+    <div className="mt-3 pt-3 border-t border-border/60 space-y-2 text-sm">
+      <div className="flex justify-between gap-3">
+        <span className="text-muted-foreground shrink-0">{mesCompLabel}</span>
+        <span className="font-mono text-right">{(valorComp * 100).toFixed(1)}%</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-muted-foreground">Variação</span>
+        <span className={`font-mono font-medium ${cls}`}>
+          {(deltaPp >= 0 ? '+' : '')}
+          {deltaPp.toFixed(1)} p.p.
+        </span>
+        {pctFmt && <span className={`font-medium ${pctFmt.className}`}>({pctFmt.text})</span>}
+      </div>
+    </div>
+  );
+}
+
 const MES_AUTO = '__auto__';
+const MES_COMP_NENHUM = '__comp_nenhum__';
 
 export default function PlaneamentoDashboardPage() {
   const { relatoriosPlaneamento, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const [mesFiltro, setMesFiltro] = useState<string>(MES_AUTO);
+  const [mesComparacao, setMesComparacao] = useState<string>(MES_COMP_NENHUM);
 
   const isConsolidado = currentEmpresaId === 'consolidado';
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
@@ -108,6 +176,22 @@ export default function PlaneamentoDashboardPage() {
 
   const kpis = mesReferenciaKpi ? totaisGrupo(relatoriosRef) : null;
 
+  useEffect(() => {
+    if (mesReferenciaKpi != null && mesComparacao !== MES_COMP_NENHUM && mesComparacao === mesReferenciaKpi) {
+      setMesComparacao(MES_COMP_NENHUM);
+    }
+  }, [mesReferenciaKpi, mesComparacao]);
+
+  const mesCompEfectivo =
+    mesReferenciaKpi != null &&
+    mesComparacao !== MES_COMP_NENHUM &&
+    mesComparacao !== mesReferenciaKpi
+      ? mesComparacao
+      : null;
+  const relatoriosComp = mesCompEfectivo ? submetidos.filter(r => r.mesAno === mesCompEfectivo) : [];
+  const kpisComp = mesCompEfectivo && relatoriosComp.length > 0 ? totaisGrupo(relatoriosComp) : null;
+  const semDadosMesComp = Boolean(mesCompEfectivo && relatoriosComp.length === 0);
+
   const comMargemNegativa = relatoriosRef.filter(r => (r.margemEbitda ?? 0) < 0);
   const porEbitda = [...relatoriosRef].sort((a, b) => (b.ebitda ?? 0) - (a.ebitda ?? 0));
 
@@ -127,25 +211,57 @@ export default function PlaneamentoDashboardPage() {
           <h1 className="page-header">Dashboard Planeamento</h1>
           <p className="text-sm text-muted-foreground mt-1">Indicadores de desempenho financeiro, crescimento e evolução das unidades de negócio.</p>
         </div>
-        <div className="space-y-1.5 shrink-0">
-          <Label htmlFor="dash-mes-planeamento" className="text-xs text-muted-foreground">
-            Mês de referência
-          </Label>
-          <Select value={mesFiltro} onValueChange={setMesFiltro}>
-            <SelectTrigger id="dash-mes-planeamento" className="w-[min(100%,280px)] h-9">
-              <SelectValue placeholder="Mês" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={MES_AUTO}>Automático (mês em Luanda → anterior se vazio)</SelectItem>
-              {mesesComDados.map(m => (
-                <SelectItem key={m} value={m}>
-                  {mesAnoLabel(m)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-end shrink-0">
+          <div className="space-y-1.5">
+            <Label htmlFor="dash-mes-planeamento" className="text-xs text-muted-foreground">
+              Mês de referência
+            </Label>
+            <Select value={mesFiltro} onValueChange={setMesFiltro}>
+              <SelectTrigger id="dash-mes-planeamento" className="w-[min(100%,280px)] h-9">
+                <SelectValue placeholder="Mês" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={MES_AUTO}>Automático (mês em Luanda → anterior se vazio)</SelectItem>
+                {mesesComDados.map(m => (
+                  <SelectItem key={m} value={m}>
+                    {mesAnoLabel(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {mesReferenciaKpi && (
+            <div className="space-y-1.5">
+              <Label htmlFor="dash-mes-comp-planeamento" className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Scale className="h-3 w-3 opacity-70" />
+                Comparar com
+              </Label>
+              <Select value={mesComparacao} onValueChange={setMesComparacao}>
+                <SelectTrigger id="dash-mes-comp-planeamento" className="w-[min(100%,280px)] h-9">
+                  <SelectValue placeholder="Mês" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={MES_COMP_NENHUM}>Não comparar</SelectItem>
+                  {mesesComDados
+                    .filter(m => m !== mesReferenciaKpi)
+                    .map(m => (
+                      <SelectItem key={m} value={m}>
+                        {mesAnoLabel(m)}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </div>
+
+      {semDadosMesComp && mesCompEfectivo && (
+        <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-amber-900 dark:text-amber-100/90">
+          Não há relatórios submetidos em <span className="font-medium">{mesAnoLabel(mesCompEfectivo)}</span> para
+          consolidar a comparação. Escolha outro mês ou aguarde submissões.
+        </p>
+      )}
 
       {mesReferenciaKpi && kpis && (
         <>
@@ -164,55 +280,93 @@ export default function PlaneamentoDashboardPage() {
                     </span>
                   )}
                 </p>
+                {kpisComp && mesCompEfectivo && (
+                  <DeltaLinhaMoeda
+                    mesCompLabel={mesAnoLabel(mesCompEfectivo)}
+                    valorComp={kpisComp.receita}
+                    valorRef={kpis.receita}
+                    invertGood={false}
+                  />
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Custos totais</CardTitle>
                 <CardDescription className="text-xs leading-snug">
-                  CMV + gasto com pessoal (inclui INSS e IRT) + serviços externos — base do resultado líquido.
+                 
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold">{formatKz(kpis.custos)}</p>
                 <p className="text-xs text-muted-foreground mt-1">{mesAnoLabel(mesReferenciaKpi)}</p>
+                {kpisComp && mesCompEfectivo && (
+                  <DeltaLinhaMoeda
+                    mesCompLabel={mesAnoLabel(mesCompEfectivo)}
+                    valorComp={kpisComp.custos}
+                    valorRef={kpis.custos}
+                    invertGood
+                  />
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">EBITDA</CardTitle>
                 <CardDescription className="text-xs leading-snug">
-                  Volume de negócio − CMV − gasto com pessoal (sem INSS e IRT) − fornecimento de serviços externos. Fora da
-                  base: impostos sobre o lucro (ex.: IRC), juros e depreciação.
+                  
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold">{formatKz(kpis.ebitda)}</p>
                 <p className="text-xs text-muted-foreground mt-1">{mesAnoLabel(mesReferenciaKpi)}</p>
+                {kpisComp && mesCompEfectivo && (
+                  <DeltaLinhaMoeda
+                    mesCompLabel={mesAnoLabel(mesCompEfectivo)}
+                    valorComp={kpisComp.ebitda}
+                    valorRef={kpis.ebitda}
+                    invertGood={false}
+                  />
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Resultado líquido</CardTitle>
                 <CardDescription className="text-xs leading-snug">
-                  Volume de negócio menos custos totais; no pessoal inclui INSS e IRT (no EBITDA esses valores não entram).
+                 
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold">{formatKz(kpis.resultadoLiquido)}</p>
                 <p className="text-xs text-muted-foreground mt-1">{mesAnoLabel(mesReferenciaKpi)}</p>
+                {kpisComp && mesCompEfectivo && (
+                  <DeltaLinhaMoeda
+                    mesCompLabel={mesAnoLabel(mesCompEfectivo)}
+                    valorComp={kpisComp.resultadoLiquido}
+                    valorRef={kpis.resultadoLiquido}
+                    invertGood={false}
+                  />
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Margem líquida</CardTitle>
                 <CardDescription className="text-xs leading-snug">
-                  Resultado líquido sobre o volume de negócio (receita).
+                  
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold">{(kpis.margemLiquida * 100).toFixed(1)}%</p>
-                <p className="text-xs text-muted-foreground mt-1">Receita consolidada</p>
+                <p className="text-xs text-muted-foreground mt-1">{mesAnoLabel(mesReferenciaKpi)}</p>
+                {kpisComp && mesCompEfectivo && (
+                  <DeltaLinhaMargem
+                    mesCompLabel={mesAnoLabel(mesCompEfectivo)}
+                    valorComp={kpisComp.margemLiquida}
+                    valorRef={kpis.margemLiquida}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>

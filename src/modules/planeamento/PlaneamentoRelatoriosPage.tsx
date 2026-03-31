@@ -33,12 +33,24 @@ function mesAnoLabel(mesAno: string): string {
   return `${months[parseInt(m, 10) - 1]} ${y}`;
 }
 
+/** YYYY-MM no fuso Africa/Luanda (alinhado com o dashboard de planeamento). */
+function mesAnoEmLuanda(ref: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Luanda',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(ref);
+  const year = parts.find(p => p.type === 'year')!.value;
+  const month = parts.find(p => p.type === 'month')!.value;
+  return `${year}-${month}`;
+}
+
 export default function PlaneamentoRelatoriosPage() {
   const { user } = useAuth();
   const { relatoriosPlaneamento, updateRelatorioPlaneamento, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const navigate = useNavigate();
-  const [mesAnoFilter, setMesAnoFilter] = useState('');
+  const [mesAnoFilter, setMesAnoFilter] = useState(() => mesAnoEmLuanda());
   const [statusFilter, setStatusFilter] = useState<StatusRelatorioPlaneamento | 'todos'>('todos');
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
@@ -46,7 +58,8 @@ export default function PlaneamentoRelatoriosPage() {
   const isDirectorDaEmpresa = user?.perfil === 'Director' && user?.empresaId != null && currentEmpresaId !== 'consolidado' && user.empresaId === currentEmpresaId;
   const canEdit = isGroupLevel || isDirectorDaEmpresa;
 
-  const mesAnoReferenciaNovo = new Date().toISOString().slice(0, 7);
+  const mesActualLuanda = mesAnoEmLuanda();
+  const mesAnoReferenciaNovo = mesActualLuanda;
   const relatorioMesReferencia = relatoriosPlaneamento.find(
     r => r.empresaId === empresaIdForNew && r.mesAno === mesAnoReferenciaNovo,
   );
@@ -65,7 +78,9 @@ export default function PlaneamentoRelatoriosPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
-  const mesesDisponiveis = Array.from(new Set(relatoriosPlaneamento.map(r => r.mesAno))).sort().reverse();
+  const mesesDisponiveis = Array.from(
+    new Set([...relatoriosPlaneamento.map(r => r.mesAno), mesActualLuanda]),
+  ).sort().reverse();
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
 
   const submeter = async (r: RelatorioMensalPlaneamento) => {
@@ -106,7 +121,10 @@ export default function PlaneamentoRelatoriosPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={mesAnoFilter || 'todos'} onValueChange={v => setMesAnoFilter(v === 'todos' ? '' : v)}>
+        <Select
+          value={mesAnoFilter === '' ? 'todos' : mesAnoFilter}
+          onValueChange={v => setMesAnoFilter(v === 'todos' ? '' : v)}
+        >
           <SelectTrigger className="w-[140px] h-9">
             <SelectValue placeholder="Mês/Ano" />
           </SelectTrigger>
