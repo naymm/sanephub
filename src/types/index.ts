@@ -828,6 +828,12 @@ export interface RelatorioMensalPlaneamento {
   ebitda?: number;
   margemBruta?: number;
   margemEbitda?: number;
+  /** Referência: encargos financeiros, deprec./amort. e impostos sobre o lucro (não entram no resultado líquido desta demonstração) */
+  jurosFinanceiros?: number;
+  depreciacaoAmortizacoes?: number;
+  impostosLucro?: number;
+  /** Volume de negócio − CMV − pessoal (inclui INSS e IRT) − serviços externos; difere do EBITDA */
+  resultadoLiquido?: number;
   /** Secção 6: Liquidez */
   saldosBancarios: SaldoBancario[];
   pendentesPagamento: PendenteValor[];

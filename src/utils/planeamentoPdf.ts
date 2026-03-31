@@ -1,7 +1,13 @@
 import jsPDF from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import type { RelatorioMensalPlaneamento, LinhaPlaneamento, SaldoBancario, PendenteValor } from '@/types';
-import { totalVendas, totalCMV, totalServicosExternos, totalGastosPessoal, calcularEbitda } from '@/utils/planeamentoCalculos';
+import {
+  totalVendas,
+  totalCMV,
+  totalServicosExternos,
+  totalGastosPessoalEbitda,
+  calcularEbitda,
+} from '@/utils/planeamentoCalculos';
 import { formatPlaneamentoTextListForDisplay } from '@/utils/planeamentoTextLists';
 import { unifiedMateriasStockFromLegacy } from '@/utils/planeamentoStocks';
 
@@ -314,11 +320,28 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
   y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.fornecimentoServicosExternos), y, [90, 18, 35, 32]);
   y += 4;
 
+  const jFin = rel.jurosFinanceiros ?? 0;
+  const depAm = rel.depreciacaoAmortizacoes ?? 0;
+  const impLuc = rel.impostosLucro ?? 0;
+  y = tableWithAutoTable(
+    doc,
+    ['Rubrica', 'Valor (Kz)'],
+    [
+      ['Juros financeiros', jFin.toLocaleString('pt-PT')],
+      ['Depreciação e amortizações', depAm.toLocaleString('pt-PT')],
+      ['Impostos sobre o lucro', impLuc.toLocaleString('pt-PT')],
+    ],
+    y,
+    [95, 80],
+    'Encargos complementares (referência — não deduzidos do resultado líquido desta demonstração)',
+  );
+  y += 4;
+
   // ——— Gráfico: Demonstração de Resultados (barras) ———
   const vendas = totalVendas(rel);
   const cmv = totalCMV(rel);
   const servExt = totalServicosExternos(rel);
-  const gastosPess = totalGastosPessoal(rel.gastosPessoal);
+  const gastosPess = totalGastosPessoalEbitda(rel.gastosPessoal);
   const ebitda = rel.ebitda ?? calcularEbitda(rel);
   y = addPageIfNeeded(doc, y, 55);
   if (y === CONTENT_START_Y) {
@@ -331,7 +354,7 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
       { label: 'Vendas (produtos + serviços)', value: vendas, color: [34, 197, 94] },
       { label: 'Custo mercadorias vendidas', value: cmv, color: [239, 68, 68] },
       { label: 'Serviços externos', value: servExt, color: [249, 115, 22] },
-      { label: 'Gastos com pessoal', value: gastosPess, color: [234, 179, 8] },
+      { label: 'Gastos com pessoal (exc. INSS/IRT)', value: gastosPess, color: [234, 179, 8] },
       { label: 'EBITDA', value: ebitda, color: ebitda >= 0 ? [165, 126, 38] : [185, 28, 28] },
     ],
     y,

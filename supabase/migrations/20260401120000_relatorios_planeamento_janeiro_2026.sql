@@ -1,3 +1,6 @@
+-- Janeiro 2026 — consolidado alinhado ao dashboard (Volume 443926901.96, Custos 271148522.61, EBITDA 208664170.25, RL 172778379.35, margem líquida ~39%).
+-- Proporção por empresa = share de receita do template de referência; INSS/IRT alinhados ao delta EBITDA vs RL.
+-- ON CONFLICT (empresa_id, mes_ano) DO NOTHING.
 
 insert into public.relatorios_planeamento (
   empresa_id,

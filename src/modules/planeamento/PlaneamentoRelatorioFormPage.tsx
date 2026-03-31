@@ -13,7 +13,13 @@ import type {
   CicloVidaEmpresa,
 } from '@/types';
 import { formatKz } from '@/utils/formatters';
-import { calcularEbitda, calcularMargemBruta, calcularMargemEbitda, actualizarTotaisLinhas } from '@/utils/planeamentoCalculos';
+import {
+  calcularEbitda,
+  calcularMargemBruta,
+  calcularMargemEbitda,
+  calcularResultadoLiquido,
+  actualizarTotaisLinhas,
+} from '@/utils/planeamentoCalculos';
 import { Input } from '@/components/ui/input';
 import { MonetaryInput } from '@/components/ui/monetary-input';
 import { Button } from '@/components/ui/button';
@@ -81,6 +87,9 @@ function emptyRelatorio(empresaId: number, mesAno: string): Omit<RelatorioMensal
     saldosBancarios: [],
     pendentesPagamento: [],
     pendentesRecebimento: [],
+    jurosFinanceiros: 0,
+    depreciacaoAmortizacoes: 0,
+    impostosLucro: 0,
   };
 }
 
@@ -393,13 +402,67 @@ export default function PlaneamentoRelatorioFormPage() {
   const ebitda = calcularEbitda(form as RelatorioMensalPlaneamento);
   const margemBruta = vendasTotal > 0 ? (vendasTotal - form.custoMercadoriasVendidas.reduce((s, l) => s + l.quantidade * l.precoUnitario, 0)) / vendasTotal : 0;
   const margemEbitda = vendasTotal > 0 ? ebitda / vendasTotal : 0;
+  const resultadoLiquido = calcularResultadoLiquido(form as RelatorioMensalPlaneamento);
+  const margemLiquida = vendasTotal > 0 ? resultadoLiquido / vendasTotal : 0;
+
+  const encargosPosEbitda = (
+    <div className="space-y-3 border-t border-border/80 pt-4">
+      <div>
+        <p className="text-sm font-medium">Encargos complementares (referência)</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Juros, depreciação e amortizações, e impostos sobre o lucro (ex.: IRC). Não entram no resultado líquido calculado acima
+          (volume − CMV − pessoal com INSS e IRT − serviços externos).
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <Label className="mb-2 block text-xs text-muted-foreground">Juros financeiros (Kz)</Label>
+          {editMode ? (
+            <MonetaryInput
+              className="h-9 text-right tabular-nums"
+              value={form.jurosFinanceiros ?? 0}
+              onChange={n => setForm(f => (f ? { ...f, jurosFinanceiros: n } : f))}
+            />
+          ) : (
+            <p className="text-sm font-mono tabular-nums">{formatKz(form.jurosFinanceiros ?? 0)}</p>
+          )}
+        </div>
+        <div>
+          <Label className="mb-2 block text-xs text-muted-foreground">Depreciação e amortizações (Kz)</Label>
+          {editMode ? (
+            <MonetaryInput
+              className="h-9 text-right tabular-nums"
+              value={form.depreciacaoAmortizacoes ?? 0}
+              onChange={n => setForm(f => (f ? { ...f, depreciacaoAmortizacoes: n } : f))}
+            />
+          ) : (
+            <p className="text-sm font-mono tabular-nums">{formatKz(form.depreciacaoAmortizacoes ?? 0)}</p>
+          )}
+        </div>
+        <div>
+          <Label className="mb-2 block text-xs text-muted-foreground">Impostos sobre o lucro (Kz)</Label>
+          {editMode ? (
+            <MonetaryInput
+              className="h-9 text-right tabular-nums"
+              value={form.impostosLucro ?? 0}
+              onChange={n => setForm(f => (f ? { ...f, impostosLucro: n } : f))}
+            />
+          ) : (
+            <p className="text-sm font-mono tabular-nums">{formatKz(form.impostosLucro ?? 0)}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   const save = async () => {
+    const rl = calcularResultadoLiquido(form as RelatorioMensalPlaneamento);
     const payload = {
       ...form,
       ebitda,
       margemBruta,
       margemEbitda,
+      resultadoLiquido: rl,
       gastosPessoal: form.gastosPessoal.map(l => ({ ...l, total: l.quantidade * l.precoUnitario })),
     };
     try {
@@ -532,6 +595,9 @@ export default function PlaneamentoRelatorioFormPage() {
           </div>
           <div>
             <Label className="mb-2 block">Gastos com pessoal</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              INSS e IRT entram no resultado líquido; no EBITDA são excluídos (só salários base e subsídios na base do EBITDA).
+            </p>
             <div className="space-y-2">
               {form.gastosPessoal.map((item, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-2">
@@ -558,20 +624,37 @@ export default function PlaneamentoRelatorioFormPage() {
               ))}
             </div>
           </div>
-          <div className="rounded-lg bg-muted/50 p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 border border-border/80">
+          <div className="rounded-lg bg-muted/50 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 border border-border/80">
             <div>
               <p className="text-xs text-muted-foreground uppercase">EBITDA</p>
               <p className="text-lg font-semibold">{formatKz(ebitda)}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                Volume de negócio − CMV − gasto com pessoal (sem INSS e IRT) − fornecimento de serviços externos. INSS e IRT
+                ficam na secção de pessoal mas não entram no EBITDA; impostos sobre o lucro, juros e depreciação só como
+                referência abaixo.
+              </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground uppercase">Margem Bruta</p>
+              <p className="text-xs text-muted-foreground uppercase">Resultado líquido</p>
+              <p className="text-lg font-semibold">{formatKz(resultadoLiquido)}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                Volume de negócio − CMV − gasto com pessoal (com INSS e IRT) − fornecimento de serviços externos.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase">Margem bruta</p>
               <p className="text-lg font-semibold">{(margemBruta * 100).toFixed(1)}%</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase">Margem EBITDA</p>
               <p className="text-lg font-semibold">{(margemEbitda * 100).toFixed(1)}%</p>
             </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase">Margem líquida</p>
+              <p className="text-lg font-semibold">{(margemLiquida * 100).toFixed(1)}%</p>
+            </div>
           </div>
+          {encargosPosEbitda}
         </CardContent>
       </Card>
 

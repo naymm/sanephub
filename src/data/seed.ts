@@ -384,6 +384,15 @@ export const RELATORIOS_PLANEAMENTO_SEED: RelatorioMensalPlaneamento[] = [
     ebitda: 1715000,
     margemBruta: 0.553,
     margemEbitda: 0.452,
+    jurosFinanceiros: 120000,
+    depreciacaoAmortizacoes: 80000,
+    impostosLucro: 280000,
+    resultadoLiquido:
+      3000000 +
+      800000 -
+      1200000 -
+      200000 -
+      (4500000 + 350000 + 135000 + 600000),
     saldosBancarios: [
       { banco: 'BFA', numeroConta: '0012345678', saldoActual: 5000000 },
     ],
