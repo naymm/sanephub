@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -9,10 +9,24 @@ import type { Contrato, StatusContrato } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate, formatKz, diasRestantes } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import {
+  garantirPastaNumeroContratoNaGestao,
+  uploadAnexosContratoParaGestao,
+} from '@/lib/contratoGestaoDocumentos';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
   Dialog,
   DialogContent,
@@ -28,7 +42,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Eye, FileText } from 'lucide-react';
+import { Plus, Pencil, Trash2, Eye, FileText, ChevronsUpDown, Upload } from 'lucide-react';
+
+const TIPO_PRESTACAO = 'Prestação de Serviços';
+
+function proximoNumeroContrato(contratos: Contrato[], empresaId: number): string {
+  const y = new Date().getFullYear();
+  const sameEmp = contratos.filter(c => c.empresaId === empresaId);
+  let maxSeq = 0;
+  for (const c of sameEmp) {
+    const m = /^CONT-(\d{4})-(\d+)$/i.exec(c.numero.trim());
+    if (m) {
+      const yr = parseInt(m[1], 10);
+      const seq = parseInt(m[2], 10);
+      if (!Number.isNaN(seq) && yr === y && seq > maxSeq) maxSeq = seq;
+    }
+  }
+  const next = maxSeq + 1;
+  return `CONT-${y}-${String(next).padStart(6, '0')}`;
+}
 
 const TIPOS_CONTRATO = [
   'Empréstimo',
@@ -45,7 +77,7 @@ const TIPOS_CONTRATO = [
 const STATUS_OPCOES: StatusContrato[] = ['Activo', 'A Renovar', 'Em Negociação', 'Suspenso', 'Rescindido', 'Expirado'];
 
 export default function ContratosPage() {
-  const { contratos, addContrato, updateContrato, deleteContrato, empresas } = useData();
+  const { contratos, addContrato, updateContrato, deleteContrato, empresas, colaboradoresTodos } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -57,9 +89,12 @@ export default function ContratosPage() {
   const [editing, setEditing] = useState<Contrato | null>(null);
   const [form, setForm] = useState<Partial<Contrato>>({
     numero: '',
-    tipo: 'Prestação de Serviços',
+    tipo: TIPO_PRESTACAO,
     parteA: '',
     parteB: '',
+    contraparteNif: '',
+    contraparteColaboradorId: undefined,
+    personalidadeContraparte: undefined,
     objecto: '',
     valor: 0,
     moeda: 'Kz',
@@ -72,6 +107,9 @@ export default function ContratosPage() {
     status: 'Activo',
     historico: [],
   });
+  const [anexosContrato, setAnexosContrato] = useState<File[]>([]);
+  const [anexosEmpresaCliente, setAnexosEmpresaCliente] = useState<File[]>([]);
+  const [colabComboOpen, setColabComboOpen] = useState(false);
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? empresas.find(e => e.activo)?.id ?? 1 : currentEmpresaId;
   const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
@@ -99,16 +137,39 @@ export default function ContratosPage() {
 
   const empresaNome = (id: number | undefined) => (id != null ? empresas.find(e => e.id === id)?.nome ?? String(id) : '—');
 
+  const colaboradoresEmpresa = useMemo(() => {
+    const eid = form.empresaId;
+    if (eid == null) return colaboradoresTodos;
+    return colaboradoresTodos.filter(c => c.empresaId === eid);
+  }, [colaboradoresTodos, form.empresaId]);
+
+  const colaboradorSeleccionado = useMemo(
+    () => colaboradoresTodos.find(c => c.id === form.contraparteColaboradorId),
+    [colaboradoresTodos, form.contraparteColaboradorId],
+  );
+
+  useEffect(() => {
+    if (!dialogOpen || editing != null) return;
+    const eid = form.empresaId;
+    if (typeof eid !== 'number') return;
+    const next = proximoNumeroContrato(contratos, eid);
+    setForm(f => (f.numero === next ? f : { ...f, numero: next }));
+  }, [dialogOpen, editing, form.empresaId, contratos]);
+
   const openCreate = () => {
     setEditing(null);
-    const ano = new Date().getFullYear();
-    const nextNum = Math.max(0, ...contratos.map(c => parseInt(c.numero.replace(/\D/g, ''), 10) || 0)) + 1;
+    const eid = typeof empresaIdForNew === 'number' ? empresaIdForNew : 1;
+    setAnexosContrato([]);
+    setAnexosEmpresaCliente([]);
     setForm({
-      empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
-      numero: `CONT-${ano}-${String(nextNum).padStart(4, '0')}`,
-      tipo: 'Prestação de Serviços',
+      empresaId: eid,
+      numero: proximoNumeroContrato(contratos, eid),
+      tipo: TIPO_PRESTACAO,
       parteA: 'Grupo SANEP',
       parteB: '',
+      contraparteNif: '',
+      contraparteColaboradorId: undefined,
+      personalidadeContraparte: undefined,
       objecto: '',
       valor: 0,
       moeda: 'Kz',
@@ -126,7 +187,19 @@ export default function ContratosPage() {
 
   const openEdit = (c: Contrato) => {
     setEditing(c);
-    setForm({ ...c, historico: c.historico ?? [] });
+    setAnexosContrato([]);
+    setAnexosEmpresaCliente([]);
+    let pers = c.personalidadeContraparte ?? undefined;
+    if (c.tipo === TIPO_PRESTACAO && !pers) {
+      if (c.contraparteColaboradorId != null) pers = 'Singular';
+      else if (c.contraparteNif) pers = 'Colectivo';
+    }
+    setForm({
+      ...c,
+      historico: c.historico ?? [],
+      contraparteNif: c.contraparteNif ?? '',
+      personalidadeContraparte: pers,
+    });
     setDialogOpen(true);
   };
 
@@ -136,25 +209,72 @@ export default function ContratosPage() {
   };
 
   const save = async () => {
-    if (!form.numero?.trim() || !form.parteB?.trim() || !form.dataInicio || !form.dataFim) return;
+    if (!form.numero?.trim() || !form.dataInicio || !form.dataFim) {
+      toast.error('Preencha número (gerado), datas de início e fim.');
+      return;
+    }
+    const isPrestacao = form.tipo === TIPO_PRESTACAO;
+    let parteBVal = form.parteB?.trim() ?? '';
+    let nifVal: string | null = form.contraparteNif?.trim() || null;
+    let colabId: number | null = form.contraparteColaboradorId ?? null;
+    let pers: string | null = form.personalidadeContraparte ?? null;
+
+    if (isPrestacao) {
+      if (!pers) {
+        toast.error('Seleccione a personalidade da contraparte (Singular ou Colectivo).');
+        return;
+      }
+      if (pers === 'Singular') {
+        if (colabId == null) {
+          toast.error('Seleccione o colaborador (contraparte singular).');
+          return;
+        }
+        const col = colaboradoresTodos.find(x => x.id === colabId);
+        parteBVal = col?.nome ?? parteBVal;
+        if (!parteBVal) {
+          toast.error('Colaborador inválido.');
+          return;
+        }
+        nifVal = null;
+      } else {
+        if (!nifVal || !parteBVal) {
+          toast.error('Indique o NIF e o nome da empresa (contraparte colectiva).');
+          return;
+        }
+        colabId = null;
+      }
+    } else {
+      if (!parteBVal) {
+        toast.error('Indique a contraparte (Parte B).');
+        return;
+      }
+      nifVal = null;
+      colabId = null;
+      pers = null;
+    }
+
+    const nomeResp = user?.nome ?? 'Sistema';
     const historico = editing
-      ? [...(form.historico ?? []), { data: new Date().toISOString().slice(0, 10), acao: 'Contrato actualizado', utilizador: user?.nome ?? 'Sistema' }]
-      : [{ data: new Date().toISOString().slice(0, 10), acao: 'Contrato criado', utilizador: user?.nome ?? 'Sistema' }];
+      ? [...(form.historico ?? []), { data: new Date().toISOString().slice(0, 10), acao: 'Contrato actualizado', utilizador: nomeResp }]
+      : [{ data: new Date().toISOString().slice(0, 10), acao: 'Contrato criado', utilizador: nomeResp }];
     const payload: Partial<Contrato> = {
       empresaId: form.empresaId,
       numero: form.numero.trim(),
       tipo: form.tipo ?? 'Outro',
       parteA: form.parteA?.trim() ?? '',
-      parteB: form.parteB.trim(),
+      parteB: parteBVal,
+      contraparteNif: isPrestacao && pers === 'Colectivo' ? nifVal : undefined,
+      contraparteColaboradorId: isPrestacao && pers === 'Singular' ? colabId ?? undefined : undefined,
+      personalidadeContraparte: isPrestacao ? pers : undefined,
       objecto: form.objecto?.trim() ?? '',
       valor: Number(form.valor) || 0,
       moeda: form.moeda ?? 'Kz',
       dataAssinatura: form.dataAssinatura ?? form.dataInicio ?? '',
       dataInicio: form.dataInicio,
       dataFim: form.dataFim,
-      advogado: form.advogado?.trim() ?? '',
-      responsavelJuridico: form.responsavelJuridico ?? form.advogado,
-      ficheiroPdf: form.ficheiroPdf,
+      advogado: nomeResp,
+      responsavelJuridico: nomeResp,
+      ficheiroPdf: anexosContrato[0]?.name ?? form.ficheiroPdf,
       alertarAntesDias: form.alertarAntesDias,
       status: form.status ?? 'Activo',
       historico,
@@ -163,14 +283,62 @@ export default function ContratosPage() {
       if (editing) {
         await updateContrato(editing.id, payload);
       } else {
-        await addContrato(payload);
+        const created = await addContrato(payload);
+        const empId = form.empresaId ?? (typeof empresaIdForNew === 'number' ? empresaIdForNew : undefined);
+        const todosAnexos = [...anexosContrato, ...anexosEmpresaCliente];
+        if (typeof empId === 'number' && todosAnexos.length > 0 && isSupabaseConfigured() && supabase && user?.id) {
+          const pasta = await garantirPastaNumeroContratoNaGestao(supabase, empId, created.numero);
+          if ('error' in pasta) {
+            toast.error(`Gestão documental: ${pasta.error}`);
+          } else {
+            if (anexosContrato.length > 0) {
+              const r1 = await uploadAnexosContratoParaGestao(
+                supabase,
+                empId,
+                user.id,
+                pasta.pastaId,
+                anexosContrato,
+                'Contrato:',
+              );
+              r1.errors.forEach(m => toast.error(m));
+              if (r1.ok > 0) toast.success(`${r1.ok} ficheiro(s) do contrato registados em Jurídico / Contratos / ${created.numero}.`);
+            }
+            if (anexosEmpresaCliente.length > 0) {
+              const r2 = await uploadAnexosContratoParaGestao(
+                supabase,
+                empId,
+                user.id,
+                pasta.pastaId,
+                anexosEmpresaCliente,
+                'Documentos da empresa (cliente):',
+              );
+              r2.errors.forEach(m => toast.error(m));
+              if (r2.ok > 0) toast.success(`${r2.ok} documento(s) do cliente registados na mesma pasta.`);
+            }
+          }
+        } else if (todosAnexos.length > 0 && !isSupabaseConfigured()) {
+          toast.info('Anexos não enviados: configure o Supabase para integrar com a Gestão documental.');
+        }
       }
       setDialogOpen(false);
       setEditing(null);
+      setAnexosContrato([]);
+      setAnexosEmpresaCliente([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
   };
+
+  const saveDisabled =
+    !form.numero?.trim() ||
+    !form.dataInicio ||
+    !form.dataFim ||
+    (form.tipo === TIPO_PRESTACAO &&
+      (!form.personalidadeContraparte ||
+        (form.personalidadeContraparte === 'Singular' && form.contraparteColaboradorId == null) ||
+        (form.personalidadeContraparte === 'Colectivo' &&
+          (!form.contraparteNif?.trim() || !form.parteB?.trim())))) ||
+    (form.tipo !== TIPO_PRESTACAO && !form.parteB?.trim());
 
   const remove = async (c: Contrato) => {
     if (!window.confirm(`Remover contrato ${c.numero}?`)) return;
@@ -316,7 +484,8 @@ export default function ContratosPage() {
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar contrato' : 'Novo contrato'}</DialogTitle>
             <DialogDescription>
-              Dados do contrato. Associe à empresa e defina o responsável jurídico. Pode indicar dias para alerta de vencimento.
+              O número do contrato é gerado automaticamente por empresa e ano. O responsável jurídico será o utilizador
+              que regista. Em «Prestação de Serviços», indique se a contraparte é singular ou colectiva.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -325,7 +494,14 @@ export default function ContratosPage() {
                 <Label>Empresa</Label>
                 <Select
                   value={form.empresaId != null ? String(form.empresaId) : '1'}
-                  onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
+                  onValueChange={v =>
+                    setForm(f => ({
+                      ...f,
+                      empresaId: Number(v),
+                      contraparteColaboradorId: undefined,
+                      parteB: f.tipo === TIPO_PRESTACAO && f.personalidadeContraparte === 'Singular' ? '' : f.parteB,
+                    }))
+                  }
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -339,11 +515,27 @@ export default function ContratosPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nº contrato</Label>
-                <Input value={form.numero} onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} placeholder="CONT-2024-0001" />
+                <Input value={form.numero} readOnly className="bg-muted/50 font-mono text-sm" title="Gerado automaticamente" />
+                <p className="text-[10px] text-muted-foreground">Sequencial por empresa e ano (ex.: CONT-2026-000001).</p>
               </div>
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v }))}>
+                <Select
+                  value={form.tipo}
+                  onValueChange={v =>
+                    setForm(f => ({
+                      ...f,
+                      tipo: v,
+                      ...(v !== TIPO_PRESTACAO
+                        ? {
+                            personalidadeContraparte: undefined,
+                            contraparteNif: '',
+                            contraparteColaboradorId: undefined,
+                          }
+                        : {}),
+                    }))
+                  }
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TIPOS_CONTRATO.map(t => (
@@ -353,16 +545,113 @@ export default function ContratosPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>Parte A (empresa)</Label>
                 <Input value={form.parteA} onChange={e => setForm(f => ({ ...f, parteA: e.target.value }))} placeholder="Grupo SANEP" />
               </div>
+            </div>
+            {form.tipo === TIPO_PRESTACAO ? (
+              <div className="space-y-4 rounded-lg border border-border/80 p-4 bg-muted/20">
+                <div className="space-y-2">
+                  <Label>Personalidade da contraparte</Label>
+                  <Select
+                    value={form.personalidadeContraparte}
+                    onValueChange={v =>
+                      setForm(f => {
+                        if (v === 'Singular') {
+                          return {
+                            ...f,
+                            personalidadeContraparte: v,
+                            contraparteNif: '',
+                            contraparteColaboradorId: f.contraparteColaboradorId,
+                            parteB: f.contraparteColaboradorId != null ? f.parteB : '',
+                          };
+                        }
+                        return {
+                          ...f,
+                          personalidadeContraparte: v,
+                          contraparteColaboradorId: undefined,
+                          contraparteNif: f.contraparteNif ?? '',
+                          parteB: f.parteB,
+                        };
+                      })
+                    }
+                  >
+                    <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Singular">Singular</SelectItem>
+                      <SelectItem value="Colectivo">Colectivo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.personalidadeContraparte === 'Singular' && (
+                  <div className="space-y-2">
+                    <Label>Colaborador (contraparte)</Label>
+                    <Popover open={colabComboOpen} onOpenChange={setColabComboOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal" role="combobox">
+                          {colaboradorSeleccionado ? colaboradorSeleccionado.nome : 'Pesquisar colaborador…'}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Nome…" />
+                          <CommandList>
+                            <CommandEmpty>Nenhum colaborador nesta empresa.</CommandEmpty>
+                            <CommandGroup>
+                              {colaboradoresEmpresa.map(c => (
+                                <CommandItem
+                                  key={c.id}
+                                  value={`${c.nome} ${c.departamento} ${c.cargo}`}
+                                  onSelect={() => {
+                                    setForm(f => ({
+                                      ...f,
+                                      contraparteColaboradorId: c.id,
+                                      parteB: c.nome,
+                                    }));
+                                    setColabComboOpen(false);
+                                  }}
+                                >
+                                  <span className="font-medium">{c.nome}</span>
+                                  <span className="text-muted-foreground text-xs ml-2">{c.cargo}</span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+                {form.personalidadeContraparte === 'Colectivo' && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>NIF da empresa (cliente)</Label>
+                      <Input
+                        value={form.contraparteNif ?? ''}
+                        onChange={e => setForm(f => ({ ...f, contraparteNif: e.target.value }))}
+                        placeholder="999999999"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Nome da empresa</Label>
+                      <Input
+                        value={form.parteB ?? ''}
+                        onChange={e => setForm(f => ({ ...f, parteB: e.target.value }))}
+                        placeholder="Denominação social"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
               <div className="space-y-2">
                 <Label>Parte B (contraparte)</Label>
                 <Input value={form.parteB} onChange={e => setForm(f => ({ ...f, parteB: e.target.value }))} placeholder="Nome da contraparte" />
               </div>
-            </div>
+            )}
             <div className="space-y-2">
               <Label>Objecto do contrato</Label>
               <Textarea value={form.objecto} onChange={e => setForm(f => ({ ...f, objecto: e.target.value }))} rows={2} placeholder="Descrição do objecto" />
@@ -398,37 +687,47 @@ export default function ContratosPage() {
                 <Input type="date" value={form.dataFim || ''} onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Responsável jurídico / Advogado</Label>
-                <Input value={form.advogado} onChange={e => setForm(f => ({ ...f, advogado: e.target.value, responsavelJuridico: f.responsavelJuridico || e.target.value }))} placeholder="Nome" />
-              </div>
-              <div className="space-y-2">
-                <Label>Alertar vencimento (dias antes)</Label>
-                <Input type="number" min={0} value={form.alertarAntesDias ?? ''} onChange={e => setForm(f => ({ ...f, alertarAntesDias: Number(e.target.value) || undefined }))} placeholder="90" />
-              </div>
+            <div className="space-y-2">
+              <Label>Responsável jurídico / Advogado</Label>
+              <p className="text-sm rounded-md border border-border/80 bg-muted/40 px-3 py-2 font-medium">{user?.nome ?? '—'}</p>
+              <p className="text-[10px] text-muted-foreground">Preenchido automaticamente com o utilizador que regista.</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Documento PDF (nome do ficheiro)</Label>
-                <Input value={form.ficheiroPdf || ''} onChange={e => setForm(f => ({ ...f, ficheiroPdf: e.target.value || undefined }))} placeholder="contrato_xxx.pdf" />
+            <div className="space-y-2">
+              <Label>Alertar vencimento (dias antes)</Label>
+              <Input type="number" min={0} value={form.alertarAntesDias ?? ''} onChange={e => setForm(f => ({ ...f, alertarAntesDias: Number(e.target.value) || undefined }))} placeholder="90" className="max-w-xs" />
+            </div>
+            {!editing && (
+              <div className="space-y-4 rounded-lg border border-border/80 p-4">
+                <p className="text-sm font-medium">Anexos (envio para Gestão documental)</p>
+                <p className="text-xs text-muted-foreground">
+                  Os ficheiros são gravados em <strong>Jurídico → Contratos → [número do contrato]</strong> após criar o
+                  contrato.
+                </p>
+                <FileDropZone label="Contrato (documento principal)" files={anexosContrato} onChange={setAnexosContrato} />
+                {form.tipo === TIPO_PRESTACAO && form.personalidadeContraparte === 'Colectivo' && (
+                  <FileDropZone
+                    label="Documentos da empresa (cliente)"
+                    files={anexosEmpresaCliente}
+                    onChange={setAnexosEmpresaCliente}
+                  />
+                )}
               </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as StatusContrato }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPCOES.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as StatusContrato }))}>
+                <SelectTrigger className="max-w-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPCOES.map(s => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.numero?.trim() || !form.parteB?.trim() || !form.dataInicio || !form.dataFim}>
+            <Button onClick={save} disabled={saveDisabled}>
               {editing ? 'Guardar' : 'Criar contrato'}
             </Button>
           </DialogFooter>
@@ -448,6 +747,18 @@ export default function ContratosPage() {
                 <div><span className="text-muted-foreground">Tipo:</span> {editing.tipo}</div>
                 <div><span className="text-muted-foreground">Parte A:</span> {editing.parteA}</div>
                 <div><span className="text-muted-foreground">Parte B:</span> {editing.parteB}</div>
+                {editing.personalidadeContraparte && (
+                  <div><span className="text-muted-foreground">Personalidade:</span> {editing.personalidadeContraparte}</div>
+                )}
+                {editing.contraparteNif && (
+                  <div><span className="text-muted-foreground">NIF contraparte:</span> {editing.contraparteNif}</div>
+                )}
+                {editing.contraparteColaboradorId != null && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Colaborador (contraparte):</span>{' '}
+                    {colaboradoresTodos.find(x => x.id === editing.contraparteColaboradorId)?.nome ?? `ID ${editing.contraparteColaboradorId}`}
+                  </div>
+                )}
                 <div className="col-span-2"><span className="text-muted-foreground">Objecto:</span> {editing.objecto}</div>
                 <div><span className="text-muted-foreground">Valor:</span> {formatKz(editing.valor)} {editing.moeda}</div>
                 <div><span className="text-muted-foreground">Responsável:</span> {editing.responsavelJuridico || editing.advogado}</div>
@@ -477,6 +788,83 @@ export default function ContratosPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function FileDropZone({
+  label,
+  files,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  files: File[];
+  onChange: (f: File[]) => void;
+  disabled?: boolean;
+}) {
+  const inputId = useId();
+  const add = (list: FileList | File[]) => {
+    onChange([...files, ...Array.from(list)]);
+  };
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div
+        role="presentation"
+        className={cn(
+          'rounded-lg border border-dashed border-border/80 p-4 text-center text-sm transition-colors',
+          disabled ? 'opacity-50 pointer-events-none' : 'hover:bg-muted/30 cursor-pointer',
+        )}
+        onDragOver={e => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={e => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (disabled) return;
+          if (e.dataTransfer.files?.length) add(e.dataTransfer.files);
+        }}
+        onClick={() => {
+          if (!disabled) document.getElementById(inputId)?.click();
+        }}
+      >
+        <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+        <p className="text-muted-foreground">Arraste ficheiros aqui ou clique para seleccionar</p>
+        <input
+          id={inputId}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={e => {
+            if (e.target.files?.length) add(e.target.files);
+            e.target.value = '';
+          }}
+          onClick={e => e.stopPropagation()}
+        />
+      </div>
+      {files.length > 0 && (
+        <ul className="text-xs text-muted-foreground space-y-1">
+          {files.map((f, i) => (
+            <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded border border-border/60 px-2 py-1">
+              <span className="truncate">{f.name}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1 shrink-0"
+                onClick={ev => {
+                  ev.stopPropagation();
+                  onChange(files.filter((_, j) => j !== i));
+                }}
+              >
+                Remover
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

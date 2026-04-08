@@ -1,15 +1,3 @@
-create policy "organizacao_settings_update_admin"
-  on public.organizacao_settings for update
-  to authenticated
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.auth_user_id = auth.uid() and p.perfil = 'Admin'
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.profiles p
-      where p.auth_user_id = auth.uid() and p.perfil = 'Admin'
-    )
-  );
+comment on column public.contratos.contraparte_nif is 'NIF da contraparte quando pessoa colectiva.';
+comment on column public.contratos.contraparte_colaborador_id is 'Colaborador quando a contraparte é singular (prestação de serviços).';
+comment on column public.contratos.personalidade_contraparte is 'Singular ou Colectivo; aplicável sobretudo a Prestação de Serviços.';

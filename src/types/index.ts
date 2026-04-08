@@ -416,6 +416,12 @@ export interface Contrato {
   tipo: string;
   parteA: string;
   parteB: string;
+  /** Prestação de serviços: NIF quando Personalidade = Colectivo */
+  contraparteNif?: string | null;
+  /** Prestação de serviços: colaborador quando Personalidade = Singular */
+  contraparteColaboradorId?: number | null;
+  /** «Singular» | «Colectivo» para fluxo de prestação de serviços */
+  personalidadeContraparte?: string | null;
   objecto: string;
   valor: number;
   moeda: string;

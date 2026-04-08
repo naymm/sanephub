@@ -69,7 +69,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   reunioes: ['id'],
   actas: ['id', 'reuniaoId', 'presididaPor'],
   irt_escalaes: ['id', 'ordem', 'valorMin', 'valorMax', 'parcelaFixa', 'taxaPercent', 'excessoDe'],
-  contratos: ['id', 'empresaId', 'valor', 'alertarAntesDias'],
+  contratos: ['id', 'empresaId', 'valor', 'alertarAntesDias', 'contraparteColaboradorId'],
   requisicoes: ['id', 'empresaId', 'quantidade', 'valorUnitario', 'valor', 'requisitanteColaboradorId'],
   pagamentos: ['id', 'requisicaoId', 'valor'],
   movimentos_tesouraria: ['id', 'empresaId', 'valor', 'centroCustoId', 'projectoId', 'requisicaoId', 'contaBancariaId'],
