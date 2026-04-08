@@ -40,7 +40,7 @@ export default function RescisoesContratuaisPage() {
     documentoPdf: '',
   });
 
-  const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
+  const canEdit = user?.perfil === 'Admin';
   const pagination = useClientSidePagination({ items: rescissoesContrato, pageSize: 25 });
 
   const getContrato = (id: number) => contratos.find(c => c.id === id);

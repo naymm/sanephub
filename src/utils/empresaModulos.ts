@@ -35,6 +35,8 @@ export function getModulosAtivosForContext(
  * `gestao-documentos` fica disponível também quando `secretaria` está na lista (retrocompatibilidade).
  */
 export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleId: string): boolean {
+  /** Comunicação interna é transversal; o desligue global fica em `organizacaoSettings.modulosDesactivados`. */
+  if (moduleId === 'comunicacao-interna') return true;
   if (modulosAtivos == null) return true;
   if (modulosAtivos.includes(moduleId)) return true;
   if (moduleId === 'gestao-documentos' && modulosAtivos.includes('secretaria')) return true;

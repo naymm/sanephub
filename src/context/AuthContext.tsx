@@ -292,7 +292,8 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
   'financas': ['Admin', 'Financeiro'],
   'contabilidade': ['Admin', 'Contabilidade', 'Financeiro'],
   'secretaria': ['Admin', 'Secretaria'],
-  'juridico': ['Admin', 'Juridico', 'Director', 'PCA'],
+  /** Exclusivo Admin: perfil Jurídico e outros não acedem ao módulo (ver `hasModuleAccess`). */
+  'juridico': ['Admin'],
   'planeamento': ['Admin', 'PCA', 'Planeamento', 'Director'],
   'conselho-administracao': ['Admin', 'PCA'],
   'comunicacao-interna': ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'],
@@ -322,9 +323,13 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
 export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (!user) return false;
   if (user.perfil === 'Admin') return true;
+  /** Jurídico: apenas Admin (não conceder via `modulos` nem PCA/Director/Juridico). */
+  if (module === 'juridico') return false;
   // Dashboard no menu agrupa Chat + Notificações (+ link ao painel): sempre acessível a quem tem sessão.
   if (module === 'dashboard') return true;
   if (user.perfil === 'Colaborador') {
+    // Notícias / eventos / aniversários: acesso de leitura alinhado ao menu (não exigir módulo explícito na lista).
+    if (module === 'comunicacao-interna') return true;
     if (!Array.isArray(user.modulos) || user.modulos.length === 0) {
       return MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;
     }

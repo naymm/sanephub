@@ -55,7 +55,7 @@ export default function ProcessosJudiciaisPage() {
   });
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? empresas.find(e => e.activo)?.id ?? 1 : currentEmpresaId;
-  const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
+  const canEdit = user?.perfil === 'Admin';
 
   const filtered = processos.filter(p => {
     const matchSearch =

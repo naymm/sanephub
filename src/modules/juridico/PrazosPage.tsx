@@ -46,7 +46,7 @@ export default function PrazosPage() {
   const [form, setForm] = useState<Partial<PrazoLegal>>({});
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? empresas.find(e => e.activo)?.id ?? 1 : currentEmpresaId;
-  const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
+  const canEdit = user?.perfil === 'Admin';
 
   const filtered = prazos.filter(p => {
     const matchSearch =

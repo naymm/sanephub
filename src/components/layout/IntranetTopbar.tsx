@@ -33,6 +33,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -85,7 +86,7 @@ export function IntranetTopbar() {
       label: string;
       icon: JSX.Element;
     }> = [
-      ...(canShowModule('portal-colaborador')
+      ...(canShowModule('portal-colaborador') && user.perfil !== 'Colaborador'
         ? [{ moduleId: 'portal-colaborador', label: 'Portal Colaborador', icon: <UserCircle className="h-4 w-4" /> }]
         : []),
       { moduleId: 'capital-humano', label: 'Capital Humano', icon: <Users className="h-4 w-4" /> },
@@ -98,7 +99,7 @@ export function IntranetTopbar() {
     ];
 
     return modules.filter(m => canShowModule(m.moduleId));
-  }, [canShowModule, organizacaoSettings]);
+  }, [canShowModule, organizacaoSettings, user.perfil]);
 
   const moduleItems = useMemo(() => {
     const items: Record<
@@ -445,6 +446,9 @@ export function IntranetTopbar() {
               {canShowModule('portal-colaborador') && (
                 <>
                   <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Portal
+                  </DropdownMenuLabel>
                   {PORTAL_MENU_ITEMS.filter(
                     item =>
                       !rotaBloqueadaPorRecursosDesactivados(item.path, organizacaoSettings.recursosDesactivados),
@@ -457,24 +461,24 @@ export function IntranetTopbar() {
                       </DropdownMenuItem>
                     );
                   })}
+                </>
+              )}
 
-                  {hasPortalColaborador && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/noticias')}>
-                        <Megaphone className="mr-2 h-4 w-4" />
-                        Notícias
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/eventos')}>
-                        <CalendarDays className="mr-2 h-4 w-4" />
-                        Eventos
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/aniversarios')}>
-                        <Cake className="mr-2 h-4 w-4" />
-                        Aniversariantes
-                      </DropdownMenuItem>
-                    </>
-                  )}
+              {hasPortalColaborador && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/noticias')}>
+                    <Megaphone className="mr-2 h-4 w-4" />
+                    Notícias
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/eventos')}>
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    Eventos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/aniversarios')}>
+                    <Cake className="mr-2 h-4 w-4" />
+                    Aniversariantes
+                  </DropdownMenuItem>
                 </>
               )}
               {user.perfil === 'Admin' && (

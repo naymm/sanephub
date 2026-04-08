@@ -188,6 +188,8 @@ export function HorizontalMenu() {
       canShowModule(i.module) &&
       !rotaBloqueadaPorRecursosDesactivados(i.path, organizacaoSettings.recursosDesactivados),
   );
+  /** Colaborador: na barra horizontal não mostrar itens do Portal (férias, recibos, etc.) — só módulos de trabalho atribuídos. */
+  const portalNavItems = isColaborador ? [] : portalItems;
   const groups = MODULE_GROUPS.filter(g => canShowModule(g.module))
     .map(g => ({ ...g, children: g.children.filter(canShowChild) }))
     .filter(g => g.children.length > 0);
@@ -269,7 +271,7 @@ export function HorizontalMenu() {
             ))}
 
             {/* Portal: no ramo «flat» (Colaborador com portal + outros módulos) estes itens não vinham de MODULE_GROUPS — era preciso listá-los aqui. */}
-            {portalItems.map(item => (
+            {portalNavItems.map(item => (
               <NavLink
                 key={item.path}
                 to={item.path}
@@ -317,7 +319,7 @@ export function HorizontalMenu() {
             ))}
 
             {/* Portal group for Colaborador */}
-            {isColaborador && portalItems.length > 0 && (
+            {isColaborador && portalNavItems.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
@@ -325,7 +327,7 @@ export function HorizontalMenu() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-64">
-                  {portalItems.map(i => (
+                  {portalNavItems.map(i => (
                     <DropdownMenuItem key={i.path} onSelect={() => navigate(i.path)}>
                   <span className="flex items-center gap-2">
                     {iconByPath[i.path] ? iconByPath[i.path] : null}

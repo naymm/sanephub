@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import type { Geofence } from '@/types';
@@ -36,7 +37,9 @@ const emptyForm: Omit<Geofence, 'id' | 'createdAt' | 'updatedAt'> = {
 };
 
 export default function GeofencesPage() {
+  const { user } = useAuth();
   const { empresas, geofences, addGeofence, updateGeofence, deleteGeofence } = useData();
+  const canEliminar = user?.perfil === 'Admin';
   const { currentEmpresaId } = useTenant();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -107,6 +110,10 @@ export default function GeofencesPage() {
   };
 
   const remove = async (g: Geofence) => {
+    if (!canEliminar) {
+      toast.error('Apenas administradores podem eliminar zonas de trabalho.');
+      return;
+    }
     if (!window.confirm(`Remover a zona «${g.nome}»? As permissões dos colaboradores para esta zona serão removidas.`)) {
       return;
     }
@@ -188,9 +195,11 @@ export default function GeofencesPage() {
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(g)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(g)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {canEliminar && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(g)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </td>
               </tr>
             ))}

@@ -47,7 +47,7 @@ export default function RiscosJuridicosPage() {
   const [form, setForm] = useState<Partial<RiscoJuridico>>({});
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? empresas.find(e => e.activo)?.id ?? 1 : currentEmpresaId;
-  const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
+  const canEdit = user?.perfil === 'Admin';
 
   const filtered = riscos.filter(r => {
     const matchSearch =

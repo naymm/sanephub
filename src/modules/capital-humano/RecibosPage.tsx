@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
@@ -33,7 +34,9 @@ const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set
 const ANO_ACTUAL = new Date().getFullYear();
 
 export default function RecibosPage() {
+  const { user } = useAuth();
   const { recibos, addRecibo, updateRecibo, deleteRecibo, colaboradores, irtEscalaes } = useData();
+  const canEliminar = user?.perfil === 'Admin';
   const [search, setSearch] = useState('');
   const [mesFilter, setMesFilter] = useState<string>('todos');
   const [anoFilter, setAnoFilter] = useState<string>(String(ANO_ACTUAL));
@@ -149,6 +152,10 @@ export default function RecibosPage() {
   };
 
   const remove = async (r: ReciboSalario) => {
+    if (!canEliminar) {
+      toast.error('Apenas administradores podem eliminar recibos.');
+      return;
+    }
     if (!window.confirm(`Remover o recibo de ${getColabName(r.colaboradorId)} (${r.mesAno})?`)) return;
     try {
       await deleteRecibo(r.id);
@@ -224,7 +231,11 @@ export default function RecibosPage() {
                     {r.status === 'Emitido' && (
                       <Button variant="ghost" size="sm" onClick={() => marcarPago(r)}>Marcar Pago</Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(r)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
+                    {canEliminar && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(r)} title="Remover">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>

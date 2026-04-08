@@ -104,6 +104,8 @@ export default function RequisicoesPage() {
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const canAccessFinancas = hasModuleAccess(user, 'financas');
+  /** Editar requisição existente: apenas Admin (criar nova continua com acesso ao módulo Finanças). */
+  const canEditRequisicao = user?.perfil === 'Admin';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusRequisicao | 'todos'>('todos');
   const [centroFilter, setCentroFilter] = useState<string>('todos');
@@ -172,6 +174,10 @@ export default function RequisicoesPage() {
   };
 
   const openEdit = (r: Requisicao) => {
+    if (!canEditRequisicao) {
+      toast.error('Apenas administradores podem editar requisições.');
+      return;
+    }
     setEditing(r);
     setForm({
       empresaId: r.empresaId,
@@ -402,6 +408,10 @@ export default function RequisicoesPage() {
     if (!form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0) return;
     try {
       if (editing) {
+        if (!canEditRequisicao) {
+          toast.error('Apenas administradores podem editar requisições.');
+          return;
+        }
         await updateRequisicao(editing.id, form);
       } else {
         await addRequisicao({ ...form, empresaId: empresaIdForNew, num: nextNum(requisicoes) });
@@ -570,7 +580,7 @@ export default function RequisicoesPage() {
                         <Eye className="h-4 w-4 mr-2" />
                         Ver
                       </DropdownMenuItem>
-                      {canAccessFinancas && (
+                      {canEditRequisicao && (
                         <DropdownMenuItem onSelect={() => openEdit(r)}>
                           <Pencil className="h-4 w-4 mr-2" />
                           Editar

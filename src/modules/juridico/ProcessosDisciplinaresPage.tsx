@@ -68,8 +68,7 @@ export default function ProcessosDisciplinaresPage() {
 
   const getEmpresaNome = (empresaId: number) =>
     empresas.find(e => e.id === empresaId)?.nome ?? `Empresa ${empresaId}`;
-  const canSeeDetalhes = user?.perfil === 'Admin' || user?.perfil === 'Juridico' || user?.perfil === 'PCA' || user?.perfil === 'Director';
-  const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
+  const canEdit = user?.perfil === 'Admin';
 
   const colaboradoresFiltrados = currentEmpresaId === 'consolidado'
     ? colaboradores
@@ -284,7 +283,7 @@ export default function ProcessosDisciplinaresPage() {
                     {lastStep ? `${formatDate(lastStep.data.slice(0, 10))} — ${lastStep.passo}` : '—'}
                   </td>
                   <td className="p-3 text-right">
-                    {canSeeDetalhes && (
+                    {canEdit && (
                       <Button variant="ghost" size="sm" onClick={() => navigate(`/juridico/processos-disciplinares/${p.id}`)}>
                         Ver detalhe
                       </Button>
@@ -304,12 +303,6 @@ export default function ProcessosDisciplinaresPage() {
         </table>
       </div>
       <DataTablePagination {...pagination.paginationProps} />
-
-      {!canSeeDetalhes && (
-        <p className="text-xs text-muted-foreground">
-          A visualização detalhada dos processos disciplinares é reservada à Área Jurídica, Direcção e PCA.
-        </p>
-      )}
 
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

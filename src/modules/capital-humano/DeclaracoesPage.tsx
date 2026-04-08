@@ -68,6 +68,7 @@ export default function DeclaracoesPage() {
   const [colabSelectOpen, setColabSelectOpen] = useState(false);
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
+  const canEliminar = user?.perfil === 'Admin';
 
   const handleImprimirPdf = async (d: Declaracao) => {
     if (d.status !== 'Emitida' && d.status !== 'Entregue') {
@@ -195,6 +196,10 @@ export default function DeclaracoesPage() {
   };
 
   const remove = async (d: Declaracao) => {
+    if (!canEliminar) {
+      toast.error('Apenas administradores podem eliminar declarações.');
+      return;
+    }
     if (!window.confirm('Remover esta declaração?')) return;
     try {
       await deleteDeclaracao(d.id);
@@ -256,7 +261,11 @@ export default function DeclaracoesPage() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
                     )}
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(d)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
+                    {canEliminar && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(d)} title="Remover">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                     {d.status === 'Pendente' && (
                       <Button variant="ghost" size="sm" onClick={() => marcarEmitida(d)}>Emitir</Button>
                     )}
