@@ -2,7 +2,8 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
-import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext } from '@/utils/empresaModulos';
+import { rotaBloqueadaPorRecursosDesactivados, tenantPodeUsarModulo } from '@/utils/orgFeatureAccess';
 import { IntranetTopbar } from './IntranetTopbar';
 import { HorizontalMenu } from './HorizontalMenu';
 import { FloatingCornerActions } from './FloatingCornerActions';
@@ -17,12 +18,13 @@ const PATH_TO_MODULE: Record<string, string> = {
   '/juridico': 'juridico',
   '/planeamento': 'planeamento',
   '/conselho-administracao': 'conselho-administracao',
+  '/comunicacao-interna': 'comunicacao-interna',
   '/configuracoes': 'configuracoes',
 };
 
 export function Layout() {
   const { user, isAuthenticated, isAuthReady } = useAuth();
-  const { empresas } = useData();
+  const { empresas, organizacaoSettings } = useData();
   const { currentEmpresaId } = useTenant();
   const location = useLocation();
   const pathname = location.pathname;
@@ -56,7 +58,14 @@ export function Layout() {
     return <Navigate to="/dashboard" replace />;
   }
   const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
-  if (user && moduleForPath && modulosAtivos != null && !empresaTemModuloActivado(modulosAtivos, moduleForPath)) {
+  if (user && moduleForPath && !tenantPodeUsarModulo(modulosAtivos, organizacaoSettings, moduleForPath)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  if (
+    user &&
+    organizacaoSettings.recursosDesactivados.length > 0 &&
+    rotaBloqueadaPorRecursosDesactivados(pathname, organizacaoSettings.recursosDesactivados)
+  ) {
     return <Navigate to="/dashboard" replace />;
   }
 

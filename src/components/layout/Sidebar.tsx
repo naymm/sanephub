@@ -4,11 +4,12 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
-  Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock,   ShieldAlert, FolderArchive,
+  Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock,   ShieldAlert, FolderArchive, Layers,
   Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator
 } from 'lucide-react';
 
@@ -118,7 +119,7 @@ const COLABORADOR_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   const { user, logout } = useAuth();
-  const { empresas } = useData();
+  const { empresas, organizacaoSettings } = useData();
   const { currentEmpresaId } = useTenant();
   const location = useLocation();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
@@ -147,12 +148,16 @@ export function Sidebar() {
 
   const canShowModule = (moduleId: string | undefined) => {
     if (!moduleId) return true;
+    if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     if (!hasModuleAccess(user, moduleId)) return false;
     // Alinhar ao HorizontalMenu: colaborador com módulos atribuídos não fica bloqueado por `modulos_ativos` incompleto na empresa.
     if (user.perfil === 'Colaborador') return true;
     if (modulosAtivos == null) return true;
     return empresaTemModuloActivado(modulosAtivos, moduleId);
   };
+
+  const childPathVisivel = (path: string) =>
+    !rotaBloqueadaPorRecursosDesactivados(path, organizacaoSettings.recursosDesactivados);
 
   /** Módulos de área (Capital Humano, Finanças, etc.) a que o colaborador tem acesso para trabalhar — inclui itens só com path (ex.: Gestão documental). */
   const workModules = isColaborador
@@ -177,14 +182,17 @@ export function Sidebar() {
   };
 
   const isActive = (path: string) => location.pathname === path;
-  const isGroupActive = (item: NavItem) =>
-    item.children?.some(c => location.pathname.startsWith(c.path)) ?? false;
 
   const renderNavItem = (item: NavItem) => {
+    if (item.path != null && !childPathVisivel(item.path)) return null;
     if (item.module && !canShowModule(item.module)) return null;
 
     if (item.children) {
-      const groupActive = isGroupActive(item);
+      const visibleChildren = item.children
+        .filter(child => !child.adminOnly || user.perfil === 'Admin')
+        .filter(child => childPathVisivel(child.path));
+      if (visibleChildren.length === 0) return null;
+      const groupActive = visibleChildren.some(c => location.pathname.startsWith(c.path));
       const userCollapsed = collapsedByUser.has(item.label);
       const expanded = !userCollapsed && (expandedItems.includes(item.label) || groupActive);
       return (
@@ -199,7 +207,7 @@ export function Sidebar() {
           </button>
           {expanded && (
             <div className="ml-7 mt-1 space-y-0.5 border-l border-sidebar-border pl-3">
-              {item.children.filter(child => !child.adminOnly || user.perfil === 'Admin').map(child => (
+              {visibleChildren.map(child => (
                 <NavLink
                   key={child.path}
                   to={child.path}
@@ -289,6 +297,10 @@ export function Sidebar() {
             <NavLink to="/configuracoes/departamentos" className={cn("sidebar-item", isActive('/configuracoes/departamentos') ? "sidebar-item-active" : "sidebar-item-inactive")}>
               <Building2 className="h-4 w-4" />
               <span>Departamentos</span>
+            </NavLink>
+            <NavLink to="/configuracoes/modulos-recursos" className={cn("sidebar-item", isActive('/configuracoes/modulos-recursos') ? "sidebar-item-active" : "sidebar-item-inactive")}>
+              <Layers className="h-4 w-4" />
+              <span>Módulos e recursos</span>
             </NavLink>
             <NavLink to="/configuracoes" className={cn("sidebar-item", isActive('/configuracoes') ? "sidebar-item-active" : "sidebar-item-inactive")}>
               <Settings className="h-4 w-4" />

@@ -126,6 +126,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   eventos: ['id', 'empresaId', 'alertarAntesHoras'],
   noticias_comentarios: ['id', 'empresaId', 'noticiaId', 'autorColaboradorId', 'autorPerfilId', 'parentComentarioId'],
   noticias_gostos: ['id', 'empresaId', 'noticiaId', 'autorPerfilId', 'colaboradorId'],
+  organizacao_settings: ['id'],
 };
 
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {

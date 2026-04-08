@@ -1,8 +1,15 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, ReactNode } from 'react';
-import type { Colaborador, Empresa, Geofence, ColaboradorGeofenceLink, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
+import type { Colaborador, Empresa, Geofence, ColaboradorGeofenceLink, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria, IRTEscalao, OrganizacaoSettings } from '@/types';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { loadAllTables, db, fetchColaboradorGeofenceLinks, syncColaboradorGeofenceLinks as syncColaboradorGeofenceLinksApi } from '@/lib/supabaseData';
+import {
+  loadAllTables,
+  db,
+  fetchColaboradorGeofenceLinks,
+  syncColaboradorGeofenceLinks as syncColaboradorGeofenceLinksApi,
+  fetchOrganizacaoSettings,
+  upsertOrganizacaoSettings,
+} from '@/lib/supabaseData';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
 import { nextReferenciaTesouraria } from '@/utils/tesourariaReferencia';
 
@@ -181,6 +188,9 @@ interface DataContextType {
   addEvento: (p: Partial<Evento>) => Promise<Evento>;
   updateEvento: (id: number, p: Partial<Evento>) => Promise<Evento>;
   deleteEvento: (id: number) => Promise<void>;
+  /** Módulos e rotas desactivados globalmente (Admin em Configurações). */
+  organizacaoSettings: OrganizacaoSettings;
+  updateOrganizacaoSettings: (next: OrganizacaoSettings) => Promise<OrganizacaoSettings>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -256,6 +266,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [colaboradorGeofenceLinks, setColaboradorGeofenceLinks] = useState<ColaboradorGeofenceLink[]>(
     emptyArrays.colaboradorGeofenceLinks,
   );
+  const [organizacaoSettings, setOrganizacaoSettings] = useState<OrganizacaoSettings>({
+    modulosDesactivados: [],
+    recursosDesactivados: [],
+  });
 
   // Realtime: mantém os arrays do DataContext sincronizados sem refresh/polling.
   const empresasRT = useRealtimeTable<Empresa>('empresas', 'id');
@@ -357,6 +371,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => setGeofences(geofencesRT.rows), [geofencesRT.rows]);
   useEffect(() => setColaboradorGeofenceLinks(colaboradorGeofencesRT.rows), [colaboradorGeofencesRT.rows]);
 
+  const reloadOrganizacaoSettings = useCallback(async () => {
+    if (!supabase || !isSupabaseConfigured()) {
+      setOrganizacaoSettings({ modulosDesactivados: [], recursosDesactivados: [] });
+      return;
+    }
+    try {
+      const s = await fetchOrganizacaoSettings(supabase);
+      setOrganizacaoSettings(s);
+    } catch {
+      setOrganizacaoSettings({ modulosDesactivados: [], recursosDesactivados: [] });
+    }
+  }, []);
+
+  const updateOrganizacaoSettings = useCallback(
+    async (next: OrganizacaoSettings) => {
+      if (!supabase || !isSupabaseConfigured()) throw new Error('Supabase não configurado');
+      const saved = await upsertOrganizacaoSettings(supabase, next);
+      setOrganizacaoSettings(saved);
+      return saved;
+    },
+    [],
+  );
+
   const refetch = useCallback(async () => {
     if (!supabase || !isSupabaseConfigured()) {
       setDataLoading(false);
@@ -365,6 +402,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setDataLoading(true);
     setDataError(null);
     try {
+      await reloadOrganizacaoSettings();
       const data = await loadAllTables(supabase);
       setEmpresas(data.empresas);
       setDepartamentos(data.departamentos);
@@ -402,7 +440,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setDataLoading(false);
     }
-  }, []);
+  }, [reloadOrganizacaoSettings]);
+
+  useEffect(() => {
+    reloadOrganizacaoSettings();
+  }, [reloadOrganizacaoSettings]);
 
   const filtered = useMemo(() => {
     const isConsolidado = currentEmpresaId === 'consolidado';
@@ -1091,11 +1133,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addEvento,
       updateEvento,
       deleteEvento,
+      organizacaoSettings,
+      updateOrganizacaoSettings,
     }),
     [
       dataLoading,
       dataError,
       refetch,
+      organizacaoSettings,
+      updateOrganizacaoSettings,
       departamentos,
       empresas,
       bancos,

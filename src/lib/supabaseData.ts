@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
 import { serializePlaneamentoTextList } from '@/utils/planeamentoTextLists';
-import type { Empresa, Departamento, Colaborador, Geofence, ColaboradorGeofenceLink, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria, IRTEscalao } from '@/types';
+import type { Empresa, Departamento, Colaborador, Geofence, ColaboradorGeofenceLink, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria, IRTEscalao, OrganizacaoSettings } from '@/types';
 
 const TABLE_NAMES = {
   empresas: 'empresas',
@@ -38,6 +38,63 @@ const TABLE_NAMES = {
 
 function num(id: number | string): number {
   return typeof id === 'string' ? parseInt(id, 10) : id;
+}
+
+const ORG_SETTINGS_TABLE = 'organizacao_settings';
+
+function isOrganizacaoSettingsUnavailable(err: { code?: string; message?: string }): boolean {
+  const b = `${err.code ?? ''} ${err.message ?? ''}`.toLowerCase();
+  return b.includes('pgrst205') || b.includes('42p01') || b.includes('does not exist') || b.includes('not found');
+}
+
+const defaultOrganizacaoSettings = (): OrganizacaoSettings => ({
+  modulosDesactivados: [],
+  recursosDesactivados: [],
+});
+
+export async function fetchOrganizacaoSettings(supabase: SupabaseClient): Promise<OrganizacaoSettings> {
+  const { data, error } = await supabase.from(ORG_SETTINGS_TABLE).select('*').eq('id', 1).maybeSingle();
+  if (error) {
+    if (isOrganizacaoSettingsUnavailable(error)) return defaultOrganizacaoSettings();
+    throw error;
+  }
+  if (!data) return defaultOrganizacaoSettings();
+  const row = mapRowFromDb<{ modulosDesactivados?: string[]; recursosDesactivados?: string[] }>(
+    'organizacao_settings',
+    data as Record<string, unknown>,
+  );
+  return {
+    modulosDesactivados: Array.isArray(row.modulosDesactivados) ? row.modulosDesactivados : [],
+    recursosDesactivados: Array.isArray(row.recursosDesactivados) ? row.recursosDesactivados : [],
+  };
+}
+
+export async function upsertOrganizacaoSettings(
+  supabase: SupabaseClient,
+  settings: OrganizacaoSettings,
+): Promise<OrganizacaoSettings> {
+  const { data, error } = await supabase
+    .from(ORG_SETTINGS_TABLE)
+    .upsert(
+      {
+        id: 1,
+        modulos_desactivados: settings.modulosDesactivados,
+        recursos_desactivados: settings.recursosDesactivados,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' },
+    )
+    .select('*')
+    .single();
+  if (error) throw error;
+  const row = mapRowFromDb<{ modulosDesactivados?: string[]; recursosDesactivados?: string[] }>(
+    'organizacao_settings',
+    data as Record<string, unknown>,
+  );
+  return {
+    modulosDesactivados: Array.isArray(row.modulosDesactivados) ? row.modulosDesactivados : [],
+    recursosDesactivados: Array.isArray(row.recursosDesactivados) ? row.recursosDesactivados : [],
+  };
 }
 
 /** Mensagem quando REST devolve 404 (tabela inexistente ou PostgREST sem reload). */

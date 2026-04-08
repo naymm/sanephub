@@ -2,6 +2,7 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { PORTAL_MENU_ITEMS, labelPortalMenuItem } from '@/navigation/portalMenu';
 import { PORTAL_PATH_ICONS } from '@/navigation/portalMenuIcons';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
@@ -55,6 +56,7 @@ const routeTitles: Record<string, string> = {
   '/configuracoes': 'Configurações',
   '/configuracoes/utilizadores': 'Utilizadores',
   '/configuracoes/departamentos': 'Departamentos',
+  '/configuracoes/modulos-recursos': 'Módulos e recursos',
   '/portal/dados': 'Os Meus Dados',
   '/portal/ferias': 'As Minhas Férias',
   '/portal/faltas': 'As Minhas Faltas',
@@ -75,7 +77,7 @@ const routeTitles: Record<string, string> = {
 export function Topbar() {
   const { user, logout } = useAuth();
   const { currentEmpresaId, setCurrentEmpresaId, isGroupLevel } = useTenant();
-  const { empresas } = useData();
+  const { empresas, organizacaoSettings } = useData();
   const { getForProfile, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const location = useLocation();
   const navigate = useNavigate();
@@ -85,6 +87,7 @@ export function Topbar() {
   const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
   const canShowModule = (moduleId?: string) => {
     if (!moduleId) return true;
+    if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     if (!hasModuleAccess(user, moduleId)) return false;
     if (user.perfil === 'Colaborador') return true;
     if (modulosAtivos == null) return true;
@@ -215,7 +218,10 @@ export function Topbar() {
             {canShowModule('portal-colaborador') && (
               <>
                 <DropdownMenuSeparator />
-                {PORTAL_MENU_ITEMS.map(item => {
+                {PORTAL_MENU_ITEMS.filter(
+                  item =>
+                    !rotaBloqueadaPorRecursosDesactivados(item.path, organizacaoSettings.recursosDesactivados),
+                ).map(item => {
                   const Icon = PORTAL_PATH_ICONS[item.path] ?? FileText;
                   return (
                     <DropdownMenuItem key={item.path} onSelect={() => navigate(item.path)}>

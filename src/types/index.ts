@@ -12,6 +12,13 @@ export interface Empresa {
   modulosAtivos?: string[];
 }
 
+/** Flags globais (tabela `organizacao_settings`): escondem módulos e rotas em toda a intranet. */
+export interface OrganizacaoSettings {
+  modulosDesactivados: string[];
+  /** Caminhos exactos ou prefixos (ex. `/capital-humano/zonas-trabalho`) desactivados. */
+  recursosDesactivados: string[];
+}
+
 export interface Departamento {
   id: number;
   nome: string;

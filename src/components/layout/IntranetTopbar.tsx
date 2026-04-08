@@ -14,6 +14,7 @@ import {
   FileText,
   FolderArchive,
   LayoutGrid,
+  Layers,
   LogOut,
   Megaphone,
   MessageCircle,
@@ -41,12 +42,13 @@ import { formatRelative } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
 import type { NotificationAudienceOptions } from '@/context/NotificationContext';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { useMemo, useState } from 'react';
 
 export function IntranetTopbar() {
   const { user, logout } = useAuth();
   const { currentEmpresaId, setCurrentEmpresaId, isGroupLevel } = useTenant();
-  const { empresas } = useData();
+  const { empresas, organizacaoSettings } = useData();
   const { getForProfile, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
 
@@ -70,6 +72,7 @@ export function IntranetTopbar() {
 
   const canShowModule = (moduleId?: string) => {
     if (!moduleId) return true;
+    if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     if (!hasModuleAccess(user, moduleId)) return false;
     if (user.perfil === 'Colaborador') return true;
     if (modulosAtivos == null) return true;
@@ -95,7 +98,7 @@ export function IntranetTopbar() {
     ];
 
     return modules.filter(m => canShowModule(m.moduleId));
-  }, [canShowModule]);
+  }, [canShowModule, organizacaoSettings]);
 
   const moduleItems = useMemo(() => {
     const items: Record<
@@ -235,7 +238,15 @@ export function IntranetTopbar() {
                     <div className="font-semibold">{selectedPrincipalModuleLabel}</div>
                   </div>
                   <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-1">
-                    {(moduleItems[selectedPrincipalModuleId] ?? []).map(i => (
+                    {(moduleItems[selectedPrincipalModuleId] ?? [])
+                      .filter(
+                        i =>
+                          !rotaBloqueadaPorRecursosDesactivados(
+                            i.path,
+                            organizacaoSettings.recursosDesactivados,
+                          ),
+                      )
+                      .map(i => (
                       <button
                         key={i.key}
                         onClick={() => {
@@ -250,7 +261,13 @@ export function IntranetTopbar() {
                         <span className="text-sm font-medium text-white/90">{i.label}</span>
                       </button>
                     ))}
-                    {(moduleItems[selectedPrincipalModuleId] ?? []).length === 0 && (
+                    {(moduleItems[selectedPrincipalModuleId] ?? []).filter(
+                      i =>
+                        !rotaBloqueadaPorRecursosDesactivados(
+                          i.path,
+                          organizacaoSettings.recursosDesactivados,
+                        ),
+                    ).length === 0 && (
                       <div className="mt-1 text-sm text-white/70">Sem itens neste módulo.</div>
                     )}
                   </div>
@@ -394,6 +411,10 @@ export function IntranetTopbar() {
                       <Users className="mr-2 h-4 w-4" />
                       Utilizadores
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => navigate('/configuracoes/modulos-recursos')}>
+                      <Layers className="mr-2 h-4 w-4" />
+                      Módulos e recursos
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => navigate('/configuracoes')}>
                       Configurações
@@ -424,7 +445,10 @@ export function IntranetTopbar() {
               {canShowModule('portal-colaborador') && (
                 <>
                   <DropdownMenuSeparator />
-                  {PORTAL_MENU_ITEMS.map(item => {
+                  {PORTAL_MENU_ITEMS.filter(
+                    item =>
+                      !rotaBloqueadaPorRecursosDesactivados(item.path, organizacaoSettings.recursosDesactivados),
+                  ).map(item => {
                     const Icon = PORTAL_PATH_ICONS[item.path] ?? FileText;
                     return (
                       <DropdownMenuItem key={item.path} onSelect={() => navigate(item.path)}>
@@ -454,10 +478,16 @@ export function IntranetTopbar() {
                 </>
               )}
               {user.perfil === 'Admin' && (
-                <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Configurações
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => navigate('/configuracoes/modulos-recursos')}>
+                    <Layers className="mr-2 h-4 w-4" />
+                    Módulos e recursos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Configurações
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={logout} className="text-destructive">

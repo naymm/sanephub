@@ -44,6 +44,7 @@ import CorrespondenciasPage from "@/modules/secretaria/CorrespondenciasPage";
 import ArquivoPage from "@/modules/secretaria/ArquivoPage";
 import UtilizadoresPage from "@/modules/config/UtilizadoresPage";
 import DepartamentosPage from "@/modules/config/DepartamentosPage";
+import ModulosRecursosPage from "@/modules/config/ModulosRecursosPage";
 import GenericModulePage from "@/modules/GenericModulePage";
 import PortalRecibosPage from "@/modules/portal/PortalRecibosPage";
 import PortalDeclaracoesPage from "@/modules/portal/PortalDeclaracoesPage";
@@ -155,6 +156,7 @@ const App = () => (
                   <Route path="/configuracoes" element={<GenericModulePage title="Configurações" module="config" />} />
                   <Route path="/configuracoes/utilizadores" element={<UtilizadoresPage />} />
                   <Route path="/configuracoes/departamentos" element={<DepartamentosPage />} />
+                  <Route path="/configuracoes/modulos-recursos" element={<ModulosRecursosPage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

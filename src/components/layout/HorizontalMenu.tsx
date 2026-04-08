@@ -4,6 +4,7 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { PORTAL_MENU_ITEMS } from '@/navigation/portalMenu';
 import {
   Users,
@@ -35,7 +36,7 @@ const GENERAL_ITEMS: MenuChild[] = [
   { label: 'Notificações', path: '/notificacoes', module: 'dashboard' },
 ];
 
-const MODULE_GROUPS: MenuGroup[] = [
+export const MODULE_GROUPS: MenuGroup[] = [
   {
     label: 'Capital Humano',
     module: 'capital-humano',
@@ -144,7 +145,7 @@ const PORTAL_ITEMS: MenuChild[] = [...PORTAL_MENU_ITEMS];
 
 export function HorizontalMenu() {
   const { user } = useAuth();
-  const { empresas } = useData();
+  const { empresas, organizacaoSettings } = useData();
   const { currentEmpresaId } = useTenant();
   const location = useLocation();
   const navigate = useNavigate();
@@ -155,6 +156,7 @@ export function HorizontalMenu() {
 
   const canShowModule = (moduleId?: string) => {
     if (!moduleId) return true;
+    if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     // Colaborador: sempre permitir acesso ao Dashboard no menu (independente de `user.modulos` conter 'dashboard').
     if (user.perfil === 'Colaborador' && moduleId === 'dashboard') return true;
     // Colaborador: mostrar Comunicação Interna (Notícias/Eventos/Aniversariantes) em modo leitura.
@@ -175,13 +177,20 @@ export function HorizontalMenu() {
 
   const canShowChild = (child: MenuChild) => {
     if (child.adminOnly && user.perfil !== 'Admin') return false;
+    if (rotaBloqueadaPorRecursosDesactivados(child.path, organizacaoSettings.recursosDesactivados)) return false;
     if (!child.module) return true;
     return canShowModule(child.module);
   };
 
   const topItems = GENERAL_ITEMS.filter(i => canShowModule(i.module));
-  const portalItems = PORTAL_ITEMS.filter(i => canShowModule(i.module));
-  const groups = MODULE_GROUPS.filter(g => canShowModule(g.module));
+  const portalItems = PORTAL_ITEMS.filter(
+    i =>
+      canShowModule(i.module) &&
+      !rotaBloqueadaPorRecursosDesactivados(i.path, organizacaoSettings.recursosDesactivados),
+  );
+  const groups = MODULE_GROUPS.filter(g => canShowModule(g.module))
+    .map(g => ({ ...g, children: g.children.filter(canShowChild) }))
+    .filter(g => g.children.length > 0);
 
   // Ícones fixos para alguns itens; para outros usamos o rótulo.
   const iconByPath: Record<string, React.ReactNode> = {
