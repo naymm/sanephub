@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Contrato } from '@/types';
 
 const BUCKET = 'gestao-documentos';
 
@@ -180,4 +181,46 @@ export async function uploadAnexosContratoParaGestao(
   }
 
   return { ok, errors };
+}
+
+/**
+ * Resolve URL pública do documento associado ao contrato (campo ficheiroPdf ou registo em gestão documental).
+ */
+export async function resolveContratoDocumentoPublicUrl(
+  supabase: SupabaseClient,
+  c: Contrato,
+): Promise<string | null> {
+  const raw = c.ficheiroPdf?.trim();
+  if (!raw) return null;
+
+  if (raw.startsWith('http')) {
+    const m = raw.match(/storage\/v1\/object\/public\/gestao-documentos\/(.+?)(?:\?|$)/);
+    if (m) {
+      const path = decodeURIComponent(m[1]);
+      const { data } = supabase.storage.from('gestao-documentos').getPublicUrl(path);
+      return data.publicUrl ?? null;
+    }
+    return raw;
+  }
+
+  if (raw.includes('/')) {
+    const { data } = supabase.storage.from('gestao-documentos').getPublicUrl(raw);
+    return data.publicUrl ?? null;
+  }
+
+  if (c.empresaId == null) return null;
+  const { data: row, error } = await supabase
+    .from('gestao_documentos_arquivos')
+    .select('storage_path')
+    .eq('empresa_id', c.empresaId)
+    .eq('nome_ficheiro', raw)
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !row) return null;
+  const path = (row as { storage_path: string }).storage_path;
+  if (!path) return null;
+  const { data } = supabase.storage.from('gestao-documentos').getPublicUrl(path);
+  return data.publicUrl ?? null;
 }

@@ -11,3 +11,7 @@ verify_jwt = false
 # A função valida o Bearer com supabase.auth.getUser().
 [functions.birthdays]
 verify_jwt = false
+
+# Fetch directo a gue.gov.ao no Deno; JWT validado na função (como birthdays).
+[functions.gue-publicacao-nome]
+verify_jwt = false

@@ -13,7 +13,9 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   garantirPastaNumeroContratoNaGestao,
   uploadAnexosContratoParaGestao,
+  resolveContratoDocumentoPublicUrl,
 } from '@/lib/contratoGestaoDocumentos';
+import { fetchNomeEmpresaPorNifGue } from '@/utils/guePublicacaoNomeEmpresa';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -42,7 +44,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Eye, FileText, ChevronsUpDown, Upload } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Pencil, Trash2, Eye, FileText, ChevronsUpDown, Upload, Search, Loader2 } from 'lucide-react';
 
 const TIPO_PRESTACAO = 'Prestação de Serviços';
 
@@ -85,7 +94,11 @@ export default function ContratosPage() {
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [filterEmpresa, setFilterEmpresa] = useState<string>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewContrato, setPreviewContrato] = useState<Contrato | null>(null);
+  const [previewInlinePdfUrl, setPreviewInlinePdfUrl] = useState<string | null>(null);
+  const [contractPdfPreviewOpen, setContractPdfPreviewOpen] = useState(false);
+  const [contractPdfPreviewUrl, setContractPdfPreviewUrl] = useState<string | null>(null);
   const [editing, setEditing] = useState<Contrato | null>(null);
   const [form, setForm] = useState<Partial<Contrato>>({
     numero: '',
@@ -110,6 +123,7 @@ export default function ContratosPage() {
   const [anexosContrato, setAnexosContrato] = useState<File[]>([]);
   const [anexosEmpresaCliente, setAnexosEmpresaCliente] = useState<File[]>([]);
   const [colabComboOpen, setColabComboOpen] = useState(false);
+  const [gueNifLookupLoading, setGueNifLookupLoading] = useState(false);
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? empresas.find(e => e.activo)?.id ?? 1 : currentEmpresaId;
   const canEdit = user?.perfil === 'Admin' || user?.perfil === 'Juridico';
@@ -148,6 +162,17 @@ export default function ContratosPage() {
     [colaboradoresTodos, form.contraparteColaboradorId],
   );
 
+  /** Empresas activas; em edição, inclui a empresa do contrato mesmo se estiver inactiva. */
+  const empresasParteA = useMemo(() => {
+    const act = empresas.filter(e => e.activo);
+    const cur = form.empresaId;
+    if (cur != null && !act.some(e => e.id === cur)) {
+      const extra = empresas.find(e => e.id === cur);
+      return extra ? [...act, extra] : act;
+    }
+    return act;
+  }, [empresas, form.empresaId]);
+
   useEffect(() => {
     if (!dialogOpen || editing != null) return;
     const eid = form.empresaId;
@@ -161,11 +186,12 @@ export default function ContratosPage() {
     const eid = typeof empresaIdForNew === 'number' ? empresaIdForNew : 1;
     setAnexosContrato([]);
     setAnexosEmpresaCliente([]);
+    const nomeEmpresaA = empresas.find(em => em.id === eid)?.nome ?? '';
     setForm({
       empresaId: eid,
       numero: proximoNumeroContrato(contratos, eid),
       tipo: TIPO_PRESTACAO,
-      parteA: 'Grupo SANEP',
+      parteA: nomeEmpresaA,
       parteB: '',
       contraparteNif: '',
       contraparteColaboradorId: undefined,
@@ -196,6 +222,7 @@ export default function ContratosPage() {
     }
     setForm({
       ...c,
+      parteA: empresas.find(em => em.id === c.empresaId)?.nome ?? c.parteA,
       historico: c.historico ?? [],
       contraparteNif: c.contraparteNif ?? '',
       personalidadeContraparte: pers,
@@ -203,12 +230,35 @@ export default function ContratosPage() {
     setDialogOpen(true);
   };
 
-  const openDetail = (c: Contrato) => {
-    setEditing(c);
-    setDetailOpen(true);
+  const openPreview = (c: Contrato) => {
+    setPreviewContrato(c);
+    setPreviewInlinePdfUrl(null);
+    setPreviewOpen(true);
+  };
+
+  const openContractPdfPreview = async (c: Contrato) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Configure o Supabase para pré-visualizar documentos.');
+      return;
+    }
+    try {
+      const url = await resolveContratoDocumentoPublicUrl(supabase, c);
+      if (!url) {
+        toast.error('Não foi possível localizar o documento deste contrato.');
+        return;
+      }
+      setContractPdfPreviewUrl(url);
+      setContractPdfPreviewOpen(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar.');
+    }
   };
 
   const save = async () => {
+    if (form.empresaId == null) {
+      toast.error('Seleccione a empresa (Parte A).');
+      return;
+    }
     if (!form.numero?.trim() || !form.dataInicio || !form.dataFim) {
       toast.error('Preencha número (gerado), datas de início e fim.');
       return;
@@ -330,6 +380,7 @@ export default function ContratosPage() {
   };
 
   const saveDisabled =
+    form.empresaId == null ||
     !form.numero?.trim() ||
     !form.dataInicio ||
     !form.dataFim ||
@@ -344,14 +395,15 @@ export default function ContratosPage() {
     if (!window.confirm(`Remover contrato ${c.numero}?`)) return;
     try {
       await deleteContrato(c.id);
-      setDetailOpen(false);
+      setPreviewOpen(false);
+      setPreviewContrato(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao remover');
     }
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="page-header">Contratos</h1>
@@ -366,13 +418,16 @@ export default function ContratosPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Pesquisar nº, contraparte, objecto..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-56 h-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Pesquisar nº, contraparte, objecto..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9 h-9 w-56 max-w-full"
+          />
+        </div>
         <Select value={filterTipo} onValueChange={setFilterTipo}>
           <SelectTrigger className="w-44 h-9">
             <SelectValue placeholder="Tipo" />
@@ -410,58 +465,86 @@ export default function ContratosPage() {
         )}
       </div>
 
-      <div className="table-container overflow-x-auto rounded-lg border border-border/80">
+      <div className="table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-muted/30">
-              <th className="text-left p-3 font-medium text-muted-foreground">Nº</th>
-              {currentEmpresaId === 'consolidado' && <th className="text-left p-3 font-medium text-muted-foreground">Empresa</th>}
-              <th className="text-left p-3 font-medium text-muted-foreground">Tipo</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Contraparte</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Objecto</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Valor</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Início</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Fim</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Dias</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Status</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Acções</th>
+            <tr className="border-b border-border/80">
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº</th>
+              {currentEmpresaId === 'consolidado' && (
+                <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Empresa</th>
+              )}
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tipo</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Contraparte</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Objecto</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valor</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Início</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Fim</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Dias</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+              <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
             </tr>
           </thead>
           <tbody>
             {pagination.slice.map(c => {
               const d = diasRestantes(c.dataFim);
               return (
-                <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
-                  <td className="p-3 font-mono text-xs">{c.numero}</td>
+                <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="py-3 px-5 font-mono text-xs">{c.numero}</td>
                   {currentEmpresaId === 'consolidado' && (
-                    <td className="p-3 text-muted-foreground">{empresaNome(c.empresaId)}</td>
+                    <td className="py-3 px-5 text-muted-foreground">{empresaNome(c.empresaId)}</td>
                   )}
-                  <td className="p-3">{c.tipo}</td>
-                  <td className="p-3 font-medium">{c.parteB}</td>
-                  <td className="p-3 text-muted-foreground max-w-48 truncate" title={c.objecto}>{c.objecto}</td>
-                  <td className="p-3 font-mono text-xs">{formatKz(c.valor)}</td>
-                  <td className="p-3 text-muted-foreground">{formatDate(c.dataInicio)}</td>
-                  <td className="p-3 text-muted-foreground">{formatDate(c.dataFim)}</td>
-                  <td className={cn('p-3', getDiasClass(c.dataFim))}>
-                    {d < 0 ? 'Vencido' : `${d} dias`}
+                  <td className="py-3 px-5">{c.tipo}</td>
+                  <td className="py-3 px-5 font-medium">{c.parteB}</td>
+                  <td className="py-3 px-5 text-muted-foreground max-w-48 truncate" title={c.objecto}>
+                    {c.objecto}
                   </td>
-                  <td className="p-3"><StatusBadge status={c.status} /></td>
-                  <td className="p-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(c)} title="Ver">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {canEdit && (
-                        <>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)} title="Editar">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)} title="Remover">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                  <td className="py-3 px-5 font-mono text-xs">{formatKz(c.valor)}</td>
+                  <td className="py-3 px-5 text-muted-foreground">{formatDate(c.dataInicio)}</td>
+                  <td className="py-3 px-5 text-muted-foreground">{formatDate(c.dataFim)}</td>
+                  <td className={cn('py-3 px-5', getDiasClass(c.dataFim))}>{d < 0 ? 'Vencido' : `${d} dias`}</td>
+                  <td className="py-3 px-5">
+                    <StatusBadge status={c.status} />
+                  </td>
+                  <td className="py-3 px-5 text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          Ações
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-[240px]">
+                        <DropdownMenuItem onSelect={() => openPreview(c)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Ver
+                        </DropdownMenuItem>
+                        {canEdit && (
+                          <DropdownMenuItem onSelect={() => openEdit(c)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          disabled={!c.ficheiroPdf?.trim() || !isSupabaseConfigured()}
+                          onSelect={() => void openContractPdfPreview(c)}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Pré-visualizar documento
+                        </DropdownMenuItem>
+                        {canEdit && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={() => remove(c)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Remover
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               );
@@ -471,10 +554,13 @@ export default function ContratosPage() {
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-12 rounded-lg border border-dashed border-border/80">
-          <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+        <div className="text-center py-8 space-y-3">
           <p className="text-muted-foreground text-sm">Nenhum contrato encontrado.</p>
-          {canEdit && <Button variant="outline" className="mt-3" onClick={openCreate}>Criar primeiro contrato</Button>}
+          {canEdit && (
+            <Button variant="outline" onClick={openCreate}>
+              Criar primeiro contrato
+            </Button>
+          )}
         </div>
       )}
       <DataTablePagination {...pagination.paginationProps} />
@@ -489,29 +575,39 @@ export default function ContratosPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            {currentEmpresaId === 'consolidado' && (
-              <div className="space-y-2">
-                <Label>Empresa</Label>
-                <Select
-                  value={form.empresaId != null ? String(form.empresaId) : '1'}
-                  onValueChange={v =>
-                    setForm(f => ({
-                      ...f,
-                      empresaId: Number(v),
-                      contraparteColaboradorId: undefined,
-                      parteB: f.tipo === TIPO_PRESTACAO && f.personalidadeContraparte === 'Singular' ? '' : f.parteB,
-                    }))
-                  }
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {empresas.filter(e => e.activo).map(e => (
-                      <SelectItem key={e.id} value={String(e.id)}>{e.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Parte A (empresa)</Label>
+              <Select
+                value={form.empresaId != null ? String(form.empresaId) : ''}
+                onValueChange={v => {
+                  const id = Number(v);
+                  const nome = empresas.find(e => e.id === id)?.nome ?? '';
+                  setForm(f => ({
+                    ...f,
+                    empresaId: id,
+                    parteA: nome,
+                    contraparteColaboradorId: undefined,
+                    parteB:
+                      f.tipo === TIPO_PRESTACAO && f.personalidadeContraparte === 'Singular' ? '' : f.parteB,
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar empresa do grupo…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresasParteA.map(e => (
+                    <SelectItem key={e.id} value={String(e.id)}>
+                      {e.nome}
+                      {!e.activo ? ' (inactiva)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Qualquer empresa cadastrada no grupo. O número do contrato segue a empresa escolhida.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nº contrato</Label>
@@ -543,12 +639,6 @@ export default function ContratosPage() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label>Parte A (empresa)</Label>
-                <Input value={form.parteA} onChange={e => setForm(f => ({ ...f, parteA: e.target.value }))} placeholder="Grupo SANEP" />
               </div>
             </div>
             {form.tipo === TIPO_PRESTACAO ? (
@@ -629,18 +719,62 @@ export default function ContratosPage() {
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>NIF da empresa (cliente)</Label>
-                      <Input
-                        value={form.contraparteNif ?? ''}
-                        onChange={e => setForm(f => ({ ...f, contraparteNif: e.target.value }))}
-                        placeholder="999999999"
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          className="flex-1 min-w-0"
+                          value={form.contraparteNif ?? ''}
+                          onChange={e => setForm(f => ({ ...f, contraparteNif: e.target.value }))}
+                          placeholder="999999999"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0"
+                          disabled={gueNifLookupLoading || !(form.contraparteNif ?? '').replace(/\D/g, '')}
+                          title="Consultar denominação no portal GUE (gue.gov.ao)"
+                          onClick={async () => {
+                            const nif = form.contraparteNif?.trim() ?? '';
+                            if (!nif.replace(/\D/g, '')) {
+                              toast.error('Preencha o NIF antes de pesquisar.');
+                              return;
+                            }
+                            if (!isSupabaseConfigured()) {
+                              toast.error('Supabase não configurado; não é possível consultar o GUE.');
+                              return;
+                            }
+                            setGueNifLookupLoading(true);
+                            try {
+                              const r = await fetchNomeEmpresaPorNifGue(supabase, nif);
+                              if (r.nome) {
+                                setForm(f => ({ ...f, parteB: r.nome! }));
+                                toast.success('Nome da empresa preenchido a partir do GUE.');
+                              } else {
+                                toast.error(r.error ?? 'Não foi possível obter o nome.');
+                              }
+                            } finally {
+                              setGueNifLookupLoading(false);
+                            }
+                          }}
+                        >
+                          {gueNifLookupLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Search className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        A consulta vai a gue.gov.ao via função Supabase (requer deploy de{' '}
+                        <code className="text-[10px]">gue-publicacao-nome</code>).
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label>Nome da empresa</Label>
                       <Input
                         value={form.parteB ?? ''}
                         onChange={e => setForm(f => ({ ...f, parteB: e.target.value }))}
-                        placeholder="Denominação social"
+                        placeholder="Denominação social" disabled
                       />
                     </div>
                   </div>
@@ -688,7 +822,7 @@ export default function ContratosPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Responsável jurídico / Advogado</Label>
+              <Label>Responsável</Label>
               <p className="text-sm rounded-md border border-border/80 bg-muted/40 px-3 py-2 font-medium">{user?.nome ?? '—'}</p>
               <p className="text-[10px] text-muted-foreground">Preenchido automaticamente com o utilizador que regista.</p>
             </div>
@@ -734,57 +868,171 @@ export default function ContratosPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+      <Dialog
+        open={previewOpen}
+        onOpenChange={open => {
+          setPreviewOpen(open);
+          if (!open) setPreviewInlinePdfUrl(null);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalhe do contrato {editing?.numero}</DialogTitle>
-            <DialogDescription>Dados completos e histórico de alterações.</DialogDescription>
+            <DialogTitle>{previewContrato?.numero}</DialogTitle>
+            <DialogDescription>Pré-visualização do contrato</DialogDescription>
           </DialogHeader>
-          {editing && (
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Empresa:</span> {empresaNome(editing.empresaId)}</div>
-                <div><span className="text-muted-foreground">Tipo:</span> {editing.tipo}</div>
-                <div><span className="text-muted-foreground">Parte A:</span> {editing.parteA}</div>
-                <div><span className="text-muted-foreground">Parte B:</span> {editing.parteB}</div>
-                {editing.personalidadeContraparte && (
-                  <div><span className="text-muted-foreground">Personalidade:</span> {editing.personalidadeContraparte}</div>
-                )}
-                {editing.contraparteNif && (
-                  <div><span className="text-muted-foreground">NIF contraparte:</span> {editing.contraparteNif}</div>
-                )}
-                {editing.contraparteColaboradorId != null && (
+          {previewContrato &&
+            (previewInlinePdfUrl ? (
+              <div className="w-full h-[70vh] min-h-[320px]">
+                <iframe
+                  src={previewInlinePdfUrl}
+                  title="Documento do contrato"
+                  className="w-full h-full border-0 rounded-md"
+                />
+                <div className="mt-3 flex justify-end">
+                  <Button type="button" variant="outline" onClick={() => setPreviewInlinePdfUrl(null)}>
+                    Voltar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 py-2">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Empresa:</span> {empresaNome(previewContrato.empresaId)}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tipo:</span> {previewContrato.tipo}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Parte A:</span> {previewContrato.parteA}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Parte B:</span> {previewContrato.parteB}
+                  </div>
+                  {previewContrato.personalidadeContraparte && (
+                    <div>
+                      <span className="text-muted-foreground">Personalidade:</span>{' '}
+                      {previewContrato.personalidadeContraparte}
+                    </div>
+                  )}
+                  {previewContrato.contraparteNif && (
+                    <div>
+                      <span className="text-muted-foreground">NIF contraparte:</span> {previewContrato.contraparteNif}
+                    </div>
+                  )}
+                  {previewContrato.contraparteColaboradorId != null && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Colaborador (contraparte):</span>{' '}
+                      {colaboradoresTodos.find(x => x.id === previewContrato.contraparteColaboradorId)?.nome ??
+                        `ID ${previewContrato.contraparteColaboradorId}`}
+                    </div>
+                  )}
                   <div className="col-span-2">
-                    <span className="text-muted-foreground">Colaborador (contraparte):</span>{' '}
-                    {colaboradoresTodos.find(x => x.id === editing.contraparteColaboradorId)?.nome ?? `ID ${editing.contraparteColaboradorId}`}
+                    <span className="text-muted-foreground">Objecto:</span> {previewContrato.objecto}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Valor:</span> {formatKz(previewContrato.valor)}{' '}
+                    {previewContrato.moeda}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Responsável:</span>{' '}
+                    {previewContrato.responsavelJuridico || previewContrato.advogado}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Início:</span> {formatDate(previewContrato.dataInicio)}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Fim:</span> {formatDate(previewContrato.dataFim)}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Status:</span> <StatusBadge status={previewContrato.status} />
+                  </div>
+                </div>
+                {previewContrato.ficheiroPdf?.trim() && (
+                  <div className="rounded-md border border-border/80 bg-muted/20 px-3 py-2 text-sm">
+                    <p className="text-muted-foreground text-xs mb-1">Documento</p>
+                    <button
+                      type="button"
+                      className="text-primary underline hover:no-underline"
+                      disabled={!isSupabaseConfigured()}
+                      onClick={() => {
+                        void (async () => {
+                          if (!supabase) {
+                            toast.error('Supabase não configurado.');
+                            return;
+                          }
+                          const url = await resolveContratoDocumentoPublicUrl(supabase, previewContrato);
+                          if (url) setPreviewInlinePdfUrl(url);
+                          else toast.error('Não foi possível pré-visualizar o documento.');
+                        })();
+                      }}
+                    >
+                      {previewContrato.ficheiroPdf?.startsWith('http')
+                        ? previewContrato.ficheiroPdf.split('/').pop()?.split('?')[0] || previewContrato.ficheiroPdf
+                        : previewContrato.ficheiroPdf}
+                    </button>
                   </div>
                 )}
-                <div className="col-span-2"><span className="text-muted-foreground">Objecto:</span> {editing.objecto}</div>
-                <div><span className="text-muted-foreground">Valor:</span> {formatKz(editing.valor)} {editing.moeda}</div>
-                <div><span className="text-muted-foreground">Responsável:</span> {editing.responsavelJuridico || editing.advogado}</div>
-                <div><span className="text-muted-foreground">Início:</span> {formatDate(editing.dataInicio)}</div>
-                <div><span className="text-muted-foreground">Fim:</span> {formatDate(editing.dataFim)}</div>
-                <div><span className="text-muted-foreground">Status:</span> <StatusBadge status={editing.status} /></div>
-                {editing.ficheiroPdf && <div className="col-span-2"><span className="text-muted-foreground">Documento:</span> {editing.ficheiroPdf}</div>}
+                {previewContrato.historico && previewContrato.historico.length > 0 && (
+                  <div>
+                    <Label className="mb-2 block">Histórico</Label>
+                    <ul className="border rounded-md divide-y divide-border/80">
+                      {[...previewContrato.historico].reverse().map((h, i) => (
+                        <li key={i} className="p-3 text-sm flex justify-between gap-2">
+                          <span>{h.acao}</span>
+                          <span className="text-muted-foreground shrink-0">
+                            {formatDate(h.data)} — {h.utilizador}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <DialogFooter className="gap-2 sm:gap-0">
+                  {canEdit && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const cur = previewContrato;
+                        setPreviewOpen(false);
+                        openEdit(cur);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    disabled={!previewContrato.ficheiroPdf?.trim() || !isSupabaseConfigured()}
+                    onClick={() => void openContractPdfPreview(previewContrato)}
+                  >
+                    Abrir documento em ecrã inteiro
+                  </Button>
+                  <Button onClick={() => setPreviewOpen(false)}>Fechar</Button>
+                </DialogFooter>
               </div>
-              {editing.historico && editing.historico.length > 0 && (
-                <div>
-                  <Label className="mb-2 block">Histórico</Label>
-                  <ul className="border rounded-md divide-y divide-border/80">
-                    {[...editing.historico].reverse().map((h, i) => (
-                      <li key={i} className="p-3 text-sm flex justify-between">
-                        <span>{h.acao}</span>
-                        <span className="text-muted-foreground">{formatDate(h.data)} — {h.utilizador}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <DialogFooter>
-                {canEdit && <Button variant="outline" onClick={() => { setDetailOpen(false); openEdit(editing); }}>Editar</Button>}
-                <Button onClick={() => setDetailOpen(false)}>Fechar</Button>
-              </DialogFooter>
+            ))}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={contractPdfPreviewOpen}
+        onOpenChange={open => {
+          setContractPdfPreviewOpen(open);
+          if (!open) setContractPdfPreviewUrl(null);
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
+          {contractPdfPreviewUrl ? (
+            <div className="w-full h-full min-h-[80vh]">
+              <iframe
+                src={contractPdfPreviewUrl}
+                title="Pré-visualização do documento"
+                className="w-full h-full border-0 rounded-md"
+              />
             </div>
+          ) : (
+            <DialogDescription className="p-6">A carregar pré-visualização…</DialogDescription>
           )}
         </DialogContent>
       </Dialog>
