@@ -11,6 +11,7 @@ const corsHeaders = {
 
 interface CreateUserBody {
   email: string;
+  username: string;
   password: string;
   nome: string;
   perfil: string;
@@ -71,11 +72,32 @@ Deno.serve(async (req) => {
     }
 
     const body = (await req.json()) as CreateUserBody;
-    const { email, password, nome, perfil, cargo = '', departamento = '', avatar = '', permissoes = [], modulos = null, empresa_id = null, colaborador_id = null } = body;
+    const {
+      email,
+      username: rawUsername,
+      password,
+      nome,
+      perfil,
+      cargo = '',
+      departamento = '',
+      avatar = '',
+      permissoes = [],
+      modulos = null,
+      empresa_id = null,
+      colaborador_id = null,
+    } = body;
 
-    if (!email?.trim() || !password || !nome?.trim() || !perfil?.trim()) {
+    const username = (rawUsername ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '');
+    const emailLocal = email?.trim()
+      ? email.trim().split('@')[0]?.toLowerCase().replace(/\s+/g, '') ?? '';
+    const finalUsername = username || emailLocal;
+
+    if (!email?.trim() || !password || !nome?.trim() || !perfil?.trim() || !finalUsername) {
       return new Response(
-        JSON.stringify({ error: 'email, password, nome e perfil são obrigatórios' }),
+        JSON.stringify({ error: 'email, nome de utilizador (ou email válido), password, nome e perfil são obrigatórios' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -118,6 +140,7 @@ Deno.serve(async (req) => {
         auth_user_id: authUserId,
         nome: nome.trim(),
         email: email.trim(),
+        username: finalUsername,
         perfil: perfil.trim(),
         cargo: (cargo || '').trim(),
         departamento: (departamento || '').trim(),
@@ -131,10 +154,17 @@ Deno.serve(async (req) => {
       .single();
 
     if (profileError) {
-      return new Response(
-        JSON.stringify({ error: profileError.message || 'Erro ao criar perfil' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      const dup =
+        profileError.code === '23505' ||
+        (profileError.message ?? '').toLowerCase().includes('unique') ||
+        (profileError.message ?? '').toLowerCase().includes('duplicate');
+      const msg = dup
+        ? 'Já existe um utilizador com este nome de utilizador.'
+        : profileError.message || 'Erro ao criar perfil';
+      return new Response(JSON.stringify({ error: msg }), {
+        status: dup ? 409 : 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     return new Response(JSON.stringify(profile), {

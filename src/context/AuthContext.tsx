@@ -13,6 +13,7 @@ function profileToUsuario(p: ProfileRow): Usuario {
     id: p.id,
     nome: p.nome,
     email: p.email,
+    username: p.username,
     senha: '',
     perfil: p.perfil as Perfil,
     cargo: p.cargo ?? '',
@@ -66,6 +67,7 @@ function loadUsuarios(): Usuario[] {
 /** Payload para criar utilizador no Supabase (Auth + profiles) via Edge Function. */
 export interface CreateUserSupabasePayload {
   email: string;
+  username: string;
   password: string;
   nome: string;
   perfil: string;
@@ -82,8 +84,8 @@ interface AuthContextType {
   user: Usuario | null;
   usuarios: Usuario[];
   setUsuarios: React.Dispatch<React.SetStateAction<Usuario[]>>;
-  /** Login simples: email + senha. O contexto (empresa/grupo) é inferido do perfil. */
-  login: (email: string, senha: string) => boolean | Promise<boolean>;
+  /** Login: nome de utilizador ou email + senha (Supabase resolve username → email). */
+  login: (identificador: string, senha: string) => boolean | Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
   /** False enquanto Supabase restaura a sessão (evita flash da página de login). */
@@ -194,8 +196,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [usuarios]);
 
   const login = useCallback(
-    async (email: string, senha: string): Promise<boolean> => {
+    async (identificador: string, senha: string): Promise<boolean> => {
       if (isSupabaseConfigured() && supabase) {
+        let email = identificador.trim();
+        if (!email.includes('@')) {
+          const { data: resolved, error: rpcError } = await supabase.rpc('resolve_login_email', {
+            p_username: email,
+          });
+          if (rpcError || resolved == null || typeof resolved !== 'string' || !resolved.trim()) {
+            return false;
+          }
+          email = resolved.trim();
+        }
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
         if (error) return false;
         const authUserId = data.user?.id;
@@ -212,9 +224,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(profileToUsuario(profile as ProfileRow));
         return true;
       }
+      const idLower = identificador.trim().toLowerCase();
       const found = usuarios.find(u => {
-        if (u.email !== email || u.senha !== senha) return false;
-        return true;
+        if (u.senha !== senha) return false;
+        if (u.email.toLowerCase() === idLower) return true;
+        const uName = (u.username ?? u.email.split('@')[0] ?? '').toLowerCase();
+        return uName === idLower;
       });
       if (found) {
         setUser(found);

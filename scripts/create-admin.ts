@@ -130,10 +130,18 @@ async function run(): Promise<void> {
     .eq('auth_user_id', authUserId)
     .maybeSingle();
 
+  const username =
+    email
+      .split('@')[0]
+      ?.trim()
+      .toLowerCase()
+      .replace(/\s+/g, '') || `admin_${authUserId.replace(/-/g, '').slice(0, 12)}`;
+
   const profileRow = {
     auth_user_id: authUserId,
     nome,
     email,
+    username,
     perfil: 'Admin',
     cargo: 'Administrador',
     departamento: 'Direcção',

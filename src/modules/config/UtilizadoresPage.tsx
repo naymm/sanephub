@@ -74,6 +74,7 @@ export default function UtilizadoresPage() {
   const [form, setForm] = useState<UsuarioFormState>({
     nome: '',
     email: '',
+    username: '',
     senha: '',
     perfil: 'Colaborador',
     cargo: '',
@@ -94,6 +95,7 @@ export default function UtilizadoresPage() {
     u =>
       u.nome.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()) ||
+      (u.username ?? '').toLowerCase().includes(search.toLowerCase()) ||
       u.perfil.toLowerCase().includes(search.toLowerCase())
   );
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
@@ -103,6 +105,7 @@ export default function UtilizadoresPage() {
     setForm({
       nome: '',
       email: '',
+      username: '',
       senha: '',
       perfil: 'Colaborador',
       cargo: '',
@@ -124,6 +127,7 @@ export default function UtilizadoresPage() {
     setForm({
       nome: u.nome,
       email: u.email,
+      username: u.username ?? u.email.split('@')[0] ?? '',
       senha: u.senha,
       perfil: u.perfil,
       cargo: u.cargo,
@@ -151,6 +155,7 @@ export default function UtilizadoresPage() {
 
   const save = async () => {
     if (!form.nome.trim() || !form.email.trim()) return;
+    if (isSupabaseConfigured() && !form.username?.trim()) return;
     if (!editing && !form.senha.trim()) return;
     const avatar = form.avatar.trim() || avatarFromNome(form.nome);
     const senha = editing && !form.senha.trim() ? editing.senha : form.senha;
@@ -168,6 +173,7 @@ export default function UtilizadoresPage() {
             .from('profiles')
             .update({
               nome: form.nome.trim(),
+              username: form.username.trim().toLowerCase().replace(/\s+/g, ''),
               perfil: form.perfil,
               cargo: (form.cargo ?? '').trim(),
               departamento: (form.departamento ?? '').trim(),
@@ -206,6 +212,7 @@ export default function UtilizadoresPage() {
       try {
         await createUserInSupabase({
           email: form.email.trim(),
+          username: form.username.trim().toLowerCase().replace(/\s+/g, ''),
           password: senha,
           nome: form.nome.trim(),
           perfil: form.perfil,
@@ -219,7 +226,7 @@ export default function UtilizadoresPage() {
         });
         setDialogOpen(false);
         setEditing(null);
-        toast.success('Utilizador criado. Pode fazer login com o email e a password definidos.');
+        toast.success('Utilizador criado. Pode fazer login com o nome de utilizador e a password definidos.');
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Erro ao criar utilizador');
       }
@@ -293,7 +300,7 @@ export default function UtilizadoresPage() {
       <div className="relative max-w-xs">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Pesquisar nome, email ou perfil..."
+          placeholder="Pesquisar nome, utilizador, email ou perfil..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="pl-9 h-9"
@@ -304,7 +311,8 @@ export default function UtilizadoresPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
-              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Utilizador</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Login</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Perfil</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Cargo / Dept.</th>
@@ -322,6 +330,9 @@ export default function UtilizadoresPage() {
                     </span>
                     <span className="font-medium">{u.nome}</span>
                   </span>
+                </td>
+                <td className="py-3 px-5 text-muted-foreground font-mono text-xs">
+                  {u.username ?? u.email.split('@')[0] ?? '—'}
                 </td>
                 <td className="py-3 px-5 text-muted-foreground">{u.email}</td>
                 <td className="py-3 px-5">{u.perfil}</td>
@@ -394,11 +405,36 @@ export default function UtilizadoresPage() {
               <Input
                 type="email"
                 value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                onChange={e => {
+                  const v = e.target.value;
+                  setForm(f => {
+                    const next = { ...f, email: v };
+                    if (!editing && !f.username?.trim()) {
+                      const local = v.split('@')[0]?.toLowerCase().replace(/\s+/g, '') ?? '';
+                      if (local) next.username = local;
+                    }
+                    return next;
+                  });
+                }}
                 placeholder="email@sanep.ao"
                 disabled={!!editing}
               />
               {editing && <p className="text-xs text-muted-foreground">O email não pode ser alterado.</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Nome de utilizador (login)</Label>
+              <Input
+                value={form.username ?? ''}
+                onChange={e =>
+                  setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s+/g, '') }))
+                }
+                placeholder="ex.: naym"
+                autoCapitalize="off"
+                autoCorrect="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Único no sistema. Ao criar, é sugerido a partir da parte local do email.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Palavra-passe</Label>
@@ -581,7 +617,12 @@ export default function UtilizadoresPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button
               onClick={save}
-              disabled={!form.nome.trim() || !form.email.trim() || (!editing && !form.senha.trim())}
+              disabled={
+                !form.nome.trim() ||
+                !form.email.trim() ||
+                (isSupabaseConfigured() && !form.username?.trim()) ||
+                (!editing && !form.senha.trim())
+              }
             >
               {editing ? 'Guardar' : 'Criar utilizador'}
             </Button>

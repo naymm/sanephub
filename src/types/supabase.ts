@@ -15,6 +15,7 @@ export interface Database {
           auth_user_id: string;
           nome: string;
           email: string;
+          username: string;
           perfil: string;
           cargo: string;
           departamento: string;
@@ -31,6 +32,7 @@ export interface Database {
           auth_user_id: string;
           nome: string;
           email: string;
+          username: string;
           perfil: string;
           cargo?: string;
           departamento?: string;
@@ -47,6 +49,7 @@ export interface Database {
           auth_user_id?: string;
           nome?: string;
           email?: string;
+          username?: string;
           perfil?: string;
           cargo?: string;
           departamento?: string;
@@ -197,6 +200,10 @@ export interface Database {
       intranet_chat_unread_summary: {
         Args: Record<string, never>;
         Returns: { conversation_id: string; unread_count: number }[];
+      };
+      resolve_login_email: {
+        Args: { p_username: string };
+        Returns: string | null;
       };
     };
     Enums: Record<string, never>;

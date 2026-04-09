@@ -28,6 +28,8 @@ export interface Usuario {
   id: number;
   nome: string;
   email: string;
+  /** Nome de utilizador para login (Supabase). Em modo offline pode estar ausente. */
+  username?: string;
   senha: string;
   perfil: Perfil;
   cargo: string;

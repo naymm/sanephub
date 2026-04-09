@@ -4,11 +4,12 @@ import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Lock, Mail, AlertCircle } from 'lucide-react';
+import { Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [senha, setSenha] = useState('');
+  const [mostrarSenha, setMostrarSenha] = useState(false);
   const [error, setError] = useState('');
   const { login, isAuthenticated, isAuthReady } = useAuth();
   const navigate = useNavigate();
@@ -20,10 +21,10 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!email || !senha) { setError('Preencha todos os campos.'); return; }
-    const success = await login(email, senha);
+    if (!username || !senha) { setError('Preencha todos os campos.'); return; }
+    const success = await login(username, senha);
     if (success) navigate('/dashboard');
-    else setError('Credenciais inválidas. Verifique o email e a senha.');
+    else setError('Credenciais inválidas. Verifique o nome de utilizador e a senha.');
   };
 
   if (!isAuthReady) {
@@ -69,32 +70,43 @@ export default function Login() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Email corporativo</Label>
+              <Label htmlFor="username" className="text-xs font-medium text-muted-foreground">Nome de utilizador</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="exemplo@sanep.ao"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="ex.: naym"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
                   className="pl-10 h-10 rounded-lg border-border/80 bg-background"
                 />
               </div>
+              {/* <p className="text-xs text-muted-foreground">Também pode usar o email corporativo se preferir.</p> */}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="senha" className="text-xs font-medium text-muted-foreground">Senha</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                   id="senha"
-                  type="password"
+                  type={mostrarSenha ? 'text' : 'password'}
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   value={senha}
                   onChange={e => setSenha(e.target.value)}
-                  className="pl-10 h-10 rounded-lg border-border/80 bg-background"
+                  className="pl-10 pr-10 h-10 rounded-lg border-border/80 bg-background"
                 />
+                <button
+                  type="button"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                  onClick={() => setMostrarSenha(v => !v)}
+                  aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                >
+                  {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
