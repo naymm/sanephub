@@ -110,6 +110,8 @@ export default function PortalDadosPage() {
             <div className="grid grid-cols-[100px_1fr] gap-x-4 gap-y-1">
               <span className="text-muted-foreground">Nome</span>
               <span>{colaborador.nome}</span>
+              <span className="text-muted-foreground">Número mecanográfico</span>
+              <span>{colaborador.numeroMec?.trim() || '—'}</span>
               <span className="text-muted-foreground">Data de nascimento</span>
               <span>{formatDate(colaborador.dataNascimento)}</span>
               <span className="text-muted-foreground">Género</span>

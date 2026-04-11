@@ -95,6 +95,7 @@ function nacionalidadeParaSelect(valorGuardado: string): string {
 
 const emptyForm: Omit<Colaborador, 'id'> = {
   empresaId: 1,
+  numeroMec: '',
   nome: '',
   dataNascimento: '',
   genero: 'M',
@@ -445,6 +446,7 @@ export default function ColaboradoresPage() {
     return colaboradores.filter(c => {
       const matchSearch =
         c.nome.toLowerCase().includes(search.toLowerCase()) ||
+        (c.numeroMec ?? '').toLowerCase().includes(search.toLowerCase()) ||
         c.cargo.toLowerCase().includes(search.toLowerCase()) ||
         c.departamento.toLowerCase().includes(search.toLowerCase()) ||
         c.emailCorporativo.toLowerCase().includes(search.toLowerCase());
@@ -567,6 +569,7 @@ export default function ColaboradoresPage() {
     setAssociarUtilizadorId(usuarioLinked?.id ?? null);
     setForm({
       empresaId: c.empresaId,
+      numeroMec: c.numeroMec?.trim() ?? '',
       nome: c.nome,
       dataNascimento: c.dataNascimento,
       genero: c.genero,
@@ -702,6 +705,7 @@ export default function ColaboradoresPage() {
     const payloadColaborador: Omit<Colaborador, 'id'> = {
       ...form,
       empresaId: form.empresaId ?? empresaIdForNew,
+      numeroMec: (form.numeroMec ?? '').trim() || null,
     };
     // Mantém compatibilidade com o campo legado `outros_subsidios` na BD:
     // passa a ser sempre a soma dos subsídios detalhados (exceto Alimentação/Transporte).
@@ -940,6 +944,9 @@ export default function ColaboradoresPage() {
             <tr className="border-b border-border/80">
               <th className="w-14 py-3 px-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Foto</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
+              <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                Nº mec.
+              </th>
               {currentEmpresaId === 'consolidado' && (
                 <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Empresa</th>
               )}
@@ -977,6 +984,9 @@ export default function ColaboradoresPage() {
                     )}
                   </td>
                   <td className="py-3 px-5 font-medium">{c.nome}</td>
+                  <td className="py-3 px-5 text-muted-foreground font-mono text-xs whitespace-nowrap">
+                    {(c.numeroMec ?? '').trim() || '—'}
+                  </td>
                   {currentEmpresaId === 'consolidado' && (
                     <td className="py-3 px-5 text-muted-foreground text-sm max-w-[140px] truncate" title={empresas.find(e => e.id === c.empresaId)?.nome}>
                       {empresas.find(e => e.id === c.empresaId)?.nome ?? '—'}
@@ -1138,7 +1148,7 @@ export default function ColaboradoresPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <div className="space-y-2">
                 <Label>BI</Label>
                 <Input value={form.bi} onChange={e => setForm(f => ({ ...f, bi: e.target.value }))} />
@@ -1150,6 +1160,15 @@ export default function ColaboradoresPage() {
               <div className="space-y-2">
                 <Label>INSS</Label>
                 <Input value={form.niss} onChange={e => setForm(f => ({ ...f, niss: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Número mecanográfico</Label>
+                <Input
+                  value={form.numeroMec ?? ''}
+                  onChange={e => setForm(f => ({ ...f, numeroMec: e.target.value }))}
+                  placeholder="Nº mec."
+                  className="font-mono"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1785,6 +1804,10 @@ export default function ColaboradoresPage() {
                   <ColaboradorSectionCard title="Recursos humanos">
                     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                       <ColaboradorDetailField label="Nº interno (ID)" value={String(viewItem.id)} />
+                      <ColaboradorDetailField
+                        label="Número mecanográfico (nº mec.)"
+                        value={viewItem.numeroMec?.trim() || '—'}
+                      />
                       <ColaboradorDetailField label="Data de admissão" value={formatDate(viewItem.dataAdmissao)} />
                       <ColaboradorDetailField label="Tipo de contrato" value={viewItem.tipoContrato} />
                       <ColaboradorDetailField

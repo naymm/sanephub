@@ -58,6 +58,8 @@ export interface Colaborador {
   id: number;
   /** ID da empresa a que o colaborador pertence (segregação multi-tenant). */
   empresaId: number;
+  /** Número mecanográfico (coluna `numero_mec` na BD). */
+  numeroMec?: string | null;
   nome: string;
   dataNascimento: string;
   genero: Genero;
@@ -165,7 +167,7 @@ export interface Falta {
   referenciaMesAtrasos?: string | null;
 }
 
-/** Marcação de ponto (tabela `time_punches` no Supabase). Enums DB: punch_kind, verification_method, punch_status. */
+/** Marcação de ponto legada (`time_punches`). */
 export interface TimePunch {
   id: number;
   authUserId: string;
@@ -188,6 +190,46 @@ export interface TimePunch {
   status: string;
   clientMeta: Record<string, unknown> | null;
   createdAt: string;
+}
+
+/** Linha normalizada de `biometrico_registros` para a lista / detalhe (colunas variáveis na BD). */
+export interface NormalizedBiometricoRegistro {
+  /** Pode ser bigserial (número) ou outro tipo de chave exposto pelo PostgREST. */
+  id: number | string;
+  rawCamel: Record<string, unknown>;
+  numeroMec: string | null;
+  occurredAtIso: string;
+  /** `yyyy-MM-dd` para filtros; vazio se não dedutível. */
+  dataIso: string;
+  /** Data só para coluna DATA (dd/MM/yyyy). */
+  dataTexto: string;
+  /** Hora entrada (HH:mm:ss ou valor vindo da BD). */
+  entradaTexto: string;
+  /** Hora saída. */
+  saidaTexto: string;
+  /** Texto livre para morada/localização técnica, se existir na BD. */
+  localTexto: string | null;
+  /** Valor textual da coluna `empresa` no registo (ex.: nome no equipamento); usado na coluna «Local» da lista. */
+  empresaColunaTexto: string | null;
+  /** Coluna VIA: canal, método, dispositivo, etc. */
+  viaTexto: string;
+  kind: string;
+  status: string;
+  empresaId: number | null;
+  pinVerified: boolean | null;
+  faceVerified: boolean | null;
+  faceConfidence: number | null;
+  verificationMethod: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
+  locationAccuracyM: number | null;
+  geofenceId: number | null;
+  isWithinGeofence: boolean | null;
+  selfieStoragePath: string | null;
+  authUserId: string | null;
+  clientMeta: Record<string, unknown> | null;
+  /** Quando várias linhas do mesmo dia e `numero_mec` foram fundidas na lista. */
+  mergedSources?: NormalizedBiometricoRegistro[];
 }
 
 export interface ReciboSalario {

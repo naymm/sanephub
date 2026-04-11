@@ -1,3 +1,9 @@
+-- Substitui a política antiga baseada em colaborador_id pela comparação via numero_mec ↔ colaboradores.numero_mec.
+
+alter table public.biometrico_registros enable row level security;
+
+drop policy if exists "biometrico_registros_select_rh_tenant" on public.biometrico_registros;
+
 create policy "biometrico_registros_select_rh_tenant"
   on public.biometrico_registros
   for select
