@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { MobileSessionLockProvider } from "@/context/MobileSessionLockContext";
 import { TenantProvider } from "@/context/TenantContext";
 import { DataProvider } from "@/context/DataContext";
 import { NotificationProvider } from "@/context/NotificationContext";
@@ -84,6 +85,7 @@ const App = () => (
               <Toaster />
               <Sonner />
               <BrowserRouter>
+              <MobileSessionLockProvider>
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -195,6 +197,7 @@ const App = () => (
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </MobileSessionLockProvider>
               </BrowserRouter>
             </TooltipProvider>
           </ChatProvider>

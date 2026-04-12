@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+/** PIN de marcação de ponto (validação no servidor). */
+export const PONTO_PIN_LENGTH = 4;
+
 export async function rpcPerfilTemPontoPin(client: SupabaseClient): Promise<boolean> {
   const { data, error } = await client.rpc('perfil_tem_ponto_pin');
   if (error) throw new Error(error.message);

@@ -9,6 +9,7 @@ import {
   FileText,
   Layers,
   LogOut,
+  Lock,
   Megaphone,
   Settings,
   User,
@@ -22,6 +23,8 @@ import { PORTAL_PATH_ICONS } from '@/navigation/portalMenuIcons';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { cn } from '@/lib/utils';
+import { useMobileSessionLock } from '@/context/MobileSessionLockContext';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
@@ -53,6 +56,8 @@ function MenuRow({ to, label, icon: Icon }: { to: string; label: string; icon: L
  */
 export default function MobileProfileMenuPage() {
   const { user, logout } = useAuth();
+  const { lockNow } = useMobileSessionLock();
+  const isMobileViewport = useIsMobileViewport();
   const navigate = useNavigate();
   const { empresas, organizacaoSettings } = useData();
   const { currentEmpresaId } = useTenant();
@@ -159,6 +164,21 @@ export default function MobileProfileMenuPage() {
         )}
 
         <div className="my-2 border-t border-border/60" />
+
+        {isMobileViewport && (
+          <button
+            type="button"
+            onClick={() => lockNow()}
+            className={cn(
+              'flex min-h-12 w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3.5 text-left shadow-sm transition-colors md:px-4',
+              'active:bg-muted/50',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
+            )}
+          >
+            <Lock className="h-5 w-5 shrink-0 text-foreground" strokeWidth={2} />
+            <span className="flex-1 font-medium text-foreground leading-snug">Bloquear app (PIN de ponto)</span>
+          </button>
+        )}
 
         <button
           type="button"
