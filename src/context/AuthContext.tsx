@@ -38,6 +38,7 @@ function profileToUsuario(p: ProfileRow): Usuario {
     cargo: p.cargo ?? '',
     departamento: p.departamento ?? '',
     avatar: p.avatar ?? '?',
+    primeiroAcessoPendente: p.primeiro_acesso_pendente === true,
     permissoes: p.permissoes ?? [],
     modulos: p.modulos ?? undefined,
     colaboradorId: p.colaborador_id ?? undefined,
@@ -113,6 +114,8 @@ interface AuthContextType {
   isAuthReady: boolean;
   /** Cria utilizador no Supabase Auth + profiles (Edge Function). Só disponível com Supabase configurado. */
   createUserInSupabase: (payload: CreateUserSupabasePayload) => Promise<Usuario>;
+  /** Recarrega o perfil a partir do Supabase (após alterações em `profiles`, PIN, etc.). */
+  refreshSessionUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -158,6 +161,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     u = await mergeFotoPerfilFromColaborador(supabase, u, row.colaborador_id);
     setUser(u);
   }, []);
+
+  const refreshSessionUser = useCallback(async () => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const id = session?.user?.id;
+    if (id) await fetchProfileAndSetUser(id);
+  }, [fetchProfileAndSetUser]);
 
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) {
@@ -337,7 +347,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, usuarios, setUsuarios, login, logout, isAuthenticated: !!user, isAuthReady: authReady, createUserInSupabase }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        usuarios,
+        setUsuarios,
+        login,
+        logout,
+        isAuthenticated: !!user,
+        isAuthReady: authReady,
+        createUserInSupabase,
+        refreshSessionUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

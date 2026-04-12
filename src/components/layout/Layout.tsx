@@ -10,6 +10,7 @@ import { IntranetTopbar } from './IntranetTopbar';
 import { HorizontalMenu } from './HorizontalMenu';
 import { FloatingCornerActions } from './FloatingCornerActions';
 import { MobileBottomNav } from './MobileBottomNav';
+import { ColaboradorPrimeiroAcessoWizard } from '@/components/onboarding/ColaboradorPrimeiroAcessoWizard';
 
 const PATH_TO_MODULE: Record<string, string> = {
   '/portal': 'portal-colaborador',
@@ -104,6 +105,7 @@ export function Layout() {
       </footer>
       <MobileBottomNav />
       <FloatingCornerActions />
+      <ColaboradorPrimeiroAcessoWizard />
     </div>
   );
 }

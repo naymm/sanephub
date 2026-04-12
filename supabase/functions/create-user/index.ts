@@ -151,6 +151,7 @@ Deno.serve(async (req) => {
       );
     }
 
+    const perfilTrim = perfil.trim();
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
         nome: nome.trim(),
         email: email.trim(),
         username: finalUsername,
-        perfil: perfil.trim(),
+        perfil: perfilTrim,
         cargo: (cargo || '').trim(),
         departamento: (departamento || '').trim(),
         avatar: (avatar || '').trim() || nome.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase(),
@@ -167,6 +168,7 @@ Deno.serve(async (req) => {
         empresa_id: empresa_id ?? null,
         colaborador_id: colaborador_id ?? null,
         numero_mec,
+        primeiro_acesso_pendente: perfilTrim === 'Colaborador',
       })
       .select()
       .single();

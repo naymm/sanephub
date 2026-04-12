@@ -37,6 +37,8 @@ export interface Usuario {
   avatar: string;
   /** Foto de perfil do colaborador ligado (`colaboradores.foto_perfil_url`); tem prioridade sobre `avatar` nas UI. */
   fotoPerfilUrl?: string | null;
+  /** Supabase: colaborador novo deve concluir alteração de senha + PIN antes de usar a intranet. */
+  primeiroAcessoPendente?: boolean;
   permissoes: string[];
   /** Módulos a que o utilizador tem acesso. Se definido, sobrepõe o acesso por perfil. Admin ignora. */
   modulos?: string[];
