@@ -21,6 +21,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
+import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
 
 type BirthdayPerson = {
   id: number;
@@ -87,7 +88,14 @@ export default function Dashboard() {
           body: { company_id, nowISO: new Date().toISOString() },
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         } as any);
-        if (error) throw error;
+        if (error) {
+          const msg = await getSupabaseFunctionsInvokeErrorMessage(
+            error,
+            'Não foi possível carregar os aniversários. Confirme no Supabase que a função «birthdays» está publicada e que os segredos estão definidos.',
+          );
+          if (!cancelled) setBirthdaysError(msg);
+          return;
+        }
         const parsed = invokeData as {
           today_birthdays?: BirthdayPerson[];
           month_birthdays?: BirthdayPerson[];
@@ -526,8 +534,12 @@ export default function Dashboard() {
           </div>
         </div>
       ) : canComunicacao && birthdaysError ? (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {birthdaysError}
+        <div
+          className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/25 dark:text-amber-50"
+          role="status"
+        >
+          <p className="font-medium">Aniversários</p>
+          <p className="mt-1 text-[13px] leading-snug opacity-90">{birthdaysError}</p>
         </div>
       ) : null}
 

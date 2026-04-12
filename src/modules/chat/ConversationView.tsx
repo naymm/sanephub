@@ -1,11 +1,13 @@
 import { useRef, useEffect, useState, useMemo, useLayoutEffect, useCallback } from 'react';
+import { ChatMobileComposerPortal } from '@/modules/chat/ChatMobileComposerPortal';
 import { useAuth } from '@/context/AuthContext';
 import { useChat, CHAT_PAGE_SIZE } from '@/context/ChatContext';
 import type { ChatAttachment } from '@/types/chat';
 import { MessageBubble } from './MessageBubble';
 import { formatChatTime } from '@/utils/formatters';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Popover,
@@ -18,9 +20,30 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Paperclip, Send, Pin, X, Users, FileText, Link2, UserMinus, Search, Loader2, ChevronLeft } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Paperclip,
+  Send,
+  Pin,
+  X,
+  Users,
+  FileText,
+  Link2,
+  UserMinus,
+  Search,
+  Loader2,
+  ChevronLeft,
+  Smile,
+  ImagePlus,
+  Phone,
+  Video,
+} from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { format, isToday, isYesterday, parseISO } from 'date-fns';
+import { pt } from 'date-fns/locale';
+import { userAvatarFallbackLabel, userAvatarImageSrc } from '@/utils/userAvatar';
 import { Input } from '@/components/ui/input';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
+import { useVisualViewportBottomInset } from '@/hooks/useVisualViewportBottomInset';
 
 interface ConversationViewProps {
   conversationId: string | null;
@@ -28,8 +51,29 @@ interface ConversationViewProps {
   onMobileBack?: () => void;
 }
 
+function ChatDateSeparator({ dateStr }: { dateStr: string }) {
+  let label: string;
+  try {
+    const d = parseISO(dateStr);
+    if (isToday(d)) label = 'Hoje';
+    else if (isYesterday(d)) label = 'Ontem';
+    else label = format(d, "d 'de' MMMM yyyy", { locale: pt });
+  } catch {
+    return null;
+  }
+  return (
+    <div className="flex justify-center py-2 md:py-2">
+      <span className="rounded-full bg-zinc-200/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-300">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 const headerIconBtn =
   'h-11 w-11 shrink-0 md:h-8 md:w-8';
+
+const MOBILE_CHAT_MSG_INPUT_ID = 'sanep-chat-mobile-msg';
 
 export function ConversationView({ conversationId, onMobileBack }: ConversationViewProps) {
   const { user, usuarios } = useAuth();
@@ -53,6 +97,12 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     canManageGroup,
   } = useChat();
   const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const mobileComposerTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const mobileSendBtnRef = useRef<HTMLButtonElement>(null);
+  /** Espelho do texto no mobile — o efeito dos listeners pode ligar só após `conv` existir; o draft cobre desvios DOM/estado. */
+  const mobileInputDraftRef = useRef('');
+  const handleSendRef = useRef<() => void>(() => {});
+  const lastSendAtRef = useRef(0);
   const nearBottomRef = useRef(true);
   const loadingOlderScrollRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
   const [localHistoryExtra, setLocalHistoryExtra] = useState(0);
@@ -63,8 +113,16 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   const [groupMembersSearch, setGroupMembersSearch] = useState('');
   const [groupFilesSearch, setGroupFilesSearch] = useState('');
   const [groupLinksSearch, setGroupLinksSearch] = useState('');
+  const isMobileComposer = useIsMobileViewport();
+  const keyboardBottomInset = useVisualViewportBottomInset();
 
   const conv = useMemo(() => conversations.find(c => c.id === conversationId), [conversations, conversationId]);
+
+  const headerPeer = useMemo(() => {
+    if (!conv || conv.type === 'group') return null;
+    const oid = conv.participantIds.find(id => id !== user?.id);
+    return oid != null ? usuarios.find(x => x.id === oid) : null;
+  }, [conv, user?.id, usuarios]);
 
   const allConvMessagesSorted = useMemo(
     () =>
@@ -162,6 +220,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value;
+    mobileInputDraftRef.current = v;
     setInput(v);
     const cursor = e.target.selectionStart ?? 0;
     const before = v.slice(0, cursor);
@@ -212,21 +271,92 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
+  const clearIosTextSelection = () => {
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {
+      /* ignore */
+    }
+  };
+
   const handleSend = () => {
-    const text = input.trim();
+    clearIosTextSelection();
+    const ta =
+      mobileComposerTextareaRef.current ??
+      (typeof document !== 'undefined'
+        ? (document.getElementById(MOBILE_CHAT_MSG_INPUT_ID) as HTMLTextAreaElement | null)
+        : null);
+    // Mobile: texto vem sempre do textarea (fonte visível); evita heurística length vs estado
+    // que em alguns frames no iOS deixava `text` vazio com o botão a reagir.
+    const raw = isMobileComposer
+      ? (ta?.value ?? mobileInputDraftRef.current ?? input)
+      : input;
+    const text = raw.trim();
     if (!conversationId || (!text && attachments.length === 0)) return;
+    const now = Date.now();
+    if (now - lastSendAtRef.current < 280) return;
+    lastSendAtRef.current = now;
     nearBottomRef.current = true;
     sendMessage(conversationId, text || '(ficheiro anexado)', attachments);
+    mobileInputDraftRef.current = '';
     setInput('');
     setAttachments([]);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  handleSendRef.current = handleSend;
+
+  /**
+   * PWA iOS: `touchend` nativo com `{ passive: false }` (React pode registar touch como passivo).
+   * Na 1.ª renderização `conv` pode ainda não existir (lista Supabase a carregar) — o botão não está no DOM;
+   * com deps só `[isMobileComposer]` o efeito não voltava a correr e ficava sem listeners
+   * (`onClick` falha muitas vezes com teclado aberto → não envia).
+   */
+  useLayoutEffect(() => {
+    if (!isMobileComposer || !conversationId || !conv) return;
+
+    let cleanup: (() => void) | undefined;
+    let canceled = false;
+    let raf = 0;
+
+    const bind = () => {
+      const btn = mobileSendBtnRef.current;
+      if (!btn || canceled) return;
+
+      const onTouchEnd = (e: TouchEvent) => {
+        e.preventDefault();
+        handleSendRef.current();
+      };
+
+      btn.addEventListener('touchend', onTouchEnd, { passive: false });
+      cleanup = () => {
+        btn.removeEventListener('touchend', onTouchEnd);
+      };
+    };
+
+    bind();
+    if (!cleanup) {
+      raf = requestAnimationFrame(() => {
+        if (canceled) return;
+        bind();
+      });
+    }
+
+    return () => {
+      canceled = true;
+      if (raf) cancelAnimationFrame(raf);
+      cleanup?.();
+    };
+  }, [isMobileComposer, conversationId, conv?.id]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing || e.key === 'Process') return;
+    if ((e.key === 'Enter' || e.key === 'NumpadEnter') && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
+
+  const composerSendDisabled = !input.trim() && attachments.length === 0;
 
   const getSenderName = (senderId: number) => usuarios.find(u => u.id === senderId)?.nome ?? 'Utilizador';
 
@@ -272,7 +402,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-muted/30">
         {onMobileBack && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/20 px-2 py-2 md:hidden">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/20 px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:hidden">
             <button
               type="button"
               onClick={onMobileBack}
@@ -291,23 +421,71 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/20 px-2 py-2 md:px-4 md:py-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background max-md:bg-[#ECECEF] md:bg-background">
+      {/* Header: shrink-0 — só a área de mensagens abaixo faz scroll (overflow-hidden no pai). */}
+      <div className="flex shrink-0 items-center justify-between gap-1 border-b border-border bg-muted/20 px-2 py-2 max-md:border-zinc-100 max-md:bg-white max-md:pl-[max(0.5rem,env(safe-area-inset-left,0px))] max-md:pr-[max(0.5rem,env(safe-area-inset-right,0px))] max-md:pt-[max(3rem,env(safe-area-inset-top,0px))] max-md:shadow-sm md:gap-2 md:px-4 md:py-3 md:shadow-none">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {onMobileBack && (
             <button
               type="button"
               onClick={onMobileBack}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-foreground transition-colors hover:bg-muted/80 md:hidden"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-700 transition-colors hover:bg-zinc-100 md:h-11 md:w-11 md:rounded-xl md:text-foreground md:hover:bg-muted/80"
               aria-label="Voltar às conversas"
             >
               <ChevronLeft className="h-6 w-6" />
             </button>
           )}
-          <h2 className="truncate font-semibold">{getConversationDisplayName(conv)}</h2>
+          <div className="hidden min-w-0 flex-1 items-center md:flex">
+            <h2 className="truncate font-semibold">{getConversationDisplayName(conv)}</h2>
+          </div>
+          <div className="flex min-w-0 flex-1 items-center gap-3 md:hidden">
+            <Avatar className="h-11 w-11 border border-zinc-100 shadow-sm">
+              {headerPeer && userAvatarImageSrc(headerPeer) ? (
+                <AvatarImage src={userAvatarImageSrc(headerPeer)!} alt="" className="object-cover" />
+              ) : null}
+              <AvatarFallback
+                className={cn(
+                  'text-sm font-semibold',
+                  conv.type === 'group' ? 'bg-amber-100 text-amber-800' : 'bg-primary/15 text-primary',
+                )}
+              >
+                {conv.type === 'group' ? <Users className="h-5 w-5" /> : userAvatarFallbackLabel(headerPeer)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-bold leading-tight text-zinc-900">
+                {getConversationDisplayName(conv)}
+              </h2>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                Na intranet
+              </p>
+            </div>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5 md:gap-1">
+          <div className="flex items-center md:hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={headerIconBtn}
+              disabled
+              title="Chamada de voz (brevemente)"
+              aria-label="Chamada de voz (brevemente)"
+            >
+              <Phone className="h-[18px] w-[18px] text-zinc-500" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={headerIconBtn}
+              disabled
+              title="Vídeo (brevemente)"
+              aria-label="Vídeo (brevemente)"
+            >
+              <Video className="h-[18px] w-[18px] text-zinc-500" />
+            </Button>
+          </div>
           {isGroup && (
               <Popover onOpenChange={open => !open && setGroupMembersSearch('')}>
                 <PopoverTrigger asChild>
@@ -511,7 +689,12 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
       {/* Messages (scroll no viewport nativo para paginação estilo WhatsApp Web) */}
       <div
         ref={scrollViewportRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-4"
+        className="min-h-0 flex-1 select-none overflow-y-auto overflow-x-hidden px-3 pb-2 pt-1 max-md:min-h-[120px] md:p-4"
+        style={
+          isMobileComposer
+            ? { paddingBottom: keyboardBottomInset + 132 }
+            : undefined
+        }
         onScroll={handleMessagesScroll}
       >
         {(usesMessagePagination
@@ -529,20 +712,34 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
             )}
           </div>
         )}
-        <div className="space-y-3">
-          {convMessages.map(m => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              senderName={getSenderName(m.senderId)}
-              onPin={togglePinMessage}
-            />
-          ))}
+        <div className="space-y-2 md:space-y-3">
+          {convMessages.map((m, idx) => {
+            const prev = idx > 0 ? convMessages[idx - 1] : null;
+            let showDate = false;
+            try {
+              const d0 = prev ? format(parseISO(prev.createdAt), 'yyyy-MM-dd') : '';
+              const d1 = format(parseISO(m.createdAt), 'yyyy-MM-dd');
+              showDate = !prev || d0 !== d1;
+            } catch {
+              showDate = !prev;
+            }
+            return (
+              <div key={m.id}>
+                {showDate ? <ChatDateSeparator dateStr={m.createdAt} /> : null}
+                <MessageBubble
+                  message={m}
+                  senderName={getSenderName(m.senderId)}
+                  onPin={togglePinMessage}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Composer */}
-      <div className="shrink-0 border-t border-border bg-muted/20 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-3 md:pb-3">
+      {/* Um compositor montado de cada vez (evita dois Textarea controlados no DOM — problemas em mobile). */}
+      {!isMobileComposer ? (
+      <div className="shrink-0 border-t border-border bg-muted/20 p-3 pb-3">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {attachments.map(a => (
@@ -568,6 +765,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
             <Textarea
               value={input}
               onChange={handleInputChange}
+              onInput={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Escreva uma mensagem… (@ menciona)"
               className="min-h-11 max-h-32 resize-none pr-2 text-base md:text-sm"
@@ -593,10 +791,10 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
             multiple
             accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx"
             className="hidden"
-            id="chat-file-input"
+            id="chat-attach-desktop"
             onChange={handleFileSelect}
           />
-          <label htmlFor="chat-file-input">
+          <label htmlFor="chat-attach-desktop">
             <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" asChild>
               <span>
                 <Paperclip className="h-4 w-4" />
@@ -604,15 +802,180 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
             </Button>
           </label>
           <Button
+            type="button"
             size="icon"
-            className="h-11 w-11 shrink-0"
+            className="h-11 w-11 shrink-0 touch-manipulation"
             onClick={handleSend}
-            disabled={!input.trim() && attachments.length === 0}
+            disabled={composerSendDisabled}
           >
             <Send className="h-4 w-4" />
           </Button>
         </div>
       </div>
+      ) : (
+      <ChatMobileComposerPortal bottomInset={keyboardBottomInset}>
+        <div className="select-none border-t border-zinc-200/80 bg-[#ECECEF] px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]">
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {attachments.map(a => (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs shadow-sm"
+                >
+                  {a.name}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(a.id)}
+                    className="flex min-h-8 min-w-8 items-center justify-center rounded-full p-1 hover:bg-zinc-100"
+                    aria-label={`Remover ${a.name}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {/* Form agrupa controlos; Enviar usa type="button" + onClick — no iOS o submit por
+            type="submit" por vezes não dispara onSubmit mesmo com feedback visual no botão. */}
+          <form
+            className="flex w-full min-w-0 items-end gap-2 [touch-action:manipulation]"
+            onSubmit={e => {
+              e.preventDefault();
+              handleSend();
+            }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              id="chat-image-mobile"
+              onChange={handleFileSelect}
+            />
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx"
+              className="sr-only"
+              id="chat-attach-mobile"
+              onChange={handleFileSelect}
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="mb-0.5 h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation rounded-full text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900 [-webkit-tap-highlight-color:transparent]"
+                  aria-label="Anexar"
+                >
+                  <span className="text-2xl font-light leading-none">+</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 border-zinc-200 p-1 shadow-xl" align="start" side="top">
+                <button
+                  type="button"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-100"
+                  onClick={() => {
+                    document.getElementById('chat-image-mobile')?.click();
+                  }}
+                >
+                  <ImagePlus className="h-5 w-5 shrink-0 text-zinc-500" aria-hidden />
+                  Imagem
+                </button>
+                <button
+                  type="button"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-100"
+                  onClick={() => {
+                    document.getElementById('chat-attach-mobile')?.click();
+                  }}
+                >
+                  <Paperclip className="h-5 w-5 shrink-0 text-zinc-500" aria-hidden />
+                  Ficheiro
+                </button>
+              </PopoverContent>
+            </Popover>
+
+            <div className="flex min-h-[44px] min-w-0 flex-1 touch-manipulation items-end rounded-[1.375rem] border border-zinc-200/90 bg-white px-1 py-1 shadow-sm [-webkit-tap-highlight-color:transparent]">
+              <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                <Textarea
+                  id={MOBILE_CHAT_MSG_INPUT_ID}
+                  ref={mobileComposerTextareaRef}
+                  value={input}
+                  onChange={handleInputChange}
+                  onInput={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Mensagem…"
+                  enterKeyHint="send"
+                  inputMode="text"
+                  autoComplete="off"
+                  autoCorrect="on"
+                  className="min-h-[40px] max-h-[7.5rem] w-full resize-none select-text border-0 bg-transparent px-2.5 py-2 text-[15px] leading-snug shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  rows={1}
+                />
+                {mentionCandidates.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-48 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
+                    {mentionCandidates.map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        className="min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-zinc-100"
+                        onClick={() => insertMention(u.nome)}
+                      >
+                        @{u.nome}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="mb-0.5 h-9 w-9 shrink-0 rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 [-webkit-tap-highlight-color:transparent]"
+                    aria-label="Emoji"
+                  >
+                    <Smile className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto border-zinc-200 p-2 shadow-xl" align="end" side="top">
+                  <div className="flex max-w-[240px] flex-wrap gap-0.5">
+                    {['👍', '😊', '🎉', '✅', '👋', '❤️', '🙏', '💪', '👏', '🔥'].map(em => (
+                      <button
+                        key={em}
+                        type="button"
+                        className="rounded-lg p-1.5 text-2xl transition-colors hover:bg-zinc-100"
+                        onClick={() => setInput(prev => prev + em)}
+                      >
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <span className="relative z-[120] mb-0.5 inline-flex shrink-0">
+              <button
+                ref={mobileSendBtnRef}
+                type="button"
+                aria-label="Enviar"
+                aria-disabled={composerSendDisabled}
+                onClick={() => handleSend()}
+                className={cn(
+                  buttonVariants({ size: 'icon' }),
+                  // Sempre cor sólida (como a bolha enviada); vazio = não envia em handleSend, sem «fantasma» opacity que parece bug no iOS
+                  'h-12 w-12 min-h-[52px] min-w-[52px] shrink-0 cursor-pointer touch-manipulation rounded-full border-0 bg-[hsl(var(--primary))] p-0 text-primary-foreground opacity-100 shadow-md [-webkit-tap-highlight-color:transparent] hover:bg-[hsl(var(--primary)/0.92)] active:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:h-5 [&_svg]:w-5',
+                )}
+              >
+                <Send className="h-5 w-5" aria-hidden />
+              </button>
+            </span>
+          </form>
+        </div>
+      </ChatMobileComposerPortal>
+      )}
     </div>
   );
 }

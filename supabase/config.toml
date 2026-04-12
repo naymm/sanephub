@@ -15,3 +15,7 @@ verify_jwt = false
 # Fetch directo a gue.gov.ao no Deno; JWT validado na função (como birthdays).
 [functions.gue-publicacao-nome]
 verify_jwt = false
+
+# Valida JWT na função (publicação de notícias → Web Push).
+[functions.notify-noticia-push]
+verify_jwt = false

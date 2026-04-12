@@ -40,7 +40,7 @@ export function AppSplashOverlay() {
   return (
     <div
       className={cn(
-        'fixed inset-0 z-[5000] flex flex-col items-center justify-center bg-[#101828] transition-opacity ease-out',
+        'fixed inset-0 z-[1200000] flex flex-col items-center justify-center bg-[#101828] transition-opacity ease-out',
         exiting && 'pointer-events-none opacity-0',
       )}
       style={{ transitionDuration: `${FADE_MS}ms` }}

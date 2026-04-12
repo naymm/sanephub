@@ -77,6 +77,7 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <div className="min-w-0">
     <AuthProvider>
       <AppSplashOverlay />
       <TenantProvider>
@@ -207,6 +208,7 @@ const App = () => (
         </DataProvider>
       </TenantProvider>
     </AuthProvider>
+    </div>
   </QueryClientProvider>
 );
 

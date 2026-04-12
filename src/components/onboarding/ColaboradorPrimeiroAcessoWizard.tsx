@@ -393,7 +393,7 @@ export function ColaboradorPrimeiroAcessoWizard() {
     <>
       {/* Mobile — mesmo invólucro que o desbloqueio por PIN (navy + cartão branco) */}
       <div
-        className="fixed inset-0 z-[200] h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none md:hidden"
+        className="fixed inset-0 z-[1100000] h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none md:hidden"
         role="dialog"
         aria-modal
         aria-labelledby="primeiro-acesso-titulo"
@@ -449,7 +449,7 @@ export function ColaboradorPrimeiroAcessoWizard() {
 
       {/* Desktop — cartão modal */}
       <div
-        className="fixed inset-0 z-[200] hidden items-center justify-center bg-background/80 backdrop-blur-sm md:flex md:p-4"
+        className="fixed inset-0 z-[1100000] hidden items-center justify-center bg-background/80 backdrop-blur-sm md:flex md:p-4"
         role="dialog"
         aria-modal
         aria-labelledby="primeiro-acesso-titulo-desktop"

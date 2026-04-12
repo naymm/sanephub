@@ -11,6 +11,7 @@ import { HorizontalMenu } from './HorizontalMenu';
 import { FloatingCornerActions } from './FloatingCornerActions';
 import { MobileBottomNav } from './MobileBottomNav';
 import { ColaboradorPrimeiroAcessoWizard } from '@/components/onboarding/ColaboradorPrimeiroAcessoWizard';
+import { MobileWebPushBanner } from '@/components/mobile/MobileWebPushBanner';
 
 const PATH_TO_MODULE: Record<string, string> = {
   '/portal': 'portal-colaborador',
@@ -73,9 +74,19 @@ export function Layout() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  /** Chat em mobile: ecrã inteiro (sem topbar, bottom nav, cantos flutuantes). */
+  const isChatFullscreenMobile = pathname === '/chat';
+
   return (
-    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-background flex flex-col">
-      <IntranetTopbar />
+    <div
+      className={cn(
+        'flex min-h-screen w-full max-w-[100vw] flex-col overflow-x-hidden bg-background',
+        isChatFullscreenMobile && 'max-md:min-h-[min(100dvh,100svh)]',
+      )}
+    >
+      <div className={cn(isChatFullscreenMobile && 'max-md:hidden')}>
+        <IntranetTopbar />
+      </div>
       <HorizontalMenu />
       {/* Altura do header fixo + menu horizontal (desktop); mobile: só topbar (spacer no IntranetTopbar) */}
       <div
@@ -88,23 +99,36 @@ export function Layout() {
           pathname === '/mais' || pathname === '/perfil'
             ? 'max-md:px-3 md:px-5 lg:px-8'
             : 'px-4 md:px-5 lg:px-8',
+          isChatFullscreenMobile &&
+            'max-md:flex max-md:h-[min(100dvh,100svh)] max-md:max-h-[min(100dvh,100svh)] max-md:min-h-0 max-md:flex-1 max-md:flex-col max-md:overflow-hidden max-md:bg-[#F0F0F2] max-md:px-0 max-md:pb-0 max-md:pt-0',
         )}
-      >
-        <Suspense
-          fallback={
-            <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
-              A carregar…
-            </div>
-          }
         >
-          <Outlet />
-        </Suspense>
+        {!isChatFullscreenMobile ? <MobileWebPushBanner /> : null}
+        <div
+          className={cn(
+            isChatFullscreenMobile && 'flex min-h-0 flex-1 flex-col',
+          )}
+        >
+          <Suspense
+            fallback={
+              <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+                A carregar…
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
+        </div>
       </main>
       <footer className="hidden md:block border-t border-border/80 px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-muted-foreground">
         © {new Date().getFullYear()} GRUPO SANEP. Todos os direitos reservados.
       </footer>
-      <MobileBottomNav />
-      <FloatingCornerActions />
+      <div className={cn(isChatFullscreenMobile && 'max-md:hidden')}>
+        <MobileBottomNav />
+      </div>
+      <div className={cn(isChatFullscreenMobile && 'max-md:hidden')}>
+        <FloatingCornerActions />
+      </div>
       <ColaboradorPrimeiroAcessoWizard />
     </div>
   );

@@ -33,6 +33,13 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: "autoUpdate",
+        strategies: "injectManifest",
+        srcDir: "src",
+        filename: "sw.ts",
+        injectManifest: {
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        },
         // Ícones com dimensões reais — o Chrome exige 192+512 e valida sizes vs pixels do PNG
         includeAssets: ["icon_app.png", "pwa-192.png", "pwa-512.png"],
         manifest: {
@@ -68,16 +75,11 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
-        workbox: {
-          globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-          navigateFallback: "index.html",
-          // Bundle principal > 2 MiB (limite default do Workbox)
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-        },
         // Sem isto, em `npm run dev` não há SW/manifest — a opção “Instalar” não aparece
         devOptions: {
           enabled: true,
           navigateFallback: "index.html",
+          type: "module",
         },
       }),
     ].filter(Boolean),

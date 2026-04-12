@@ -4,6 +4,7 @@ import { USUARIOS_SEED } from '@/data/seed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { PROFILES_SELECT_PUBLIC } from '@/lib/profileColumns';
 import type { Database } from '@/types/supabase';
+import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
@@ -320,17 +321,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase não configurado');
       const { data, error } = await supabase.functions.invoke('create-user', { body: payload });
       if (error) {
-        // Com respostas non-2xx o cliente devolve data=null; a mensagem vem no body em error.context (Response).
-        let msg = (error as Error).message || 'Erro ao criar utilizador';
-        const ctx = (error as { context?: Response }).context;
-        if (ctx && typeof (ctx as Response).json === 'function') {
-          try {
-            const body = (await (ctx as Response).json()) as { error?: string };
-            if (body?.error && typeof body.error === 'string') msg = body.error;
-          } catch {
-            /* ignorar falha ao fazer parse */
-          }
-        }
+        const msg = await getSupabaseFunctionsInvokeErrorMessage(
+          error,
+          (error as Error).message || 'Erro ao criar utilizador',
+        );
         throw new Error(msg);
       }
       const raw = data as unknown;

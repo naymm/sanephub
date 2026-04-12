@@ -1,2 +1,1 @@
-comment on column public.profiles.primeiro_acesso_pendente is
-  'Se true (tipicamente Colaborador recém-criado), a app exige alterar senha e definir PIN antes de continuar.';
+comment on table public.web_push_subscriptions is 'Endpoints Web Push por dispositivo; envio apenas via service role (Edge).';

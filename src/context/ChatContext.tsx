@@ -9,6 +9,7 @@ import type { ChatConversation, ChatMessage, ChatAttachment, MessageStatus } fro
 import { CHAT_CONVERSATIONS_SEED, CHAT_MESSAGES_SEED } from '@/data/chatSeed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Json } from '@/types/supabase';
+import { toast } from 'sonner';
 
 const STORAGE_CONV = 'sanep_chat_conversations';
 const STORAGE_MSG = 'sanep_chat_messages';
@@ -64,6 +65,27 @@ function loadMessages(): ChatMessage[] {
 
 function genId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** UUID v4 para Supabase. Em contexto não seguro (HTTP por IP na LAN) `crypto.randomUUID` não existe. */
+function randomUUID(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') {
+    return c.randomUUID();
+  }
+  if (c && typeof c.getRandomValues === 'function') {
+    const buf = new Uint8Array(16);
+    c.getRandomValues(buf);
+    buf[6] = (buf[6] & 0x0f) | 0x40;
+    buf[8] = (buf[8] & 0x3f) | 0x80;
+    const h = [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 function rowToConversation(row: ConversationRow): ChatConversation {
@@ -548,15 +570,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const sendMessage = useCallback(
     (conversationId: string, content: string, attachments: ChatAttachment[] = []) => {
-      if (!currentUserId) return;
+      if (!currentUserId) {
+        toast.error('Sessão inválida. Volte a iniciar sessão.', { duration: 12000 });
+        return;
+      }
       const text = content.trim() || '(ficheiro anexado)';
       const withIds = attachments.map((a) => ({ ...a, id: a.id || genId('att') }));
 
       if (supabaseMode) {
-        if (!supabase) return;
-        const id = crypto.randomUUID();
-        const conv = conversations.find((c) => c.id === conversationId);
-        if (!conv) return;
+        if (!supabase) {
+          toast.error('Chat indisponível (ligação ao servidor não configurada).', {
+            duration: 12000,
+          });
+          return;
+        }
+        const id = randomUUID();
         const newMsg: ChatMessage = {
           id,
           conversationId,
@@ -584,6 +612,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           if (error) {
             console.error('[chat] sendMessage', error);
             setMessages((prev) => prev.filter((m) => m.id !== id));
+            toast.error(error.message || 'Não foi possível enviar a mensagem.', {
+              duration: 12000,
+              description: error.code ? `Código: ${error.code}` : undefined,
+            });
           }
         })();
         return;
@@ -602,7 +634,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       };
       setMessages((prev) => [...prev, newMsg]);
     },
-    [currentUserId, conversations],
+    [currentUserId, supabase],
   );
 
   const createPrivateConversation = useCallback(
@@ -630,7 +662,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         );
         if (hit) return hit.id;
 
-        const newId = crypto.randomUUID();
+        const newId = randomUUID();
         const { error } = await supabase.from('intranet_chat_conversations').insert({
           id: newId,
           type: 'private',
@@ -689,7 +721,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       if (supabaseMode) {
         if (!supabase) return '';
-        const newId = crypto.randomUUID();
+        const newId = randomUUID();
         const { error } = await supabase.from('intranet_chat_conversations').insert({
           id: newId,
           type: 'group',

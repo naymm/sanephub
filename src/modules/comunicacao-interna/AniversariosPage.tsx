@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { pt } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
+import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
 
 type BirthdayPerson = {
   id: number;
@@ -31,20 +32,6 @@ type BirthdaysApiResponse = {
   /** Quando presente (edge function actualizada), lista completa para filtrar por mês no cliente. */
   all_birthdays?: BirthdayPerson[];
 };
-
-async function getEdgeFunctionErrorMessage(e: unknown): Promise<string> {
-  let msg = e instanceof Error ? e.message : 'Erro ao carregar aniversários';
-  const ctx = (e as { context?: { json?: () => Promise<unknown> } })?.context;
-  if (ctx && typeof ctx.json === 'function') {
-    try {
-      const body = (await ctx.json()) as { error?: string };
-      if (body?.error && typeof body.error === 'string') msg = body.error;
-    } catch {
-      // ignore
-    }
-  }
-  return msg;
-}
 
 function looksLikeUrl(s?: string | null): boolean {
   if (!s) return false;
@@ -194,7 +181,10 @@ export default function AniversariosPage() {
         }
         if (!cancelled) setPeople(list);
       } catch (e) {
-        const msg = await getEdgeFunctionErrorMessage(e);
+        const msg = await getSupabaseFunctionsInvokeErrorMessage(
+          e,
+          'Não foi possível carregar os aniversários. Confirme no Supabase que a função «birthdays» está publicada.',
+        );
         if (!cancelled) setErrorMsg(msg);
         toast.error(msg);
       } finally {

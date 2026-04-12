@@ -74,7 +74,7 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
   if (!isMobileViewport) {
     return (
       <div
-        className="fixed inset-0 z-[100] flex min-h-[100dvh] items-center justify-center overflow-hidden overscroll-none p-6"
+        className="fixed inset-0 z-[1100000] flex min-h-[100dvh] items-center justify-center overflow-hidden overscroll-none p-6"
         role="dialog"
         aria-modal
         aria-labelledby="pin-unlock-title"
@@ -135,7 +135,7 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] items-stretch justify-center overflow-hidden overscroll-none"
+      className="fixed inset-0 z-[1100000] flex h-[100dvh] max-h-[100dvh] items-stretch justify-center overflow-hidden overscroll-none"
       role="dialog"
       aria-modal
       aria-labelledby="pin-unlock-title"

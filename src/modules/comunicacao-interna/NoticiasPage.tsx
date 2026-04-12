@@ -28,6 +28,23 @@ const NOTIF_TARGET_PROFILES = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 
 
 const todayISO = () => new Date().toISOString();
 
+async function invokeNoticiaPushNotify(noticiaId: number) {
+  if (!isSupabaseConfigured() || !supabase) return;
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    const { error } = await supabase.functions.invoke('notify-noticia-push', {
+      body: { noticiaId },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (error) console.warn('notify-noticia-push', error.message);
+  } catch {
+    /* não bloquear publicação */
+  }
+}
+
 const LIST_PATH = '/comunicacao-interna/noticias';
 const NOVO_PATH = '/comunicacao-interna/noticias/novo';
 
@@ -202,6 +219,7 @@ export default function NoticiasPage() {
             destinatarioPerfil: NOTIF_TARGET_PROFILES,
             link: `/comunicacao-interna/noticias/${updated.id}`,
           });
+          void invokeNoticiaPushNotify(updated.id);
         } else if (isUnpublish) {
           addNotification({
             tipo: 'info',
@@ -243,6 +261,7 @@ export default function NoticiasPage() {
             destinatarioPerfil: NOTIF_TARGET_PROFILES,
             link: `/comunicacao-interna/noticias/${created.id}`,
           });
+          void invokeNoticiaPushNotify(created.id);
         }
 
         setDialogOpen(false);
