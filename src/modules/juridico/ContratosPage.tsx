@@ -1,9 +1,15 @@
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Contrato, StatusContrato } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -29,14 +35,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -87,7 +86,11 @@ const TIPOS_CONTRATO = [
 
 const STATUS_OPCOES: StatusContrato[] = ['Activo', 'A Renovar', 'Em Negociação', 'Suspenso', 'Rescindido', 'Expirado'];
 
+const LIST_PATH = '/juridico/contratos';
+const NOVO_PATH = '/juridico/contratos/novo';
+
 export default function ContratosPage() {
+  const navigate = useNavigate();
   const { contratos, addContrato, updateContrato, deleteContrato, empresas, colaboradoresTodos } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
@@ -183,7 +186,7 @@ export default function ContratosPage() {
     setForm(f => (f.numero === next ? f : { ...f, numero: next }));
   }, [dialogOpen, editing, form.empresaId, contratos]);
 
-  const openCreate = () => {
+  const prepareCreate = useCallback(() => {
     setEditing(null);
     const eid = typeof empresaIdForNew === 'number' ? empresaIdForNew : 1;
     setAnexosContrato([]);
@@ -210,8 +213,51 @@ export default function ContratosPage() {
       status: 'Activo',
       historico: [],
     });
-    setDialogOpen(true);
-  };
+  }, [contratos, empresaIdForNew, empresas, user?.nome]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setAnexosContrato([]);
+    setAnexosEmpresaCliente([]);
+    setForm({
+      numero: '',
+      tipo: TIPO_PRESTACAO,
+      parteA: '',
+      parteB: '',
+      contraparteNif: '',
+      contraparteColaboradorId: undefined,
+      personalidadeContraparte: undefined,
+      objecto: '',
+      valor: 0,
+      moeda: 'Kz',
+      dataAssinatura: '',
+      dataInicio: '',
+      dataFim: '',
+      advogado: '',
+      responsavelJuridico: '',
+      alertarAntesDias: 90,
+      status: 'Activo',
+      historico: [],
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (c: Contrato) => {
     setEditing(c);
@@ -376,6 +422,10 @@ export default function ContratosPage() {
       setEditing(null);
       setAnexosContrato([]);
       setAnexosEmpresaCliente([]);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -417,6 +467,10 @@ export default function ContratosPage() {
     [empresas],
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
+  const contratoDialogTitle = editing ? 'Editar contrato' : 'Novo contrato';
+  const contratoDialogDescription =
+    'O número do contrato é gerado automaticamente por empresa e ano. O responsável jurídico será o utilizador que regista. Em «Prestação de Serviços», indique se a contraparte é singular ou colectiva.';
 
   const renderContratoAcoes = (c: Contrato) => (
     <DropdownMenu>
@@ -620,16 +674,16 @@ export default function ContratosPage() {
       )}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar contrato' : 'Novo contrato'}</DialogTitle>
-            <DialogDescription>
-              O número do contrato é gerado automaticamente por empresa e ano. O responsável jurídico será o utilizador
-              que regista. Em «Prestação de Serviços», indique se a contraparte é singular ou colectiva.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Jurídico"
+          screenTitle={contratoDialogTitle}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(contratoDialogTitle, contratoDialogDescription)}
+          formBody={
+            <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Parte A (empresa)</Label>
               <Select
@@ -914,13 +968,28 @@ export default function ContratosPage() {
               </Select>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={saveDisabled}>
-              {editing ? 'Guardar' : 'Criar contrato'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={saveDisabled}>
+                {editing ? 'Guardar' : 'Criar contrato'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>
+                {editing ? 'Guardar' : 'Criar contrato'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog

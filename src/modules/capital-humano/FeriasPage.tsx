@@ -1,22 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
-import { useAuth } from '@/context/AuthContext';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Ferias, StatusFerias } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate, diasEntre } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -38,8 +36,11 @@ const STATUS_OPTIONS: { value: StatusFerias | 'todos'; label: string }[] = [
   { value: 'Cancelado', label: 'Cancelado' },
 ];
 
+const LIST_PATH = '/capital-humano/ferias';
+const NOVO_PATH = '/capital-humano/ferias/novo';
+
 export default function FeriasPage() {
-  const { user } = useAuth();
+  const navigate = useNavigate();
   const { ferias, addFerias, updateFerias, deleteFerias, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFerias | 'todos'>('todos');
@@ -57,6 +58,48 @@ export default function FeriasPage() {
     dias: 0,
     status: 'Pendente',
     solicitadoEm: new Date().toISOString().slice(0, 10),
+  });
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    const today = new Date().toISOString().slice(0, 10);
+    setForm({
+      colaboradorId: colaboradores[0]?.id ?? 0,
+      dataInicio: today,
+      dataFim: today,
+      dias: 1,
+      status: 'Pendente',
+      solicitadoEm: today,
+    });
+  }, [colaboradores]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    const today = new Date().toISOString().slice(0, 10);
+    setForm({
+      colaboradorId: colaboradores[0]?.id ?? 0,
+      dataInicio: today,
+      dataFim: today,
+      dias: 1,
+      status: 'Pendente',
+      solicitadoEm: today,
+    });
+  }, [colaboradores]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
   });
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
@@ -87,19 +130,7 @@ export default function FeriasPage() {
     setForm(prev => ({ ...prev, dias: d >= 0 ? d : 0 }));
   };
 
-  const openCreate = () => {
-    setEditing(null);
-    const today = new Date().toISOString().slice(0, 10);
-    setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
-      dataInicio: today,
-      dataFim: today,
-      dias: 1,
-      status: 'Pendente',
-      solicitadoEm: today,
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (f: Ferias) => {
     setEditing(f);
@@ -122,6 +153,10 @@ export default function FeriasPage() {
       else await addFerias(form);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
       toast.success(editing ? 'Pedido de férias actualizado.' : 'Pedido de férias registado.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
@@ -310,53 +345,84 @@ export default function FeriasPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum pedido de férias encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar pedido de férias' : 'Novo pedido de férias'}</DialogTitle>
-            <DialogDescription>Período e colaborador.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Colaborador</Label>
-              <Select
-                value={form.colaboradorId ? String(form.colaboradorId) : ''}
-                onValueChange={v => setForm(f => ({ ...f, colaboradorId: Number(v) }))}
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Capital Humano"
+          screenTitle={editing ? 'Editar pedido de férias' : 'Novo pedido de férias'}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar pedido de férias' : 'Novo pedido de férias',
+            'Período e colaborador.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
+              <div className="space-y-2">
+                <Label>Colaborador</Label>
+                <Select
+                  value={form.colaboradorId ? String(form.colaboradorId) : ''}
+                  onValueChange={v => setForm(f => ({ ...f, colaboradorId: Number(v) }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    {colaboradores.filter(c => c.status === 'Activo').map(c => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.departamento}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data início</Label>
+                  <Input type="date" value={form.dataInicio} onChange={e => { setForm(f => ({ ...f, dataInicio: e.target.value })); updateDias(e.target.value, form.dataFim); }} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data fim</Label>
+                  <Input type="date" value={form.dataFim} onChange={e => { setForm(f => ({ ...f, dataFim: e.target.value })); updateDias(form.dataInicio, e.target.value); }} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Dias (calculado)</Label>
+                <Input type="number" min={1} value={form.dias} onChange={e => setForm(f => ({ ...f, dias: Number(e.target.value) || 0 }))} />
+              </div>
+              {editing && (
+                <div className="space-y-2">
+                  <Label>Data solicitação</Label>
+                  <Input type="date" value={form.solicitadoEm} onChange={e => setForm(f => ({ ...f, solicitadoEm: e.target.value }))} />
+                </div>
+              )}
+            </div>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void save()}
+                disabled={!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0}
               >
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  {colaboradores.filter(c => c.status === 'Activo').map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.departamento}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0}
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Data início</Label>
-                <Input type="date" value={form.dataInicio} onChange={e => { setForm(f => ({ ...f, dataInicio: e.target.value })); updateDias(e.target.value, form.dataFim); }} />
-              </div>
-              <div className="space-y-2">
-                <Label>Data fim</Label>
-                <Input type="date" value={form.dataFim} onChange={e => { setForm(f => ({ ...f, dataFim: e.target.value })); updateDias(form.dataInicio, e.target.value); }} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Dias (calculado)</Label>
-              <Input type="number" min={1} value={form.dias} onChange={e => setForm(f => ({ ...f, dias: Number(e.target.value) || 0 }))} />
-            </div>
-            {editing && (
-              <div className="space-y-2">
-                <Label>Data solicitação</Label>
-                <Input type="date" value={form.solicitadoEm} onChange={e => setForm(f => ({ ...f, solicitadoEm: e.target.value }))} />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

@@ -1,22 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Usuario, Perfil } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -66,7 +65,11 @@ function avatarFromNome(nome: string): string {
 
 type UsuarioFormState = Omit<Usuario, 'id'> & { empresaId?: number | null };
 
+const LIST_PATH = '/configuracoes/utilizadores';
+const NOVO_PATH = '/configuracoes/utilizadores/novo';
+
 export default function UtilizadoresPage() {
+  const navigate = useNavigate();
   const { user: currentUser, usuarios, setUsuarios, createUserInSupabase } = useAuth();
   const { empresas, colaboradoresTodos } = useData();
   const [search, setSearch] = useState('');
@@ -117,7 +120,7 @@ export default function UtilizadoresPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
+  const prepareCreate = useCallback(() => {
     setEditing(null);
     setForm({
       nome: '',
@@ -136,8 +139,46 @@ export default function UtilizadoresPage() {
       assinaturaCargo: '',
       assinaturaImagemUrl: '',
     });
-    setDialogOpen(true);
-  };
+  }, []);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      nome: '',
+      email: '',
+      username: '',
+      senha: '',
+      perfil: 'Colaborador',
+      cargo: '',
+      departamento: '',
+      avatar: '',
+      permissoes: [],
+      modulos: [],
+      empresaId: null,
+      colaboradorId: null,
+      assinaturaLinha: '',
+      assinaturaCargo: '',
+      assinaturaImagemUrl: '',
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (u: Usuario) => {
     setEditing(u);
@@ -251,6 +292,10 @@ export default function UtilizadoresPage() {
         });
         setDialogOpen(false);
         setEditing(null);
+        if (isNovoRoute) {
+          endMobileCreateFlow();
+          navigate(LIST_PATH, { replace: true });
+        }
         toast.success('Utilizador criado. Pode fazer login com o nome de utilizador e a password definidos.');
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Erro ao criar utilizador');
@@ -262,6 +307,10 @@ export default function UtilizadoresPage() {
     setUsuarios(prev => [...prev, { id: newId, ...payload }]);
     setDialogOpen(false);
     setEditing(null);
+    if (isNovoRoute) {
+      endMobileCreateFlow();
+      navigate(LIST_PATH, { replace: true });
+    }
   };
 
   const remove = async (u: Usuario) => {
@@ -454,17 +503,19 @@ export default function UtilizadoresPage() {
       )}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar utilizador' : 'Novo utilizador'}</DialogTitle>
-            <DialogDescription>
-              Dados do utilizador. Para perfis de direcção e áreas (Director, PCA, RH, etc.), os módulos marcados{' '}
-              <strong>somam-se</strong> ao acesso definido pelo perfil — não substituem esse acesso. Para Colaborador, a lista
-              de módulos é a referência principal (junto com o portal).
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Configurações"
+          screenTitle={editing ? 'Editar utilizador' : 'Novo utilizador'}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar utilizador' : 'Novo utilizador',
+            'Dados do utilizador. Para perfis de direcção e áreas, os módulos marcados somam-se ao acesso do perfil. Para Colaborador, a lista de módulos é a referência principal (junto com o portal).',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nome</Label>
@@ -697,21 +748,46 @@ export default function UtilizadoresPage() {
               )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={save}
-              disabled={
-                !form.nome.trim() ||
-                !form.email.trim() ||
-                (isSupabaseConfigured() && !form.username?.trim()) ||
-                (!editing && !form.senha.trim())
-              }
-            >
-              {editing ? 'Guardar' : 'Criar utilizador'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void save()}
+                disabled={
+                  !form.nome.trim() ||
+                  !form.email.trim() ||
+                  (isSupabaseConfigured() && !form.username?.trim()) ||
+                  (!editing && !form.senha.trim())
+                }
+              >
+                {editing ? 'Guardar' : 'Criar utilizador'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={
+                  !form.nome.trim() ||
+                  !form.email.trim() ||
+                  (isSupabaseConfigured() && !form.username?.trim()) ||
+                  (!editing && !form.senha.trim())
+                }
+                onClick={() => void save()}
+              >
+                {editing ? 'Guardar' : 'Criar utilizador'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
     </div>
   );

@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { PendenciaDocumental, TipoPendencia, PrioridadePendencia } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -10,14 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -33,7 +32,11 @@ const TIPO_OPTIONS: TipoPendencia[] = ['Factura em falta', 'Comprovante em falta
 const PRIORIDADE_OPTIONS: PrioridadePendencia[] = ['Baixa', 'Média', 'Alta', 'Urgente'];
 const STATUS_OPTIONS: PendenciaDocumental['status'][] = ['Pendente', 'Em tratamento', 'Regularizado', 'Vencido'];
 
+const LIST_PATH = '/contabilidade/pendencias';
+const NOVO_PATH = '/contabilidade/pendencias/novo';
+
 export default function PendenciasPage() {
+  const navigate = useNavigate();
   const { pendencias, addPendencia, updatePendencia } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PendenciaDocumental['status'] | 'todos'>('todos');
@@ -51,6 +54,52 @@ export default function PendenciasPage() {
     prioridade: 'Média',
     responsavel: '',
     status: 'Pendente',
+  });
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({
+      titulo: '',
+      tipo: 'Factura em falta',
+      descricao: '',
+      entidadeRef: '',
+      entidadeTipo: 'Requisicao',
+      entidadeId: 0,
+      prioridade: 'Média',
+      responsavel: '',
+      status: 'Pendente',
+    });
+  }, []);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      titulo: '',
+      tipo: 'Factura em falta',
+      descricao: '',
+      entidadeRef: '',
+      entidadeTipo: 'Requisicao',
+      entidadeId: 0,
+      prioridade: 'Média',
+      responsavel: '',
+      status: 'Pendente',
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
   });
 
   const filtered = pendencias.filter(p => {
@@ -75,21 +124,7 @@ export default function PendenciasPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({
-      titulo: '',
-      tipo: 'Factura em falta',
-      descricao: '',
-      entidadeRef: '',
-      entidadeTipo: 'Requisicao',
-      entidadeId: 0,
-      prioridade: 'Média',
-      responsavel: '',
-      status: 'Pendente',
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (p: PendenciaDocumental) => {
     setEditing(p);
@@ -116,6 +151,10 @@ export default function PendenciasPage() {
       else await addPendencia(form);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -128,6 +167,91 @@ export default function PendenciasPage() {
       toast.error(e instanceof Error ? e.message : 'Erro ao actualizar');
     }
   };
+
+  const title = editing ? 'Editar pendência' : 'Nova pendência';
+  const saveDisabled = !form.titulo.trim();
+
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="space-y-2">
+        <Label>Título</Label>
+        <Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} placeholder="ex: Factura REQ-2024-0002" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Tipo</Label>
+          <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoPendencia }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TIPO_OPTIONS.map(t => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Prioridade</Label>
+          <Select value={form.prioridade} onValueChange={v => setForm(f => ({ ...f, prioridade: v as PrioridadePendencia }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PRIORIDADE_OPTIONS.map(pr => (
+                <SelectItem key={pr} value={pr}>{pr}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Descrição</Label>
+        <Textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} rows={2} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Ref. entidade</Label>
+          <Input value={form.entidadeRef} onChange={e => setForm(f => ({ ...f, entidadeRef: e.target.value }))} placeholder="ex: REQ-2024-0002" />
+        </div>
+        <div className="space-y-2">
+          <Label>Tipo entidade</Label>
+          <Select value={form.entidadeTipo} onValueChange={v => setForm(f => ({ ...f, entidadeTipo: v as PendenciaDocumental['entidadeTipo'] }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Requisicao">Requisicao</SelectItem>
+              <SelectItem value="Contrato">Contrato</SelectItem>
+              <SelectItem value="Processo">Processo</SelectItem>
+              <SelectItem value="Outro">Outro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Data limite (opcional)</Label>
+        <Input type="date" value={form.dataLimite ?? ''} onChange={e => setForm(f => ({ ...f, dataLimite: e.target.value || undefined }))} />
+      </div>
+      <div className="space-y-2">
+        <Label>Responsável</Label>
+        <Input value={form.responsavel} onChange={e => setForm(f => ({ ...f, responsavel: e.target.value }))} />
+      </div>
+      {editing && (
+        <>
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as PendenciaDocumental['status'] }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map(s => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Observações</Label>
+            <Textarea value={form.observacoes ?? ''} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value || undefined }))} rows={2} />
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -252,96 +376,36 @@ export default function PendenciasPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma pendência encontrada.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar pendência' : 'Nova pendência'}</DialogTitle>
-            <DialogDescription>Registo de pendência documental.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Título</Label>
-              <Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} placeholder="ex: Factura REQ-2024-0002" />
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Contabilidade"
+          screenTitle={title}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(title, 'Registo de pendência documental.')}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={saveDisabled}>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>
+                Guardar
+              </Button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoPendencia }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPO_OPTIONS.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Prioridade</Label>
-                <Select value={form.prioridade} onValueChange={v => setForm(f => ({ ...f, prioridade: v as PrioridadePendencia }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PRIORIDADE_OPTIONS.map(pr => (
-                      <SelectItem key={pr} value={pr}>{pr}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} rows={2} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Ref. entidade</Label>
-                <Input value={form.entidadeRef} onChange={e => setForm(f => ({ ...f, entidadeRef: e.target.value }))} placeholder="ex: REQ-2024-0002" />
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo entidade</Label>
-                <Select value={form.entidadeTipo} onValueChange={v => setForm(f => ({ ...f, entidadeTipo: v as PendenciaDocumental['entidadeTipo'] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Requisicao">Requisicao</SelectItem>
-                    <SelectItem value="Contrato">Contrato</SelectItem>
-                    <SelectItem value="Processo">Processo</SelectItem>
-                    <SelectItem value="Outro">Outro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Data limite (opcional)</Label>
-              <Input type="date" value={form.dataLimite ?? ''} onChange={e => setForm(f => ({ ...f, dataLimite: e.target.value || undefined }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Responsável</Label>
-              <Input value={form.responsavel} onChange={e => setForm(f => ({ ...f, responsavel: e.target.value }))} />
-            </div>
-            {editing && (
-              <>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as PendenciaDocumental['status'] }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Observações</Label>
-                  <Textarea value={form.observacoes ?? ''} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value || undefined }))} rows={2} />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.titulo.trim()}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

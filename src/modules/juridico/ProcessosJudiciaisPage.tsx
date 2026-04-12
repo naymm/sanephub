@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { ProcessoJudicial } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -15,10 +21,10 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -33,7 +39,11 @@ import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSo
 
 const STATUS_OPCOES: ProcessoJudicial['status'][] = ['Em curso', 'Suspenso', 'Encerrado', 'Ganho', 'Perdido', 'Acordo'];
 
+const LIST_PATH = '/juridico/processos';
+const NOVO_PATH = '/juridico/processos/novo';
+
 export default function ProcessosJudiciaisPage() {
+  const navigate = useNavigate();
   const { processos, addProcesso, updateProcesso, deleteProcesso, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
@@ -88,7 +98,7 @@ export default function ProcessosJudiciaisPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
+  const prepareCreate = useCallback(() => {
     setEditing(null);
     const ano = new Date().getFullYear();
     const nextNum = Math.max(0, ...processos.map(p => parseInt(p.numero.replace(/\D/g, ''), 10) || 0)) + 1;
@@ -105,8 +115,41 @@ export default function ProcessosJudiciaisPage() {
       descricao: '',
       status: 'Em curso',
     });
-    setDialogOpen(true);
-  };
+  }, [empresaIdForNew, processos, user?.nome]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      numero: '',
+      tribunal: '',
+      tipoAccao: '',
+      autor: '',
+      reu: '',
+      valorEmCausa: 0,
+      dataEntrada: '',
+      advogado: '',
+      descricao: '',
+      status: 'Em curso',
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (p: ProcessoJudicial) => {
     setEditing(p);
@@ -141,6 +184,10 @@ export default function ProcessosJudiciaisPage() {
       else await addProcesso(payload);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -309,13 +356,19 @@ export default function ProcessosJudiciaisPage() {
       )}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar processo judicial' : 'Novo processo judicial'}</DialogTitle>
-            <DialogDescription>Dados do processo em tribunal.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Jurídico"
+          screenTitle={editing ? 'Editar processo judicial' : 'Novo processo judicial'}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar processo judicial' : 'Novo processo judicial',
+            'Dados do processo em tribunal.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
             {currentEmpresaId === 'consolidado' && (
               <div className="space-y-2">
                 <Label>Empresa</Label>
@@ -395,13 +448,33 @@ export default function ProcessosJudiciaisPage() {
               <Textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} rows={2} placeholder="Opcional" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.numero?.trim() || !form.tribunal?.trim() || !form.dataEntrada}>
-              {editing ? 'Guardar' : 'Registar processo'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={!form.numero?.trim() || !form.tribunal?.trim() || !form.dataEntrada}>
+                {editing ? 'Guardar' : 'Registar processo'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.numero?.trim() || !form.tribunal?.trim() || !form.dataEntrada}
+                onClick={() => void save()}
+              >
+                {editing ? 'Guardar' : 'Registar processo'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>

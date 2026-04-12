@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { ProcessoDisciplinar, MedidaDisciplinarProposta, StatusProcessoDisciplinar } from '@/types';
 import { formatDate } from '@/utils/formatters';
@@ -12,14 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -51,6 +49,9 @@ const WIZARD_STEPS = [
   { id: '9', title: 'Decisão PCA' },
   { id: '10', title: 'Comunicado e encerramento' },
 ];
+
+const LIST_PATH = '/juridico/processos-disciplinares';
+const NOVO_PATH = '/juridico/processos-disciplinares/novo';
 
 export default function ProcessosDisciplinaresPage() {
   const { id } = useParams<{ id: string }>();
@@ -158,12 +159,14 @@ export default function ProcessosDisciplinaresPage() {
     );
   }
 
-  const openWizard = () => {
+  const prepareWizardCreate = useCallback(() => {
     const ano = new Date().getFullYear();
     const nextNum = Math.max(0, ...processosDisciplinares.map(p => parseInt(p.numero.replace(/\D/g, ''), 10) || 0)) + 1;
+    const colabFiltered =
+      currentEmpresaId === 'consolidado' ? colaboradores : colaboradores.filter(c => c.empresaId === currentEmpresaId);
     setForm({
       empresaId: empresaIdForNew,
-      colaboradorId: colaboradoresFiltrados[0]?.id ?? 0,
+      colaboradorId: colabFiltered[0]?.id ?? 0,
       numero: `PD-${ano}-${String(nextNum).padStart(4, '0')}`,
       criadoEm: new Date().toISOString(),
       criadoPor: user?.nome ?? 'Sistema',
@@ -173,8 +176,30 @@ export default function ProcessosDisciplinaresPage() {
       historico: [],
     });
     setWizardStep(0);
-    setWizardOpen(true);
-  };
+  }, [colaboradores, currentEmpresaId, empresaIdForNew, processosDisciplinares, user?.nome]);
+
+  const resetWizardModal = useCallback(() => {
+    setWizardStep(0);
+    setForm({ medidasPropostas: [] });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen: wizardOpen,
+    setDialogOpen: setWizardOpen,
+    prepareCreate: prepareWizardCreate,
+    resetModal: resetWizardModal,
+  });
+
+  const openWizard = () => openCreateNavigateOrDialog();
 
   const addMedida = () => {
     setForm(f => ({
@@ -248,6 +273,7 @@ export default function ProcessosDisciplinaresPage() {
     try {
       const row = await addProcessoDisciplinar(payload);
       setWizardOpen(false);
+      if (isNovoRoute) endMobileCreateFlow();
       navigate(`/juridico/processos-disciplinares/${row.id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
@@ -373,14 +399,24 @@ export default function ProcessosDisciplinaresPage() {
 
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Novo processo disciplinar — Passo {wizardStep + 1} de {WIZARD_STEPS.length}</DialogTitle>
-            <DialogDescription>{WIZARD_STEPS[wizardStep]?.title}</DialogDescription>
-          </DialogHeader>
-
-          <div className="py-2 space-y-4">
+      <Dialog open={wizardOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Jurídico"
+          screenTitle="Novo processo disciplinar"
+          step={{
+            current: wizardStep + 1,
+            total: WIZARD_STEPS.length,
+            title: WIZARD_STEPS[wizardStep]?.title ?? '',
+          }}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            `Novo processo disciplinar — Passo ${wizardStep + 1} de ${WIZARD_STEPS.length}`,
+            WIZARD_STEPS[wizardStep]?.title,
+          )}
+          formBody={
+            <div className="py-2 space-y-4">
             {wizardStep === 0 && (
               <>
                 <div className="grid grid-cols-2 gap-4">
@@ -706,31 +742,62 @@ export default function ProcessosDisciplinaresPage() {
               </>
             )}
           </div>
-
-          <DialogFooter className="flex justify-between">
-            <div className="flex gap-2">
-              {wizardStep > 0 && (
-                <Button variant="outline" type="button" onClick={() => setWizardStep(s => s - 1)}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+          }
+          desktopFooter={
+            <DialogFooter className="flex justify-between sm:flex-row flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                {wizardStep > 0 && (
+                  <Button variant="outline" type="button" onClick={() => setWizardStep(s => s - 1)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+                  </Button>
+                )}
+                {wizardStep < WIZARD_STEPS.length - 1 && (
+                  <Button type="button" onClick={() => setWizardStep(s => s + 1)}>
+                    Próximo <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => void saveProcesso()}
+                  disabled={!form.autoOcorrenciaDescricao?.trim() || !form.colaboradorId}
+                >
+                  Guardar processo (pode continuar depois)
                 </Button>
-              )}
-              {wizardStep < WIZARD_STEPS.length - 1 && (
-                <Button type="button" onClick={() => setWizardStep(s => s + 1)}>
-                  Próximo <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              )}
+              </div>
+              <Button variant="ghost" type="button" onClick={() => onDialogOpenChange(false)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                {wizardStep > 0 && (
+                  <Button variant="outline" type="button" className="min-h-11 flex-1 rounded-xl" onClick={() => setWizardStep(s => s - 1)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+                  </Button>
+                )}
+                {wizardStep < WIZARD_STEPS.length - 1 && (
+                  <Button type="button" className="min-h-11 flex-1 rounded-xl" onClick={() => setWizardStep(s => s + 1)}>
+                    Próximo <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                )}
+              </div>
               <Button
                 type="button"
-                variant="default"
-                onClick={saveProcesso}
+                className="min-h-11 w-full rounded-xl"
+                onClick={() => void saveProcesso()}
                 disabled={!form.autoOcorrenciaDescricao?.trim() || !form.colaboradorId}
               >
                 Guardar processo (pode continuar depois)
               </Button>
+              <Button variant="ghost" type="button" className="min-h-11 w-full rounded-xl" onClick={closeMobileCreate}>
+                Fechar
+              </Button>
             </div>
-            <Button variant="ghost" type="button" onClick={() => setWizardOpen(false)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
     </div>
   );

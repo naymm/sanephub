@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { RiscoJuridico } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -36,7 +42,11 @@ const IMPACTO: RiscoJuridico['impacto'][] = ['Baixo', 'Médio', 'Alto'];
 const NIVEL: RiscoJuridico['nivelRisco'][] = ['Baixo', 'Médio', 'Alto', 'Crítico'];
 const STATUS_OPCOES: RiscoJuridico['status'][] = ['Identificado', 'Em monitorização', 'Mitigado', 'Materializado', 'Encerrado'];
 
+const LIST_PATH = '/juridico/riscos';
+const NOVO_PATH = '/juridico/riscos/novo';
+
 export default function RiscosJuridicosPage() {
+  const navigate = useNavigate();
   const { riscos, addRisco, updateRisco, deleteRisco, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
@@ -79,9 +89,8 @@ export default function RiscosJuridicosPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
+  const prepareCreate = useCallback(() => {
     setEditing(null);
-    const nextId = Math.max(0, ...riscos.map(r => r.id)) + 1;
     const nextNum = Math.max(0, ...riscos.map(r => parseInt(r.codigo.replace(/\D/g, ''), 10) || 0)) + 1;
     setForm({
       empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
@@ -97,8 +106,30 @@ export default function RiscosJuridicosPage() {
       status: 'Identificado',
       dataIdentificacao: new Date().toISOString().slice(0, 10),
     });
-    setDialogOpen(true);
-  };
+  }, [empresaIdForNew, riscos, user?.nome]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({});
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (r: RiscoJuridico) => {
     setEditing(r);
@@ -133,6 +164,10 @@ export default function RiscosJuridicosPage() {
       else await addRisco(payload);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -301,13 +336,19 @@ export default function RiscosJuridicosPage() {
       )}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar risco jurídico' : 'Novo risco jurídico'}</DialogTitle>
-            <DialogDescription>Identificação e avaliação do risco.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Jurídico"
+          screenTitle={editing ? 'Editar risco jurídico' : 'Novo risco jurídico'}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar risco jurídico' : 'Novo risco jurídico',
+            'Identificação e avaliação do risco.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
             {currentEmpresaId === 'consolidado' && (
               <div className="space-y-2">
                 <Label>Empresa</Label>
@@ -404,13 +445,33 @@ export default function RiscosJuridicosPage() {
               <Textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} rows={2} placeholder="Opcional" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.codigo?.trim() || !form.titulo?.trim()}>
-              {editing ? 'Guardar' : 'Registar risco'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={!form.codigo?.trim() || !form.titulo?.trim()}>
+                {editing ? 'Guardar' : 'Registar risco'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.codigo?.trim() || !form.titulo?.trim()}
+                onClick={() => void save()}
+              >
+                {editing ? 'Guardar' : 'Registar risco'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { Evento } from '@/types';
@@ -12,12 +12,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { Label } from '@/components/ui/label';
 import { Search, Plus, Pencil, Trash2, Eye, CalendarDays, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NOTIF_TARGET_PROFILES = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'];
+
+const LIST_PATH = '/comunicacao-interna/eventos';
+const NOVO_PATH = '/comunicacao-interna/eventos/novo';
 
 const emptyForm: Omit<Evento, 'id' | 'empresaId'> = {
   titulo: '',
@@ -47,6 +55,41 @@ export default function EventosPage() {
 
   const [form, setForm] = useState<Omit<Evento, 'id' | 'empresaId'>>(emptyForm);
 
+  const prepareCreate = useCallback(() => {
+    if (!isAdmin) {
+      navigate(LIST_PATH, { replace: true });
+      return;
+    }
+    if (!empresaIdForMutation) {
+      toast.error('Para criar eventos, selecione uma empresa (não use “consolidado”).');
+      navigate(LIST_PATH, { replace: true });
+      return;
+    }
+    setEditing(null);
+    setForm({ ...emptyForm, dataInicio: new Date().toISOString() });
+  }, [empresaIdForMutation, isAdmin, navigate]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({ ...emptyForm, dataInicio: new Date().toISOString() });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return [...eventos]
@@ -63,9 +106,7 @@ export default function EventosPage() {
       toast.error('Para criar eventos, selecione uma empresa (não use “consolidado”).');
       return;
     }
-    setEditing(null);
-    setForm({ ...emptyForm, dataInicio: new Date().toISOString() });
-    setDialogOpen(true);
+    openCreateNavigateOrDialog();
   };
 
   const openEdit = (e: Evento) => {
@@ -164,6 +205,10 @@ export default function EventosPage() {
 
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute && !editing) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar evento.');
     }
@@ -262,14 +307,19 @@ export default function EventosPage() {
         )}
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar evento' : 'Novo evento'}</DialogTitle>
-            <DialogDescription>Defina data/hora, localização, tipo interno/externo e imagem.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Comunicação Interna"
+          screenTitle={editing ? 'Editar evento' : 'Novo evento'}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar evento' : 'Novo evento',
+            'Defina data/hora, localização, tipo interno/externo e imagem.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label>Título</Label>
               <Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
@@ -358,14 +408,28 @@ export default function EventosPage() {
               </div>
             </div>
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => void save()} className="bg-primary text-primary-foreground">
-              {editing ? 'Guardar alterações' : 'Criar evento'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} className="bg-primary text-primary-foreground">
+                {editing ? 'Guardar alterações' : 'Criar evento'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl bg-primary text-primary-foreground" onClick={() => void save()}>
+                {editing ? 'Guardar alterações' : 'Criar evento'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
     </div>
   );

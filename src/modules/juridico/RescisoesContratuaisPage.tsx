@@ -1,23 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { RescisaoContrato, TipoRescisao } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -29,9 +28,13 @@ import { Plus, FileText } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
+const LIST_PATH = '/juridico/rescisoes';
+const NOVO_PATH = '/juridico/rescisoes/novo';
+
 const TIPOS_RESCISAO: TipoRescisao[] = ['Resolução', 'Revogação', 'Caducidade'];
 
 export default function RescisoesContratuaisPage() {
+  const navigate = useNavigate();
   const { rescissoesContrato, addRescisaoContrato, contratos, empresas } = useData();
   const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -44,6 +47,48 @@ export default function RescisoesContratuaisPage() {
 
   const canEdit = user?.perfil === 'Admin';
   const pagination = useClientSidePagination({ items: rescissoesContrato, pageSize: 25 });
+
+  const prepareCreate = useCallback(() => {
+    const activos = contratos.filter(c => c.status !== 'Rescindido' && c.status !== 'Expirado');
+    const primeiroContrato = activos[0];
+    setForm({
+      contratoId: primeiroContrato?.id,
+      empresaId: primeiroContrato?.empresaId ?? 1,
+      tipo: 'Resolução',
+      motivoDetalhado: '',
+      dataRescisao: new Date().toISOString().slice(0, 10),
+      documentoPdf: '',
+    });
+  }, [contratos]);
+
+  const resetModal = useCallback(() => {
+    const activos = contratos.filter(c => c.status !== 'Rescindido' && c.status !== 'Expirado');
+    const primeiroContrato = activos[0];
+    setForm({
+      contratoId: primeiroContrato?.id,
+      empresaId: primeiroContrato?.empresaId ?? 1,
+      tipo: 'Resolução',
+      motivoDetalhado: '',
+      dataRescisao: new Date().toISOString().slice(0, 10),
+      documentoPdf: '',
+    });
+  }, [contratos]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const getContrato = (id: number) => contratos.find(c => c.id === id);
   const getEmpresaNome = (empresaId: number) =>
@@ -68,18 +113,7 @@ export default function RescisoesContratuaisPage() {
 
   const contratosActivos = contratos.filter(c => c.status !== 'Rescindido' && c.status !== 'Expirado');
 
-  const openCreate = () => {
-    const primeiroContrato = contratosActivos[0];
-    setForm({
-      contratoId: primeiroContrato?.id,
-      empresaId: primeiroContrato?.empresaId ?? 1,
-      tipo: 'Resolução',
-      motivoDetalhado: '',
-      dataRescisao: new Date().toISOString().slice(0, 10),
-      documentoPdf: '',
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const onContratoChange = (contratoIdStr: string) => {
     const cid = Number(contratoIdStr);
@@ -102,6 +136,10 @@ export default function RescisoesContratuaisPage() {
     try {
       await addRescisaoContrato(payload);
       setDialogOpen(false);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -246,14 +284,18 @@ export default function RescisoesContratuaisPage() {
 
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Registar rescisão contratual</DialogTitle>
-            <DialogDescription>
-              Associa a rescisão a um contrato e regista tipo, data e motivo. Opcionalmente indica o nome do ficheiro PDF do documento.
-            </DialogDescription>
-          </DialogHeader>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Jurídico"
+          screenTitle="Registar rescisão contratual"
+          desktopContentClassName="max-w-lg"
+          desktopHeader={mobileCreateDesktopHeader(
+            'Registar rescisão contratual',
+            'Associa a rescisão a um contrato e regista tipo, data e motivo. Opcionalmente indica o nome do ficheiro PDF do documento.',
+          )}
+          formBody={
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Contrato</Label>
@@ -294,13 +336,34 @@ export default function RescisoesContratuaisPage() {
               <Input value={form.documentoPdf} onChange={e => setForm(f => ({ ...f, documentoPdf: e.target.value }))} placeholder="Ex.: rescisao_CONT-2024-0012.pdf" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.contratoId || !form.motivoDetalhado?.trim() || !form.dataRescisao}>
-              Registar rescisão
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={() => void save()}
+                disabled={!form.contratoId || !form.motivoDetalhado?.trim() || !form.dataRescisao}
+              >
+                Registar rescisão
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.contratoId || !form.motivoDetalhado?.trim() || !form.dataRescisao}
+                onClick={() => void save()}
+              >
+                Registar rescisão
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
     </div>
   );

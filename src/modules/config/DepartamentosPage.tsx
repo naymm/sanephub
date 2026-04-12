@@ -1,32 +1,60 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Departamento } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
+const LIST_PATH = '/configuracoes/departamentos';
+const NOVO_PATH = '/configuracoes/departamentos/novo';
+
 export default function DepartamentosPage() {
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { departamentos, addDepartamento, updateDepartamento, deleteDepartamento } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Departamento | null>(null);
   const [form, setForm] = useState({ nome: '' });
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({ nome: '' });
+  }, []);
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({ nome: '' });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const filtered = departamentos.filter(d =>
     d.nome.toLowerCase().includes(search.toLowerCase())
@@ -40,11 +68,7 @@ export default function DepartamentosPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ nome: '' });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (d: Departamento) => {
     setEditing(d);
@@ -60,6 +84,10 @@ export default function DepartamentosPage() {
       else await addDepartamento({ nome });
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -73,6 +101,21 @@ export default function DepartamentosPage() {
       toast.error(e instanceof Error ? e.message : 'Erro ao remover');
     }
   };
+
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="space-y-2">
+        <Label>Nome</Label>
+        <Input
+          value={form.nome}
+          onChange={e => setForm({ nome: e.target.value })}
+          placeholder="ex: Tecnologia"
+        />
+      </div>
+    </div>
+  );
+
+  const title = editing ? 'Editar departamento' : 'Novo departamento';
 
   if (currentUser?.perfil !== 'Admin') {
     return (
@@ -167,29 +210,36 @@ export default function DepartamentosPage() {
       )}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar departamento' : 'Novo departamento'}</DialogTitle>
-            <DialogDescription>Indique o nome do departamento.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input
-                value={form.nome}
-                onChange={e => setForm({ nome: e.target.value })}
-                placeholder="ex: Tecnologia"
-              />
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Configurações"
+          screenTitle={title}
+          desktopContentClassName="max-w-sm max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(title, 'Indique o nome do departamento.')}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={!form.nome.trim()}>
+                {editing ? 'Guardar' : 'Criar'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={!form.nome.trim()} onClick={() => void save()}>
+                {editing ? 'Guardar' : 'Criar'}
+              </Button>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.nome.trim()}>
-              {editing ? 'Guardar' : 'Criar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
     </div>
   );

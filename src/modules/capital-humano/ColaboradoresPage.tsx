@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
@@ -29,7 +30,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, User, X, GraduationCap, Briefcase } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  Pencil,
+  Eye,
+  Trash2,
+  UploadCloud,
+  User,
+  X,
+  GraduationCap,
+  Briefcase,
+  ArrowRight,
+} from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { cn } from '@/lib/utils';
@@ -313,6 +326,16 @@ export default function ColaboradoresPage() {
   const { usuarios, user } = useAuth();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isNovoRoute = location.pathname === '/capital-humano/colaboradores/novo';
+  const [viewportMaxMd, setViewportMaxMd] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768,
+  );
+  const [mobileWizardStep, setMobileWizardStep] = useState(1);
+  const showMobileNovoWizard = isNovoRoute && viewportMaxMd;
+  const MOBILE_WIZARD_TOTAL = 3;
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusColaborador | 'todos'>('todos');
   const [deptFilter, setDeptFilter] = useState<string>('todos');
@@ -361,10 +384,24 @@ export default function ColaboradoresPage() {
     [empresas],
   );
 
+  useEffect(() => {
+    const onResize = () => setViewportMaxMd(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isNovoRoute) return;
+    if (window.innerWidth >= 768) {
+      navigate('/capital-humano/colaboradores', { replace: true });
+    }
+  }, [isNovoRoute, navigate]);
+
   const empresaAnteriorModalRef = useRef<number | null>(null);
+  const formModalActive = dialogOpen || showMobileNovoWizard;
   /** Ao mudar de empresa no formulário, remove zonas que não pertencem à nova empresa (não altera na abertura inicial). */
   useEffect(() => {
-    if (!dialogOpen) {
+    if (!formModalActive) {
       empresaAnteriorModalRef.current = null;
       return;
     }
@@ -378,7 +415,7 @@ export default function ColaboradoresPage() {
     if (anterior === eid) return;
     empresaAnteriorModalRef.current = eid;
     setFormGeofenceIds(prev => prev.filter(id => geofences.some(g => g.id === id && g.empresaId === eid)));
-  }, [form.empresaId, dialogOpen, geofences]);
+  }, [form.empresaId, formModalActive, geofences]);
 
   const usePaginated = isSupabaseConfigured() && !!supabase;
   const [page, setPage] = useState(0);
@@ -552,7 +589,7 @@ export default function ColaboradoresPage() {
     setFormGeofenceIds([]);
   }, [empresaIdForNew, limparPreviewFoto]);
 
-  const openCreate = () => {
+  const initCreateForm = useCallback(() => {
     setEditing(null);
     setAssociarUtilizadorId(null);
     setNovoColaboradorAnexos([]);
@@ -568,6 +605,45 @@ export default function ColaboradoresPage() {
     setSubsidioParaAdicionar('__none__');
     setEditandoSubsidio(null);
     setFormGeofenceIds([]);
+  }, [empresaIdForNew, limparPreviewFoto]);
+
+  const wizardInitRef = useRef(false);
+  const mobileWizardSessionRef = useRef(false);
+
+  useEffect(() => {
+    if (showMobileNovoWizard) {
+      if (!wizardInitRef.current) {
+        wizardInitRef.current = true;
+        initCreateForm();
+        setMobileWizardStep(1);
+      }
+      mobileWizardSessionRef.current = true;
+      setDialogOpen(true);
+    } else {
+      wizardInitRef.current = false;
+      setMobileWizardStep(1);
+      if (mobileWizardSessionRef.current) {
+        mobileWizardSessionRef.current = false;
+        setDialogOpen(false);
+        resetModalState();
+      }
+    }
+  }, [showMobileNovoWizard, initCreateForm, resetModalState]);
+
+  const closeMobileWizard = useCallback(() => {
+    mobileWizardSessionRef.current = false;
+    wizardInitRef.current = false;
+    setDialogOpen(false);
+    resetModalState();
+    navigate('/capital-humano/colaboradores');
+  }, [navigate, resetModalState]);
+
+  const openCreate = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      navigate('/capital-humano/colaboradores/novo');
+      return;
+    }
+    initCreateForm();
     setDialogOpen(true);
   };
 
@@ -876,6 +952,11 @@ export default function ColaboradoresPage() {
       setFotoPerfilRemovida(false);
       limparPreviewFoto();
       setDialogOpen(false);
+      if (location.pathname === '/capital-humano/colaboradores/novo') {
+        mobileWizardSessionRef.current = false;
+        wizardInitRef.current = false;
+        navigate('/capital-humano/colaboradores', { replace: true });
+      }
       setEditing(null);
       setAssociarUtilizadorId(null);
       setNovoColaboradorAnexos([]);
@@ -911,6 +992,671 @@ export default function ColaboradoresPage() {
       toast.error(e instanceof Error ? e.message : 'Erro ao remover');
     }
   };
+
+  const showWizardStep = (n: 1 | 2 | 3) => !showMobileNovoWizard || mobileWizardStep === n;
+
+  const mobileWizardStepMeta = [
+    { kicker: 'Passo 1/3', title: 'Dados pessoais' },
+    { kicker: 'Passo 2/3', title: 'Contrato e remuneração' },
+    { kicker: 'Passo 3/3', title: 'Contactos e conclusão' },
+  ] as const;
+  const stepInfo = mobileWizardStepMeta[mobileWizardStep - 1] ?? mobileWizardStepMeta[0];
+
+  const colaboradorFormGridEl = () => (
+    <div className="grid gap-4 py-2">
+      {showWizardStep(1) && (
+      <>
+      <div className="space-y-2">
+        <Label>Empresa</Label>
+        <Select
+          value={form.empresaId != null && form.empresaId > 0 ? String(form.empresaId) : ''}
+          onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Seleccionar empresa" />
+          </SelectTrigger>
+          <SelectContent>
+            {empresasActivas.map(e => (
+              <SelectItem key={e.id} value={String(e.id)}>
+                {e.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          O colaborador fica associado à empresa seleccionada (transferência entre empresas). As zonas de ponto permitidas devem
+          pertencer à mesma empresa; ao mudar de empresa, as zonas incompatíveis são removidas automaticamente.
+        </p>
+      </div>
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-start">
+        <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-full border-2 border-border bg-background shadow-sm">
+          {fotoMostrada ? (
+            <img src={fotoMostrada} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <User className="h-14 w-14 opacity-60" aria-hidden />
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 text-center sm:text-left">
+          <Label>Fotografia de perfil</Label>
+          <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => fotoPerfilInputRef.current?.click()}
+            >
+              Escolher imagem…
+            </Button>
+            {(fotoPreviewObjectUrl || (form.fotoPerfilUrl && !fotoPerfilRemovida)) && (
+              <Button type="button" variant="ghost" size="sm" onClick={removerFotoPerfil}>
+                Remover foto
+              </Button>
+            )}
+          </div>
+          <input
+            ref={fotoPerfilInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              onSelectFotoPerfil(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <p className="text-xs text-muted-foreground">JPEG, PNG, GIF ou WebP · máximo 3 MB</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Nome completo</Label>
+          <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Data nascimento</Label>
+          <Input type="date" value={form.dataNascimento} onChange={e => setForm(f => ({ ...f, dataNascimento: e.target.value }))} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Género</Label>
+          <Select value={form.genero} onValueChange={v => setForm(f => ({ ...f, genero: v as Genero }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {GENERO_OPTIONS.map(g => (
+                <SelectItem key={g} value={g}>{g === 'M' ? 'Masculino' : g === 'F' ? 'Feminino' : 'Outro'}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Estado civil</Label>
+          <Select
+            value={form.estadoCivil}
+            onValueChange={v => setForm(f => ({ ...f, estadoCivil: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar estado civil" />
+            </SelectTrigger>
+            <SelectContent>
+              {estadoCivilSelectOptions.map(ec => (
+                <SelectItem key={ec} value={ec}>
+                  {ec}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="space-y-2">
+          <Label>BI</Label>
+          <Input value={form.bi} onChange={e => setForm(f => ({ ...f, bi: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>NIF</Label>
+          <Input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>INSS</Label>
+          <Input value={form.niss} onChange={e => setForm(f => ({ ...f, niss: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Número mecanográfico</Label>
+          <Input
+            value={form.numeroMec ?? ''}
+            onChange={e => setForm(f => ({ ...f, numeroMec: e.target.value }))}
+            placeholder="Nº mec."
+            className="font-mono"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Nacionalidade</Label>
+          <Select
+            value={form.nacionalidade}
+            onValueChange={(v) => setForm((f) => ({ ...f, nacionalidade: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar nacionalidade" />
+            </SelectTrigger>
+            <SelectContent>
+              {nacionalidadeSelectOptions.map((n) => (
+                <SelectItem key={n} value={n}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Nível académico</Label>
+          <Select
+            value={form.nivelAcademico ?? 'Ensino Secundário'}
+            onValueChange={(v) => setForm((f) => ({ ...f, nivelAcademico: v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar nível académico" />
+            </SelectTrigger>
+            <SelectContent>
+              {nivelAcademicoSelectOptions.map((n) => (
+                <SelectItem key={n} value={n}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Endereço</Label>
+        <Input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} />
+      </div>
+      </>
+      )}
+      {showWizardStep(2) && (
+      <>
+      <hr className="border-border/80" />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Cargo</Label>
+          <Select value={form.cargo} onValueChange={v => setForm(f => ({ ...f, cargo: v }))}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar cargo" />
+            </SelectTrigger>
+            <SelectContent>
+              {cargoSelectOptions.map(cg => (
+                <SelectItem key={cg} value={cg}>
+                  {cg}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Departamento</Label>
+          {departamentoSelectOptions.length === 0 ? (
+            <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">
+              Não há departamentos no catálogo. Cadastre em Configurações → Departamentos.
+            </p>
+          ) : null}
+          <Select
+            value={form.departamento.trim() ? form.departamento : DEPARTAMENTO_SELECT_VAZIO}
+            onValueChange={v =>
+              setForm(f => ({ ...f, departamento: v === DEPARTAMENTO_SELECT_VAZIO ? '' : v }))
+            }
+            disabled={departamentoSelectOptions.length === 0}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar departamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEPARTAMENTO_SELECT_VAZIO}>— Seleccionar —</SelectItem>
+              {departamentoSelectOptions.map(nome => (
+                <SelectItem key={nome} value={nome}>
+                  {nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-3">
+        <div>
+          <Label className="text-base">Horário de trabalho (ponto)</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Entrada e tolerância de 15 min definem o limite para contagem de atrasos; o fim do horário serve de referência à
+            saída. Quem tem isenção de horário não acumula atrasos nem recebe faltas automáticas por atraso.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Hora normal de entrada</Label>
+            <Input
+              type="time"
+              step={60}
+              value={form.horarioEntrada ?? '08:00'}
+              onChange={e => setForm(f => ({ ...f, horarioEntrada: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Até (fim do horário)</Label>
+            <Input
+              type="time"
+              step={60}
+              value={form.horarioSaida ?? '17:00'}
+              onChange={e => setForm(f => ({ ...f, horarioSaida: e.target.value }))}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Isenção de horário</Label>
+          <Select
+            value={form.isencaoHorario === true ? 'sim' : 'nao'}
+            onValueChange={(v) => setForm(f => ({ ...f, isencaoHorario: v === 'sim' }))}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nao">Não — atrasos contam para o mês</SelectItem>
+              <SelectItem value="sim">Sim — sem acumulação de atrasos</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+        <Label>Zonas de ponto permitidas</Label>
+        <p className="text-xs text-muted-foreground">
+          Cadastre zonas em Capital Humano → Zonas de trabalho. Só aparecem zonas da empresa deste colaborador.
+        </p>
+        {geofencesForFormEmpresa.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhuma zona para esta empresa.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {geofencesForFormEmpresa.map(g => (
+              <label
+                key={g.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-border/50 bg-background/80 px-3 py-2 text-sm"
+              >
+                <Checkbox
+                  checked={formGeofenceIds.includes(g.id)}
+                  onCheckedChange={checked => {
+                    setFormGeofenceIds(prev =>
+                      checked === true
+                        ? [...new Set([...prev, g.id])]
+                        : prev.filter(x => x !== g.id),
+                    );
+                  }}
+                />
+                <span className="min-w-0 flex-1">
+                  {g.nome}
+                  {!g.activo ? <span className="text-muted-foreground"> (inactiva)</span> : null}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Data admissão</Label>
+          <Input type="date" value={form.dataAdmissao} onChange={e => setForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Tipo contrato</Label>
+          <Select value={form.tipoContrato} onValueChange={v => setForm(f => ({ ...f, tipoContrato: v as TipoContrato }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TIPO_CONTRATO_OPTIONS.map(t => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {form.tipoContrato !== 'Efectivo' && (
+        <div className="space-y-2">
+          <Label>Data fim contrato</Label>
+          <Input type="date" value={form.dataFimContrato ?? ''} onChange={e => setForm(f => ({ ...f, dataFimContrato: e.target.value || undefined }))} />
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Salário base (Kz)</Label>
+          <Input
+            inputMode="decimal"
+            placeholder="Ex: 400.000,00"
+            value={salarioBaseText}
+            onChange={(e) => {
+              const v = e.target.value;
+              // permite só dígitos, espaços e separadores comuns
+              if (v && !/^[0-9\s.,]*$/.test(v)) return;
+              const nextText = formatKzTyping(v);
+              setSalarioBaseText(nextText);
+              const parsed = parseKzInput(nextText);
+              setForm(f => ({ ...f, salarioBase: Number.isFinite(parsed) ? parsed : f.salarioBase }));
+            }}
+            onBlur={() => {
+              if (!salarioBaseText.trim()) {
+                setForm(f => ({ ...f, salarioBase: 0 }));
+                setSalarioBaseText('');
+                return;
+              }
+              const parsed = parseKzInput(salarioBaseText);
+              if (!Number.isFinite(parsed) || parsed < 0) {
+                toast.error('Salário base inválido.');
+                setSalarioBaseText(formatKzInput(form.salarioBase ?? 0));
+                return;
+              }
+              setForm(f => ({ ...f, salarioBase: parsed }));
+              setSalarioBaseText(formatKzInput(parsed));
+            }}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>IBAN</Label>
+          <Input value={form.iban} onChange={e => setForm(f => ({ ...f, iban: e.target.value }))} />
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-3">
+          {subsidiosAtivos.length === 0 && (
+            <p className="text-xs text-muted-foreground">Nenhum subsídio adicionado.</p>
+          )}
+          {subsidiosAtivos.map(key => {
+            const label = SUBSIDIOS_CONFIG.find(x => x.key === key)?.label ?? key;
+            const rawValue = Number((form as any)[key] ?? 0);
+            return (
+              <div key={key} className="flex min-w-[320px] items-center gap-3">
+                <div className="flex h-10 flex-1 items-center rounded-lg bg-muted/30 px-4">
+                  <p className="min-w-0 truncate text-sm font-medium">{label}</p>
+                </div>
+
+                <div className="flex h-10 w-44 items-center justify-end">
+                  {editandoSubsidio === key ? (
+                    <Input
+                      placeholder="—"
+                      inputMode="decimal"
+                      value={subsidioTextByKey[key] ?? (rawValue === 0 ? '' : formatKzTyping(String(rawValue)))}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v && !/^[0-9\s.,]*$/.test(v)) return;
+                        const nextText = formatKzTyping(v);
+                        setSubsidioTextByKey(prev => ({ ...prev, [key]: nextText }));
+                        const parsed = parseKzInput(nextText);
+                        setForm(f => ({ ...f, [key]: Number.isFinite(parsed) ? parsed : 0 } as any));
+                      }}
+                      onBlur={() => {
+                        const txt = subsidioTextByKey[key] ?? '';
+                        if (!txt.trim()) {
+                          setForm(f => ({ ...f, [key]: 0 } as any));
+                          setSubsidioTextByKey(prev => ({ ...prev, [key]: '' }));
+                          setEditandoSubsidio(null);
+                          return;
+                        }
+                        const parsed = parseKzInput(txt);
+                        if (!Number.isFinite(parsed) || parsed < 0) {
+                          toast.error('Valor de subsídio inválido.');
+                          setSubsidioTextByKey(prev => ({ ...prev, [key]: formatKzInput(rawValue) }));
+                          setEditandoSubsidio(null);
+                          return;
+                        }
+                        setForm(f => ({ ...f, [key]: parsed } as any));
+                        setSubsidioTextByKey(prev => ({ ...prev, [key]: formatKzInput(parsed) }));
+                        setEditandoSubsidio(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') setEditandoSubsidio(null);
+                        if (e.key === 'Enter') setEditandoSubsidio(null);
+                      }}
+                      className="w-full text-right"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm text-right hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      onClick={() => {
+                        setSubsidioTextByKey(prev => ({
+                          ...prev,
+                          [key]: rawValue === 0 ? '' : formatKzInput(rawValue),
+                        }));
+                        setEditandoSubsidio(key);
+                      }}
+                      aria-label={`Editar ${label}`}
+                    >
+                      {rawValue === 0 ? <span className="text-muted-foreground">—</span> : formatKz(rawValue)}
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-destructive/10 text-destructive"
+                  onClick={() => {
+                    setSubsidiosAtivos(prev => prev.filter(k => k !== key));
+                    setEditandoSubsidio(cur => (cur === key ? null : cur));
+                    setForm(f => {
+                      const next = { ...f, [key]: 0 } as any;
+                      const detailedSum = SUBSIDIOS_DYNAMIC_KEYS.reduce((acc, k) => acc + (next[k] ?? 0), 0);
+                      next.outrosSubsidios = detailedSum;
+                      return next;
+                    });
+                  }}
+                  aria-label={`Remover ${label}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end">
+          <Select
+            value={subsidioParaAdicionar}
+            onValueChange={v => {
+              if (v === '__none__') return;
+              const k = v as SubsidioKey;
+              setSubsidiosAtivos(prev => (prev.includes(k) ? prev : [...prev, k]));
+              setSubsidioParaAdicionar('__none__');
+              setForm(f => ({ ...f, [k]: (f as any)[k] ?? 0 } as any));
+              setSubsidioTextByKey(prev => ({ ...prev, [k]: '' }));
+              setEditandoSubsidio(k);
+            }}
+          >
+            <SelectTrigger className="w-auto !border-0 !bg-primary !text-primary-foreground hover:!bg-primary/90 [&>svg]:hidden">
+              <SelectValue placeholder="Adicionar Subsídios" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">
+                Adicionar Subsídios
+              </SelectItem>
+              {SUBSIDIOS_ALL_KEYS.filter(k => !subsidiosAtivos.includes(k)).map(k => {
+                const label = SUBSIDIOS_CONFIG.find(x => x.key === k)?.label ?? k;
+                return (
+                  <SelectItem key={k} value={k}>
+                    {label}
+                  </SelectItem>
+                );
+              })}
+              {SUBSIDIOS_ALL_KEYS.filter(k => !subsidiosAtivos.includes(k)).length === 0 && (
+                <SelectItem value="__todos_ja_adicionados__" disabled>
+                  Todos já adicionados
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      </>
+      )}
+      {showWizardStep(3) && (
+      <>
+      <hr className="border-border/80" />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Email corporativo</Label>
+          <Input type="email" value={form.emailCorporativo} onChange={e => setForm(f => ({ ...f, emailCorporativo: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Email pessoal (opcional)</Label>
+          <Input type="email" value={form.emailPessoal ?? ''} onChange={e => setForm(f => ({ ...f, emailPessoal: e.target.value || undefined }))} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Telefone principal</Label>
+          <Input value={form.telefonePrincipal} onChange={e => setForm(f => ({ ...f, telefonePrincipal: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Telefone alternativo (opcional)</Label>
+          <Input value={form.telefoneAlternativo ?? ''} onChange={e => setForm(f => ({ ...f, telefoneAlternativo: e.target.value || undefined }))} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Contacto emergência - Nome</Label>
+          <Input value={form.contactoEmergenciaNome ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaNome: e.target.value || undefined }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Contacto emergência - Telefone</Label>
+          <Input value={form.contactoEmergenciaTelefone ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaTelefone: e.target.value || undefined }))} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Status</Label>
+        <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as StatusColaborador }))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map(s => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {!editing && isSupabaseConfigured() && (
+        <div className="space-y-3 border-t border-border/80 pt-4">
+          <Label className="text-base">Pasta e documentos do colaborador</Label>
+          <p className="text-xs text-muted-foreground">
+            Ao guardar, é criada a subpasta em{' '}
+            <strong>… / Colaboradores / {form.nome.trim() ? nomePastaColaboradorMaiusculo(form.nome) : 'PRIMEIRO ÚLTIMO'}</strong>{' '}
+            (primeiro e último nome em maiúsculas), mesmo sem ficheiros — fica vazia até carregar documentos abaixo ou na Gestão documental.
+            Requer «Capital Humano» (ou «RH») e «Colaboradores» já existentes na Gestão documental.
+          </p>
+          <div
+            className={cn(
+              'cursor-pointer rounded-lg border-2 border-dashed px-3 py-6 text-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              docDragActive
+                ? 'border-primary bg-primary/10'
+                : 'border-border/80 bg-muted/20 hover:border-muted-foreground/40 hover:bg-muted/30',
+            )}
+            onClick={() => novoDocInputRef.current?.click()}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              docDragDepth.current += 1;
+              setDocDragActive(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              docDragDepth.current -= 1;
+              if (docDragDepth.current <= 0) {
+                docDragDepth.current = 0;
+                setDocDragActive(false);
+              }
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              docDragDepth.current = 0;
+              setDocDragActive(false);
+              applyNovoColaboradorFiles(Array.from(e.dataTransfer.files));
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(ev) => {
+              if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                novoDocInputRef.current?.click();
+              }
+            }}
+          >
+            <input
+              ref={novoDocInputRef}
+              type="file"
+              multiple
+              className="sr-only"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(e) => {
+                applyNovoColaboradorFiles(e.target.files ? Array.from(e.target.files) : []);
+                e.target.value = '';
+              }}
+            />
+            <UploadCloud
+              className={cn('mx-auto h-9 w-9', docDragActive ? 'text-primary' : 'text-muted-foreground')}
+              aria-hidden
+            />
+            <p className="mt-2 text-sm font-medium">Arraste documentos aqui ou clique para seleccionar</p>
+            <p className="mt-1 text-xs text-muted-foreground">PDF, Word ou Excel · vários ficheiros</p>
+          </div>
+          {novoColaboradorAnexos.length > 0 && (
+            <ul className="max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-border/60 bg-background/50 p-2 text-xs">
+              {novoColaboradorAnexos.map((f, i) => (
+                <li key={`${i}-${f.name}-${f.size}`} className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate font-medium">{f.name}</span>
+                  <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
+                    {extDoc(f.name).toUpperCase()} · {formatBytesDoc(f.size)}
+                    <button
+                      type="button"
+                      className="rounded p-0.5 text-destructive hover:bg-destructive/10"
+                      aria-label={`Remover ${f.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNovoColaboradorAnexos((prev) => prev.filter((_, j) => j !== i));
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {isSupabaseConfigured() && usuarios.length > 0 && (
+        <div className="space-y-2 border-t border-border/80 pt-4">
+          <Label>Associar a utilizador (opcional)</Label>
+          <Select
+            value={associarUtilizadorId != null ? String(associarUtilizadorId) : 'nenhum'}
+            onValueChange={v => setAssociarUtilizadorId(v === 'nenhum' ? null : Number(v))}
+          >
+            <SelectTrigger><SelectValue placeholder="Nenhum — colaborador sem conta de acesso" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nenhum">Nenhum</SelectItem>
+              {usuarios.map(u => (
+                <SelectItem key={u.id} value={String(u.id)}>{u.nome} — {u.email}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Se associar a um utilizador, ele verá no Portal (Meus Recibos, Férias, etc.) os dados deste colaborador.
+          </p>
+        </div>
+      )}
+      </>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -1118,671 +1864,140 @@ export default function ColaboradoresPage() {
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
-          if (!open) resetModalState();
+          if (!open) {
+            if (showMobileNovoWizard) {
+              closeMobileWizard();
+              return;
+            }
+            resetModalState();
+          }
           setDialogOpen(open);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar colaborador' : 'Novo colaborador'}</DialogTitle>
-            <DialogDescription>
-              {editing
-                ? 'Dados do colaborador. Para o transferir para outra empresa, altere «Empresa» abaixo e guarde.'
-                : 'Dados do colaborador. Pode anexar documentos (arrastar ou clicar) — serão guardados na pasta «Colaboradores» já existente em Gestão documental (Capital Humano ou RH), dentro de uma subpasta com o nome do colaborador em maiúsculas.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Empresa</Label>
-              <Select
-                value={form.empresaId != null && form.empresaId > 0 ? String(form.empresaId) : ''}
-                onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {empresasActivas.map(e => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                O colaborador fica associado à empresa seleccionada (transferência entre empresas). As zonas de ponto permitidas devem
-                pertencer à mesma empresa; ao mudar de empresa, as zonas incompatíveis são removidas automaticamente.
-              </p>
-            </div>
-            <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-start">
-              <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-full border-2 border-border bg-background shadow-sm">
-                {fotoMostrada ? (
-                  <img src={fotoMostrada} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                    <User className="h-14 w-14 opacity-60" aria-hidden />
-                  </div>
-                )}
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col gap-2 text-center sm:text-left">
-                <Label>Fotografia de perfil</Label>
-                <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => fotoPerfilInputRef.current?.click()}
-                  >
-                    Escolher imagem…
-                  </Button>
-                  {(fotoPreviewObjectUrl || (form.fotoPerfilUrl && !fotoPerfilRemovida)) && (
-                    <Button type="button" variant="ghost" size="sm" onClick={removerFotoPerfil}>
-                      Remover foto
-                    </Button>
-                  )}
-                </div>
-                <input
-                  ref={fotoPerfilInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    onSelectFotoPerfil(e.target.files);
-                    e.target.value = '';
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">JPEG, PNG, GIF ou WebP · máximo 3 MB</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nome completo</Label>
-                <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Data nascimento</Label>
-                <Input type="date" value={form.dataNascimento} onChange={e => setForm(f => ({ ...f, dataNascimento: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Género</Label>
-                <Select value={form.genero} onValueChange={v => setForm(f => ({ ...f, genero: v as Genero }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {GENERO_OPTIONS.map(g => (
-                      <SelectItem key={g} value={g}>{g === 'M' ? 'Masculino' : g === 'F' ? 'Feminino' : 'Outro'}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Estado civil</Label>
-                <Select
-                  value={form.estadoCivil}
-                  onValueChange={v => setForm(f => ({ ...f, estadoCivil: v }))}
+        <DialogContent
+          className={cn(
+            showMobileNovoWizard
+              ? 'fixed inset-0 left-0 top-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none data-[state=closed]:slide-out-to-top-[0%] data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 [&>button.absolute]:hidden'
+              : 'max-w-2xl max-h-[90vh] overflow-y-auto',
+          )}
+          onPointerDownOutside={(e) => {
+            if (showMobileNovoWizard) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (showMobileNovoWizard) {
+              e.preventDefault();
+              closeMobileWizard();
+            }
+          }}
+        >
+          {showMobileNovoWizard ? (
+            <>
+              <div className="relative shrink-0 border-b border-border/40 bg-gradient-to-br from-[hsl(var(--navy))] to-[hsl(var(--navy-lighter))] px-4 pb-10 pt-[max(0.45rem,env(safe-area-inset-top,0px))] text-white shadow-md backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={() => closeMobileWizard()}
+                  className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
+                  aria-label="Fechar"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar estado civil" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {estadoCivilSelectOptions.map(ec => (
-                      <SelectItem key={ec} value={ec}>
-                        {ec}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <div className="space-y-2">
-                <Label>BI</Label>
-                <Input value={form.bi} onChange={e => setForm(f => ({ ...f, bi: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>NIF</Label>
-                <Input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>INSS</Label>
-                <Input value={form.niss} onChange={e => setForm(f => ({ ...f, niss: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Número mecanográfico</Label>
-                <Input
-                  value={form.numeroMec ?? ''}
-                  onChange={e => setForm(f => ({ ...f, numeroMec: e.target.value }))}
-                  placeholder="Nº mec."
-                  className="font-mono"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nacionalidade</Label>
-                <Select
-                  value={form.nacionalidade}
-                  onValueChange={(v) => setForm((f) => ({ ...f, nacionalidade: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar nacionalidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {nacionalidadeSelectOptions.map((n) => (
-                      <SelectItem key={n} value={n}>
-                        {n}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Nível académico</Label>
-                <Select
-                  value={form.nivelAcademico ?? 'Ensino Secundário'}
-                  onValueChange={(v) => setForm((f) => ({ ...f, nivelAcademico: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar nível académico" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {nivelAcademicoSelectOptions.map((n) => (
-                      <SelectItem key={n} value={n}>
-                        {n}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Endereço</Label>
-              <Input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} />
-            </div>
-            <hr className="border-border/80" />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Cargo</Label>
-                <Select value={form.cargo} onValueChange={v => setForm(f => ({ ...f, cargo: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar cargo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cargoSelectOptions.map(cg => (
-                      <SelectItem key={cg} value={cg}>
-                        {cg}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Departamento</Label>
-                {departamentoSelectOptions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">
-                    Não há departamentos no catálogo. Cadastre em Configurações → Departamentos.
-                  </p>
-                ) : null}
-                <Select
-                  value={form.departamento.trim() ? form.departamento : DEPARTAMENTO_SELECT_VAZIO}
-                  onValueChange={v =>
-                    setForm(f => ({ ...f, departamento: v === DEPARTAMENTO_SELECT_VAZIO ? '' : v }))
-                  }
-                  disabled={departamentoSelectOptions.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar departamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={DEPARTAMENTO_SELECT_VAZIO}>— Seleccionar —</SelectItem>
-                    {departamentoSelectOptions.map(nome => (
-                      <SelectItem key={nome} value={nome}>
-                        {nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-3">
-              <div>
-                <Label className="text-base">Horário de trabalho (ponto)</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Entrada e tolerância de 15 min definem o limite para contagem de atrasos; o fim do horário serve de referência à
-                  saída. Quem tem isenção de horário não acumula atrasos nem recebe faltas automáticas por atraso.
+                  <X className="h-5 w-5" />
+                </button>
+                <p className="text-center text-xs font-medium uppercase tracking-wider text-white/90">
+                  Capital Humano
                 </p>
+                <h2 className="text-center text-2xl font-bold leading-tight">Novo colaborador</h2>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Hora normal de entrada</Label>
-                  <Input
-                    type="time"
-                    step={60}
-                    value={form.horarioEntrada ?? '08:00'}
-                    onChange={e => setForm(f => ({ ...f, horarioEntrada: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Até (fim do horário)</Label>
-                  <Input
-                    type="time"
-                    step={60}
-                    value={form.horarioSaida ?? '17:00'}
-                    onChange={e => setForm(f => ({ ...f, horarioSaida: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Isenção de horário</Label>
-                <Select
-                  value={form.isencaoHorario === true ? 'sim' : 'nao'}
-                  onValueChange={(v) => setForm(f => ({ ...f, isencaoHorario: v === 'sim' }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nao">Não — atrasos contam para o mês</SelectItem>
-                    <SelectItem value="sim">Sim — sem acumulação de atrasos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
-              <Label>Zonas de ponto permitidas</Label>
-              <p className="text-xs text-muted-foreground">
-                Cadastre zonas em Capital Humano → Zonas de trabalho. Só aparecem zonas da empresa deste colaborador.
-              </p>
-              {geofencesForFormEmpresa.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhuma zona para esta empresa.</p>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {geofencesForFormEmpresa.map(g => (
-                    <label
-                      key={g.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-md border border-border/50 bg-background/80 px-3 py-2 text-sm"
+              <div className="relative -mt-6 flex min-h-0 flex-1 flex-col rounded-t-3xl bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.07)]">
+                <div className="shrink-0 border-b border-border/60 bg-background px-4 pb-3 pt-4">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-primary/40 bg-primary/5 text-sm font-bold text-primary"
+                      aria-hidden
                     >
-                      <Checkbox
-                        checked={formGeofenceIds.includes(g.id)}
-                        onCheckedChange={checked => {
-                          setFormGeofenceIds(prev =>
-                            checked === true
-                              ? [...new Set([...prev, g.id])]
-                              : prev.filter(x => x !== g.id),
-                          );
-                        }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        {g.nome}
-                        {!g.activo ? <span className="text-muted-foreground"> (inactiva)</span> : null}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Data admissão</Label>
-                <Input type="date" value={form.dataAdmissao} onChange={e => setForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo contrato</Label>
-                <Select value={form.tipoContrato} onValueChange={v => setForm(f => ({ ...f, tipoContrato: v as TipoContrato }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPO_CONTRATO_OPTIONS.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {form.tipoContrato !== 'Efectivo' && (
-              <div className="space-y-2">
-                <Label>Data fim contrato</Label>
-                <Input type="date" value={form.dataFimContrato ?? ''} onChange={e => setForm(f => ({ ...f, dataFimContrato: e.target.value || undefined }))} />
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Salário base (Kz)</Label>
-                <Input
-                  inputMode="decimal"
-                  placeholder="Ex: 400.000,00"
-                  value={salarioBaseText}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    // permite só dígitos, espaços e separadores comuns
-                    if (v && !/^[0-9\s.,]*$/.test(v)) return;
-                    const nextText = formatKzTyping(v);
-                    setSalarioBaseText(nextText);
-                    const parsed = parseKzInput(nextText);
-                    setForm(f => ({ ...f, salarioBase: Number.isFinite(parsed) ? parsed : f.salarioBase }));
-                  }}
-                  onBlur={() => {
-                    if (!salarioBaseText.trim()) {
-                      setForm(f => ({ ...f, salarioBase: 0 }));
-                      setSalarioBaseText('');
-                      return;
-                    }
-                    const parsed = parseKzInput(salarioBaseText);
-                    if (!Number.isFinite(parsed) || parsed < 0) {
-                      toast.error('Salário base inválido.');
-                      setSalarioBaseText(formatKzInput(form.salarioBase ?? 0));
-                      return;
-                    }
-                    setForm(f => ({ ...f, salarioBase: parsed }));
-                    setSalarioBaseText(formatKzInput(parsed));
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>IBAN</Label>
-                <Input value={form.iban} onChange={e => setForm(f => ({ ...f, iban: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-3">
-                {subsidiosAtivos.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nenhum subsídio adicionado.</p>
-                )}
-                {subsidiosAtivos.map(key => {
-                  const label = SUBSIDIOS_CONFIG.find(x => x.key === key)?.label ?? key;
-                  const rawValue = Number((form as any)[key] ?? 0);
-                  return (
-                    <div key={key} className="flex min-w-[320px] items-center gap-3">
-                      <div className="flex h-10 flex-1 items-center rounded-lg bg-muted/30 px-4">
-                        <p className="min-w-0 truncate text-sm font-medium">{label}</p>
-                      </div>
-
-                      <div className="flex h-10 w-44 items-center justify-end">
-                        {editandoSubsidio === key ? (
-                          <Input
-                            placeholder="—"
-                            inputMode="decimal"
-                            value={subsidioTextByKey[key] ?? (rawValue === 0 ? '' : formatKzTyping(String(rawValue)))}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              if (v && !/^[0-9\s.,]*$/.test(v)) return;
-                              const nextText = formatKzTyping(v);
-                              setSubsidioTextByKey(prev => ({ ...prev, [key]: nextText }));
-                              const parsed = parseKzInput(nextText);
-                              setForm(f => ({ ...f, [key]: Number.isFinite(parsed) ? parsed : 0 } as any));
-                            }}
-                            onBlur={() => {
-                              const txt = subsidioTextByKey[key] ?? '';
-                              if (!txt.trim()) {
-                                setForm(f => ({ ...f, [key]: 0 } as any));
-                                setSubsidioTextByKey(prev => ({ ...prev, [key]: '' }));
-                                setEditandoSubsidio(null);
-                                return;
-                              }
-                              const parsed = parseKzInput(txt);
-                              if (!Number.isFinite(parsed) || parsed < 0) {
-                                toast.error('Valor de subsídio inválido.');
-                                setSubsidioTextByKey(prev => ({ ...prev, [key]: formatKzInput(rawValue) }));
-                                setEditandoSubsidio(null);
-                                return;
-                              }
-                              setForm(f => ({ ...f, [key]: parsed } as any));
-                              setSubsidioTextByKey(prev => ({ ...prev, [key]: formatKzInput(parsed) }));
-                              setEditandoSubsidio(null);
-                            }}
-                            onKeyDown={e => {
-                              if (e.key === 'Escape') setEditandoSubsidio(null);
-                              if (e.key === 'Enter') setEditandoSubsidio(null);
-                            }}
-                            className="w-full text-right"
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm text-right hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            onClick={() => {
-                              setSubsidioTextByKey(prev => ({
-                                ...prev,
-                                [key]: rawValue === 0 ? '' : formatKzInput(rawValue),
-                              }));
-                              setEditandoSubsidio(key);
-                            }}
-                            aria-label={`Editar ${label}`}
-                          >
-                            {rawValue === 0 ? <span className="text-muted-foreground">—</span> : formatKz(rawValue)}
-                          </button>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-destructive/10 text-destructive"
-                        onClick={() => {
-                          setSubsidiosAtivos(prev => prev.filter(k => k !== key));
-                          setEditandoSubsidio(cur => (cur === key ? null : cur));
-                          setForm(f => {
-                            const next = { ...f, [key]: 0 } as any;
-                            const detailedSum = SUBSIDIOS_DYNAMIC_KEYS.reduce((acc, k) => acc + (next[k] ?? 0), 0);
-                            next.outrosSubsidios = detailedSum;
-                            return next;
-                          });
-                        }}
-                        aria-label={`Remover ${label}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {mobileWizardStep}
                     </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex justify-end">
-                <Select
-                  value={subsidioParaAdicionar}
-                  onValueChange={v => {
-                    if (v === '__none__') return;
-                    const k = v as SubsidioKey;
-                    setSubsidiosAtivos(prev => (prev.includes(k) ? prev : [...prev, k]));
-                    setSubsidioParaAdicionar('__none__');
-                    setForm(f => ({ ...f, [k]: (f as any)[k] ?? 0 } as any));
-                    setSubsidioTextByKey(prev => ({ ...prev, [k]: '' }));
-                    setEditandoSubsidio(k);
-                  }}
-                >
-                  <SelectTrigger className="w-auto !border-0 !bg-primary !text-primary-foreground hover:!bg-primary/90 [&>svg]:hidden">
-                    <SelectValue placeholder="Adicionar Subsídios" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      Adicionar Subsídios
-                    </SelectItem>
-                    {SUBSIDIOS_ALL_KEYS.filter(k => !subsidiosAtivos.includes(k)).map(k => {
-                      const label = SUBSIDIOS_CONFIG.find(x => x.key === k)?.label ?? k;
-                      return (
-                        <SelectItem key={k} value={k}>
-                          {label}
-                        </SelectItem>
-                      );
-                    })}
-                    {SUBSIDIOS_ALL_KEYS.filter(k => !subsidiosAtivos.includes(k)).length === 0 && (
-                      <SelectItem value="__todos_ja_adicionados__" disabled>
-                        Todos já adicionados
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <hr className="border-border/80" />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Email corporativo</Label>
-                <Input type="email" value={form.emailCorporativo} onChange={e => setForm(f => ({ ...f, emailCorporativo: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Email pessoal (opcional)</Label>
-                <Input type="email" value={form.emailPessoal ?? ''} onChange={e => setForm(f => ({ ...f, emailPessoal: e.target.value || undefined }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Telefone principal</Label>
-                <Input value={form.telefonePrincipal} onChange={e => setForm(f => ({ ...f, telefonePrincipal: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Telefone alternativo (opcional)</Label>
-                <Input value={form.telefoneAlternativo ?? ''} onChange={e => setForm(f => ({ ...f, telefoneAlternativo: e.target.value || undefined }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Contacto emergência - Nome</Label>
-                <Input value={form.contactoEmergenciaNome ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaNome: e.target.value || undefined }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Contacto emergência - Telefone</Label>
-                <Input value={form.contactoEmergenciaTelefone ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaTelefone: e.target.value || undefined }))} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as StatusColaborador }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {!editing && isSupabaseConfigured() && (
-              <div className="space-y-3 border-t border-border/80 pt-4">
-                <Label className="text-base">Pasta e documentos do colaborador</Label>
-                <p className="text-xs text-muted-foreground">
-                  Ao guardar, é criada a subpasta em{' '}
-                  <strong>… / Colaboradores / {form.nome.trim() ? nomePastaColaboradorMaiusculo(form.nome) : 'PRIMEIRO ÚLTIMO'}</strong>{' '}
-                  (primeiro e último nome em maiúsculas), mesmo sem ficheiros — fica vazia até carregar documentos abaixo ou na Gestão documental.
-                  Requer «Capital Humano» (ou «RH») e «Colaboradores» já existentes na Gestão documental.
-                </p>
-                <div
-                  className={cn(
-                    'cursor-pointer rounded-lg border-2 border-dashed px-3 py-6 text-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                    docDragActive
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border/80 bg-muted/20 hover:border-muted-foreground/40 hover:bg-muted/30',
-                  )}
-                  onClick={() => novoDocInputRef.current?.click()}
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    docDragDepth.current += 1;
-                    setDocDragActive(true);
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    docDragDepth.current -= 1;
-                    if (docDragDepth.current <= 0) {
-                      docDragDepth.current = 0;
-                      setDocDragActive(false);
-                    }
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.dataTransfer.dropEffect = 'copy';
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    docDragDepth.current = 0;
-                    setDocDragActive(false);
-                    applyNovoColaboradorFiles(Array.from(e.dataTransfer.files));
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(ev) => {
-                    if (ev.key === 'Enter' || ev.key === ' ') {
-                      ev.preventDefault();
-                      novoDocInputRef.current?.click();
-                    }
-                  }}
-                >
-                  <input
-                    ref={novoDocInputRef}
-                    type="file"
-                    multiple
-                    className="sr-only"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    onChange={(e) => {
-                      applyNovoColaboradorFiles(e.target.files ? Array.from(e.target.files) : []);
-                      e.target.value = '';
-                    }}
-                  />
-                  <UploadCloud
-                    className={cn('mx-auto h-9 w-9', docDragActive ? 'text-primary' : 'text-muted-foreground')}
-                    aria-hidden
-                  />
-                  <p className="mt-2 text-sm font-medium">Arraste documentos aqui ou clique para seleccionar</p>
-                  <p className="mt-1 text-xs text-muted-foreground">PDF, Word ou Excel · vários ficheiros</p>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <p className="text-xs font-medium text-primary">{stepInfo.kicker}</p>
+                      <p className="text-base font-semibold leading-snug text-foreground">{stepInfo.title}</p>
+                    </div>
+                  </div>
                 </div>
-                {novoColaboradorAnexos.length > 0 && (
-                  <ul className="max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-border/60 bg-background/50 p-2 text-xs">
-                    {novoColaboradorAnexos.map((f, i) => (
-                      <li key={`${i}-${f.name}-${f.size}`} className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate font-medium">{f.name}</span>
-                        <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
-                          {extDoc(f.name).toUpperCase()} · {formatBytesDoc(f.size)}
-                          <button
-                            type="button"
-                            className="rounded p-0.5 text-destructive hover:bg-destructive/10"
-                            aria-label={`Remover ${f.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setNovoColaboradorAnexos((prev) => prev.filter((_, j) => j !== i));
-                            }}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-1">
+                  {colaboradorFormGridEl()}
+                </div>
+                <div className="shrink-0 border-t border-border/80 bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11 flex-1 rounded-xl border-border/80"
+                      disabled={saving}
+                      onClick={() => {
+                        initCreateForm();
+                        setMobileWizardStep(1);
+                        toast.message('Formulário limpo.');
+                      }}
+                    >
+                      Limpar
+                    </Button>
+                    {mobileWizardStep > 1 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 flex-1 rounded-xl"
+                        disabled={saving}
+                        onClick={() => setMobileWizardStep(s => Math.max(1, s - 1))}
+                      >
+                        Voltar
+                      </Button>
+                    ) : null}
+                    {mobileWizardStep < 3 ? (
+                      <Button
+                        type="button"
+                        className="min-h-11 flex-[1.2] rounded-xl gap-1.5"
+                        disabled={saving}
+                        onClick={() => setMobileWizardStep(s => Math.min(3, s + 1))}
+                      >
+                        Continuar
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        className="min-h-11 flex-[1.2] rounded-xl"
+                        disabled={!form.nome.trim() || !form.emailCorporativo.trim() || saving}
+                        onClick={() => void save()}
+                      >
+                        {saving ? 'A guardar…' : 'Guardar'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
-            {isSupabaseConfigured() && usuarios.length > 0 && (
-              <div className="space-y-2 border-t border-border/80 pt-4">
-                <Label>Associar a utilizador (opcional)</Label>
-                <Select
-                  value={associarUtilizadorId != null ? String(associarUtilizadorId) : 'nenhum'}
-                  onValueChange={v => setAssociarUtilizadorId(v === 'nenhum' ? null : Number(v))}
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>{editing ? 'Editar colaborador' : 'Novo colaborador'}</DialogTitle>
+                <DialogDescription>
+                  {editing
+                    ? 'Dados do colaborador. Para o transferir para outra empresa, altere «Empresa» abaixo e guarde.'
+                    : 'Dados do colaborador. Pode anexar documentos (arrastar ou clicar) — serão guardados na pasta «Colaboradores» já existente em Gestão documental (Capital Humano ou RH), dentro de uma subpasta com o nome do colaborador em maiúsculas.'}
+                </DialogDescription>
+              </DialogHeader>
+              {colaboradorFormGridEl()}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={save}
+                  disabled={!form.nome.trim() || !form.emailCorporativo.trim() || saving}
                 >
-                  <SelectTrigger><SelectValue placeholder="Nenhum — colaborador sem conta de acesso" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nenhum">Nenhum</SelectItem>
-                    {usuarios.map(u => (
-                      <SelectItem key={u.id} value={String(u.id)}>{u.nome} — {u.email}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Se associar a um utilizador, ele verá no Portal (Meus Recibos, Férias, etc.) os dados deste colaborador.
-                </p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={save}
-              disabled={!form.nome.trim() || !form.emailCorporativo.trim() || saving}
-            >
-              {saving ? 'A guardar…' : 'Guardar'}
-            </Button>
-          </DialogFooter>
+                  {saving ? 'A guardar…' : 'Guardar'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

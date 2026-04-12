@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -7,6 +8,11 @@ import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useNotifications } from '@/context/NotificationContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Requisicao, StatusRequisicao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -14,14 +20,7 @@ import { formatKz, formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +48,9 @@ const STATUS_OPTIONS: { value: StatusRequisicao | 'todos'; label: string }[] = [
   { value: 'Pago', label: 'Pago' },
 ];
 
+const LIST_PATH = '/portal/requisicoes';
+const NOVO_PATH = '/portal/requisicoes/novo';
+
 function nextNum(requisicoes: Requisicao[]): string {
   const year = new Date().getFullYear();
   const prefix = `REQ-${year}-`;
@@ -58,6 +60,7 @@ function nextNum(requisicoes: Requisicao[]): string {
 }
 
 export default function PortalRequisicoesPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const colaboradorId = useColaboradorId();
   const { requisicoes, addRequisicao, updateRequisicao, centrosCusto, departamentos, colaboradoresTodos, addPagamento } = useData();
@@ -101,6 +104,53 @@ export default function PortalRequisicoesPage() {
     [],
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
+  const prepareCreate = useCallback(() => {
+    if (colaboradorId == null) {
+      navigate(LIST_PATH, { replace: true });
+      return;
+    }
+    const dept = departamentos.find(d => d.nome === user?.departamento)?.nome ?? departamentos[0]?.nome ?? '';
+    setForm({
+      fornecedor: '',
+      descricao: '',
+      valor: 0,
+      departamento: dept,
+      centroCusto: 'CC-001',
+      data: new Date().toISOString().slice(0, 10),
+      tipoSolicitacao: 'Factura Proforma',
+      proformaAnexos: [],
+    });
+  }, [colaboradorId, departamentos, navigate, user?.departamento]);
+
+  const resetModal = useCallback(() => {
+    setForm({
+      fornecedor: '',
+      descricao: '',
+      valor: 0,
+      departamento: '',
+      centroCusto: 'CC-001',
+      data: new Date().toISOString().slice(0, 10),
+      tipoSolicitacao: 'Factura Proforma',
+      proformaAnexos: [],
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const resolvePublicUrlFromAny = async (value?: string | null): Promise<string | null> => {
     if (!value) return null;
@@ -147,18 +197,8 @@ export default function PortalRequisicoesPage() {
     prazoParaFacturaFinalValido(r);
 
   const openCreate = () => {
-    const dept = departamentos.find(d => d.nome === user?.departamento)?.nome ?? departamentos[0]?.nome ?? '';
-    setForm({
-      fornecedor: '',
-      descricao: '',
-      valor: 0,
-      departamento: dept,
-      centroCusto: 'CC-001',
-      data: new Date().toISOString().slice(0, 10),
-      tipoSolicitacao: 'Factura Proforma',
-      proformaAnexos: [],
-    });
-    setDialogOpen(true);
+    if (colaboradorId == null) return;
+    openCreateNavigateOrDialog();
   };
 
   const addProformaAnexo = (nome: string) => {
@@ -216,6 +256,10 @@ export default function PortalRequisicoesPage() {
         link: '/financas/requisicoes',
       });
       setDialogOpen(false);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao submeter');
     }
@@ -414,13 +458,19 @@ export default function PortalRequisicoesPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma requisição encontrada.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-6">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>Nova requisição à Área Financeira</DialogTitle>
-            <DialogDescription>Preencha os dados. A requisição será analisada pela equipa financeira.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2 overflow-y-auto min-h-0">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Portal"
+          screenTitle="Nova requisição à Área Financeira"
+          desktopContentClassName="max-w-lg max-h-[90vh] flex flex-col p-6"
+          desktopHeader={mobileCreateDesktopHeader(
+            'Nova requisição à Área Financeira',
+            'Preencha os dados. A requisição será analisada pela equipa financeira.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2 overflow-y-auto min-h-0">
             <div className="space-y-2">
               <Label>Fornecedor</Label>
               <Input value={form.fornecedor} onChange={e => setForm(f => ({ ...f, fornecedor: e.target.value }))} placeholder="Nome do fornecedor" />
@@ -539,22 +589,48 @@ export default function PortalRequisicoesPage() {
               )}
             </div>
           </div>
-          <DialogFooter className="shrink-0 border-t border-border/80 pt-4 mt-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={save}
-              disabled={
-                !form.fornecedor.trim() ||
-                !form.descricao.trim() ||
-                form.valor <= 0 ||
-                !form.departamento.trim() ||
-                (form.tipoSolicitacao === 'Factura Proforma' && form.proformaAnexos.length === 0)
-              }
-            >
-              Submeter
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter className="shrink-0 border-t border-border/80 pt-4 mt-2">
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void save()}
+                disabled={
+                  !form.fornecedor.trim() ||
+                  !form.descricao.trim() ||
+                  form.valor <= 0 ||
+                  !form.departamento.trim() ||
+                  (form.tipoSolicitacao === 'Factura Proforma' && form.proformaAnexos.length === 0)
+                }
+              >
+                Submeter
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={
+                  !form.fornecedor.trim() ||
+                  !form.descricao.trim() ||
+                  form.valor <= 0 ||
+                  !form.departamento.trim() ||
+                  (form.tipoSolicitacao === 'Factura Proforma' && form.proformaAnexos.length === 0)
+                }
+                onClick={() => void save()}
+              >
+                Submeter
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

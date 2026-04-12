@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
@@ -11,14 +17,7 @@ import { IRT_ESCALOES_FALLBACK, salarioBaseParaEscalaoIrtAposFaltas, selecionarE
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -35,7 +34,11 @@ const MESES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11',
 const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const ANO_ACTUAL = new Date().getFullYear();
 
+const LIST_PATH = '/capital-humano/recibos';
+const NOVO_PATH = '/capital-humano/recibos/novo';
+
 export default function RecibosPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { recibos, addRecibo, updateRecibo, deleteRecibo, colaboradores, irtEscalaes } = useData();
   const canEliminar = user?.perfil === 'Admin';
@@ -62,6 +65,67 @@ export default function RecibosPage() {
   });
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+
+  const prepareCreate = useCallback(() => {
+    const colab = colaboradores.find(c => c.status === 'Activo') ?? colaboradores[0];
+    const base = colab?.salarioBase ?? 0;
+    const subsidioAlimentacao = colab?.subsidioAlimentacao ?? 25000;
+    const subsidioTransporte = colab?.subsidioTransporte ?? 20000;
+    const outrosSubsidios = colab?.outrosSubsidios ?? 0;
+    const mesAno = `${anoFilter && anoFilter !== 'todos' ? anoFilter : ANO_ACTUAL}-${mesFilter && mesFilter !== 'todos' ? mesFilter : '01'}`;
+    const draft: Omit<ReciboSalario, 'id'> = {
+      colaboradorId: colab?.id ?? 0,
+      mesAno,
+      vencimentoBase: base,
+      subsidioAlimentacao,
+      subsidioTransporte,
+      outrosSubsidios,
+      descontoFaltas: 0,
+      diasFaltaDesconto: 0,
+      inss: 0,
+      irt: 0,
+      outrasDeducoes: 0,
+      liquido: 0,
+      status: 'Emitido',
+    };
+    const bruto = draft.vencimentoBase + draft.subsidioAlimentacao + draft.subsidioTransporte + draft.outrosSubsidios;
+    const deducoes = (draft.descontoFaltas ?? 0) + draft.inss + draft.irt + draft.outrasDeducoes;
+    setForm({ ...draft, liquido: Math.max(0, bruto - deducoes) });
+  }, [colaboradores, anoFilter, mesFilter]);
+
+  const resetModal = useCallback(() => {
+    setForm({
+      colaboradorId: 0,
+      mesAno: `${ANO_ACTUAL}-11`,
+      vencimentoBase: 0,
+      subsidioAlimentacao: 25000,
+      subsidioTransporte: 20000,
+      outrosSubsidios: 0,
+      inss: 0,
+      irt: 0,
+      outrasDeducoes: 0,
+      descontoFaltas: 0,
+      diasFaltaDesconto: 0,
+      liquido: 0,
+      status: 'Emitido',
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
 
@@ -116,31 +180,7 @@ export default function RecibosPage() {
     return Math.max(0, bruto - deducoes);
   };
 
-  const openCreate = () => {
-    const colab = colaboradores.find(c => c.status === 'Activo') ?? colaboradores[0];
-    const base = colab?.salarioBase ?? 0;
-    const subsidioAlimentacao = colab?.subsidioAlimentacao ?? 25000;
-    const subsidioTransporte = colab?.subsidioTransporte ?? 20000;
-    const outrosSubsidios = colab?.outrosSubsidios ?? 0;
-    const mesAno = `${anoFilter && anoFilter !== 'todos' ? anoFilter : ANO_ACTUAL}-${mesFilter && mesFilter !== 'todos' ? mesFilter : '01'}`;
-    const draft: Omit<ReciboSalario, 'id'> = {
-      colaboradorId: colab?.id ?? 0,
-      mesAno,
-      vencimentoBase: base,
-      subsidioAlimentacao,
-      subsidioTransporte,
-      outrosSubsidios,
-      descontoFaltas: 0,
-      diasFaltaDesconto: 0,
-      inss: 0,
-      irt: 0,
-      outrasDeducoes: 0,
-      liquido: 0,
-      status: 'Emitido',
-    };
-    setForm({ ...draft, liquido: calcLiquido(draft) });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const save = async () => {
     if (!form.colaboradorId || !form.mesAno || form.vencimentoBase <= 0) return;
@@ -153,6 +193,10 @@ export default function RecibosPage() {
     try {
       await addRecibo({ ...form, liquido });
       setDialogOpen(false);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
       toast.success('Recibo emitido com sucesso.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao emitir');
@@ -319,89 +363,114 @@ export default function RecibosPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum recibo encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Emitir recibo</DialogTitle>
-            <DialogDescription>Dados do recibo de vencimento.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Colaborador</Label>
-              <Select
-                value={form.colaboradorId ? String(form.colaboradorId) : ''}
-                onValueChange={v => {
-                  const c = colaboradores.find(x => x.id === Number(v));
-                  if (c) {
-                    const novo = { ...form, colaboradorId: c.id, vencimentoBase: c.salarioBase };
-                    setForm({ ...novo, liquido: calcLiquido(novo) });
-                  }
-                }}
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Capital Humano"
+          screenTitle="Emitir recibo"
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader('Emitir recibo', 'Dados do recibo de vencimento.')}
+          formBody={
+            <div className="grid gap-4 py-2">
+              <div className="space-y-2">
+                <Label>Colaborador</Label>
+                <Select
+                  value={form.colaboradorId ? String(form.colaboradorId) : ''}
+                  onValueChange={v => {
+                    const c = colaboradores.find(x => x.id === Number(v));
+                    if (c) {
+                      const novo = { ...form, colaboradorId: c.id, vencimentoBase: c.salarioBase };
+                      setForm({ ...novo, liquido: calcLiquido(novo) });
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    {colaboradores.filter(c => c.status === 'Activo').map(c => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {formatKz(c.salarioBase)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Mês/Ano</Label>
+                <div className="flex gap-2">
+                  <Select value={form.mesAno?.slice(0, 4)} onValueChange={y => setForm(f => ({ ...f, mesAno: `${y}-${form.mesAno?.slice(5) || '01'}` }))}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[ANO_ACTUAL, ANO_ACTUAL - 1].map(a => (
+                        <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={form.mesAno?.slice(5) || '01'} onValueChange={m => setForm(f => ({ ...f, mesAno: `${f.mesAno?.slice(0, 4) || ANO_ACTUAL}-${m}` }))}>
+                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MESES.map((m, i) => (
+                        <SelectItem key={m} value={m}>{MES_LABELS[i]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Vencimento base (Kz)</Label>
+                <Input type="number" min={0} value={form.vencimentoBase || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, vencimentoBase: v, liquido: calcLiquido({ ...prev, vencimentoBase: v }) })); }} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Subs. alimentação</Label>
+                  <Input type="number" min={0} value={form.subsidioAlimentacao || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, subsidioAlimentacao: v, liquido: calcLiquido({ ...prev, subsidioAlimentacao: v }) })); }} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Subs. transporte</Label>
+                  <Input type="number" min={0} value={form.subsidioTransporte || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, subsidioTransporte: v, liquido: calcLiquido({ ...prev, subsidioTransporte: v }) })); }} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>INSS</Label>
+                  <Input type="number" min={0} value={form.inss || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, inss: v, liquido: calcLiquido({ ...prev, inss: v }) })); }} />
+                </div>
+                <div className="space-y-2">
+                  <Label>IRT</Label>
+                  <Input type="number" min={0} value={form.irt || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, irt: v, liquido: calcLiquido({ ...prev, irt: v }) })); }} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Outras ded.</Label>
+                  <Input type="number" min={0} value={form.outrasDeducoes || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, outrasDeducoes: v, liquido: calcLiquido({ ...prev, outrasDeducoes: v }) })); }} />
+                </div>
+              </div>
+              <p className="text-sm font-medium">Líquido: {formatKz(form.liquido)}</p>
+            </div>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={!form.colaboradorId || !form.mesAno || form.vencimentoBase <= 0}>
+                Emitir
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.colaboradorId || !form.mesAno || form.vencimentoBase <= 0}
+                onClick={() => void save()}
               >
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  {colaboradores.filter(c => c.status === 'Activo').map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {formatKz(c.salarioBase)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                Emitir
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Mês/Ano</Label>
-              <div className="flex gap-2">
-                <Select value={form.mesAno?.slice(0, 4)} onValueChange={y => setForm(f => ({ ...f, mesAno: `${y}-${form.mesAno?.slice(5) || '01'}` }))}>
-                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[ANO_ACTUAL, ANO_ACTUAL - 1].map(a => (
-                      <SelectItem key={a} value={String(a)}>{a}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={form.mesAno?.slice(5) || '01'} onValueChange={m => setForm(f => ({ ...f, mesAno: `${f.mesAno?.slice(0, 4) || ANO_ACTUAL}-${m}` }))}>
-                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MESES.map((m, i) => (
-                      <SelectItem key={m} value={m}>{MES_LABELS[i]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Vencimento base (Kz)</Label>
-              <Input type="number" min={0} value={form.vencimentoBase || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, vencimentoBase: v, liquido: calcLiquido({ ...prev, vencimentoBase: v }) })); }} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Subs. alimentação</Label>
-                <Input type="number" min={0} value={form.subsidioAlimentacao || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, subsidioAlimentacao: v, liquido: calcLiquido({ ...prev, subsidioAlimentacao: v }) })); }} />
-              </div>
-              <div className="space-y-2">
-                <Label>Subs. transporte</Label>
-                <Input type="number" min={0} value={form.subsidioTransporte || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, subsidioTransporte: v, liquido: calcLiquido({ ...prev, subsidioTransporte: v }) })); }} />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>INSS</Label>
-                <Input type="number" min={0} value={form.inss || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, inss: v, liquido: calcLiquido({ ...prev, inss: v }) })); }} />
-              </div>
-              <div className="space-y-2">
-                <Label>IRT</Label>
-                <Input type="number" min={0} value={form.irt || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, irt: v, liquido: calcLiquido({ ...prev, irt: v }) })); }} />
-              </div>
-              <div className="space-y-2">
-                <Label>Outras ded.</Label>
-                <Input type="number" min={0} value={form.outrasDeducoes || ''} onChange={e => { const v = Number(e.target.value) || 0; setForm(prev => ({ ...prev, outrasDeducoes: v, liquido: calcLiquido({ ...prev, outrasDeducoes: v }) })); }} />
-              </div>
-            </div>
-            <p className="text-sm font-medium">Líquido: {formatKz(form.liquido)}</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.colaboradorId || !form.mesAno || form.vencimentoBase <= 0}>Emitir</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog

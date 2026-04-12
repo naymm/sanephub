@@ -1,9 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Acta, Colaborador, Reuniao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -33,6 +39,9 @@ import { cn } from '@/lib/utils';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { isActaAudioFile, uploadActaAudioTranscricao } from '@/lib/actaAudioTranscricao';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+
+const LIST_PATH = '/secretaria/actas';
+const NOVO_PATH = '/secretaria/actas/novo';
 
 const STATUS_OPTIONS: Acta['status'][] = ['Rascunho', 'Em Revisão', 'Aprovada', 'Publicada', 'Arquivada'];
 
@@ -82,6 +91,7 @@ function emptyForm(actas: Acta[], reunioes: Reuniao[]): Omit<Acta, 'id'> {
 }
 
 export default function ActasPage() {
+  const navigate = useNavigate();
   const { actas, addActa, updateActa, deleteActa, reunioes, colaboradores, colaboradoresTodos } = useData();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<Acta['status'] | 'todos'>('todos');
@@ -98,6 +108,36 @@ export default function ActasPage() {
   const [saving, setSaving] = useState(false);
   const [participantesOpen, setParticipantesOpen] = useState(false);
   const [participantesSearch, setParticipantesSearch] = useState('');
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setAudioFile(null);
+    setParticipantesSearch('');
+    setForm(emptyForm(actas, reunioes));
+  }, [actas, reunioes]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setAudioFile(null);
+    setParticipantesSearch('');
+    setForm(emptyForm(actas, reunioes));
+  }, [actas, reunioes]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const colaboradoresSelect = useMemo(() => {
     return [...colaboradores]
@@ -152,13 +192,7 @@ export default function ActasPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setAudioFile(null);
-    setParticipantesSearch('');
-    setForm(emptyForm(actas, reunioes));
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (a: Acta) => {
     const r = reunioes.find(x => x.id === a.reuniaoId);
@@ -196,6 +230,7 @@ export default function ActasPage() {
 
   const save = async () => {
     if (!form.reuniaoId || !form.numero.trim() || !form.data || !form.titulo.trim()) return;
+    const wasEditing = !!editing;
     if (audioFile && audioFile.size > MAX_AUDIO_BYTES) {
       toast.error('O ficheiro de áudio não pode exceder 80 MB.');
       return;
@@ -240,6 +275,10 @@ export default function ActasPage() {
       setDialogOpen(false);
       setEditing(null);
       setAudioFile(null);
+      if (!wasEditing && isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
       toast.success('Acta guardada.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
@@ -376,12 +415,18 @@ export default function ActasPage() {
       {reunioes.length === 0 && <p className="text-sm text-amber-600">Crie pelo menos uma reunião para poder registar actas.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar acta' : 'Nova acta'}</DialogTitle>
-            <DialogDescription>Registo da acta da reunião. O número é gerado automaticamente no novo registo.</DialogDescription>
-          </DialogHeader>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Secretaria Geral"
+          screenTitle={editing ? 'Editar acta' : 'Nova acta'}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar acta' : 'Nova acta',
+            'Registo da acta da reunião. O número é gerado automaticamente no novo registo.',
+          )}
+          formBody={
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Reunião</Label>
@@ -630,13 +675,31 @@ export default function ActasPage() {
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button onClick={save} disabled={saving || !form.reuniaoId || !form.data || !form.titulo.trim()}>
-              {saving ? 'A guardar…' : 'Guardar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancelar</Button>
+              <Button onClick={() => void save()} disabled={saving || !form.reuniaoId || !form.data || !form.titulo.trim()}>
+                {saving ? 'A guardar…' : 'Guardar'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={saving || !form.reuniaoId || !form.data || !form.titulo.trim()}
+                onClick={() => void save()}
+              >
+                {saving ? 'A guardar…' : 'Guardar'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

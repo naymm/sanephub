@@ -1,27 +1,30 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Banco } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
+const LIST_PATH = '/financas/bancos';
+const NOVO_PATH = '/financas/bancos/novo';
+
 export default function BancosPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { bancos, addBanco, updateBanco, deleteBanco } = useData();
   const isAdmin = user?.perfil === 'Admin';
@@ -30,6 +33,31 @@ export default function BancosPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Banco | null>(null);
   const [form, setForm] = useState({ nome: '', codigo: '', activo: true });
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({ nome: '', codigo: '', activo: true });
+  }, []);
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({ nome: '', codigo: '', activo: true });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const filtered = bancos.filter(
     b =>
@@ -48,11 +76,7 @@ export default function BancosPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ nome: '', codigo: '', activo: true });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (b: Banco) => {
     setEditing(b);
@@ -76,6 +100,10 @@ export default function BancosPage() {
       setDialogOpen(false);
       setEditing(null);
       toast.success(editing ? 'Banco actualizado.' : 'Banco registado.');
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -90,6 +118,26 @@ export default function BancosPage() {
       toast.error(e instanceof Error ? e.message : 'Erro ao remover');
     }
   };
+
+  const title = editing ? 'Editar banco' : 'Novo banco';
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="space-y-2">
+        <Label>Nome</Label>
+        <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Ex.: Banco BFA" />
+      </div>
+      <div className="space-y-2">
+        <Label>Código (opcional)</Label>
+        <Input value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value }))} placeholder="Ex.: BFA" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox id="activo" checked={form.activo} onCheckedChange={v => setForm(f => ({ ...f, activo: v === true }))} />
+        <Label htmlFor="activo" className="font-normal cursor-pointer">
+          Activo
+        </Label>
+      </div>
+    </div>
+  );
 
   if (!isAdmin) {
     return (
@@ -197,31 +245,34 @@ export default function BancosPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum banco encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar banco' : 'Novo banco'}</DialogTitle>
-            <DialogDescription>Nome único no sistema; código opcional (ex. SWIFT abreviado).</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Ex.: Banco BFA" />
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Finanças"
+          screenTitle={title}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(title, 'Nome único no sistema; código opcional (ex. SWIFT abreviado).')}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save}>Guardar</Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" onClick={() => void save()}>
+                Guardar
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Código (opcional)</Label>
-              <Input value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value }))} placeholder="Ex.: BFA" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox id="activo" checked={form.activo} onCheckedChange={v => setForm(f => ({ ...f, activo: v === true }))} />
-              <Label htmlFor="activo" className="font-normal cursor-pointer">Activo</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
     </div>
   );

@@ -1,24 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { formatarDuracaoHorasMinutos, SEGUNDOS_ATRASO_POR_FALTA } from '@/lib/pontoHorario';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { useAuth } from '@/context/AuthContext';
 import type { Falta, TipoFalta } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -65,7 +64,11 @@ function numeroFaltaAtrasoNoMes(f: Falta, todas: Falta[]): number | null {
   return i >= 0 ? i + 1 : null;
 }
 
+const LIST_PATH = '/capital-humano/faltas';
+const NOVO_PATH = '/capital-humano/faltas/novo';
+
 export default function FaltasPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { faltas, addFalta, updateFalta, deleteFalta, colaboradores } = useData();
   const [search, setSearch] = useState('');
@@ -84,6 +87,44 @@ export default function FaltasPage() {
     registadoPor: user?.nome ?? '',
   });
   const [totaisAtrasoMes, setTotaisAtrasoMes] = useState<Map<string, number>>(() => new Map());
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({
+      colaboradorId: colaboradores[0]?.id ?? 0,
+      data: new Date().toISOString().slice(0, 10),
+      tipo: 'Justificada',
+      motivo: '',
+      registadoPor: user?.nome ?? '',
+    });
+  }, [colaboradores, user?.nome]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      colaboradorId: colaboradores[0]?.id ?? 0,
+      data: new Date().toISOString().slice(0, 10),
+      tipo: 'Justificada',
+      motivo: '',
+      registadoPor: user?.nome ?? '',
+    });
+  }, [colaboradores, user?.nome]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const paresAtrasoConsulta = useMemo(() => {
     const colIds = new Set<number>();
@@ -165,17 +206,7 @@ export default function FaltasPage() {
       : undefined;
   const viewAtrasoOrdem = viewItem ? numeroFaltaAtrasoNoMes(viewItem, faltas) : null;
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
-      data: new Date().toISOString().slice(0, 10),
-      tipo: 'Justificada',
-      motivo: '',
-      registadoPor: user?.nome ?? '',
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (f: Falta) => {
     setEditing(f);
@@ -196,6 +227,10 @@ export default function FaltasPage() {
       else await addFalta(form);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -330,59 +365,84 @@ export default function FaltasPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma falta encontrada.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar falta' : 'Registar falta'}</DialogTitle>
-            <DialogDescription>Dados da falta.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Colaborador</Label>
-              <Select value={form.colaboradorId ? String(form.colaboradorId) : ''} onValueChange={v => setForm(f => ({ ...f, colaboradorId: Number(v) }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  {colaboradores.map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.departamento}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Capital Humano"
+          screenTitle={editing ? 'Editar falta' : 'Registar falta'}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(editing ? 'Editar falta' : 'Registar falta', 'Dados da falta.')}
+          formBody={
+            <div className="grid gap-4 py-2">
               <div className="space-y-2">
-                <Label>Data</Label>
-                <Input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select
-                  value={form.tipo}
-                  onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoFalta }))}
-                  disabled={editing?.tipo === 'Por atrasos'}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label>Colaborador</Label>
+                <Select value={form.colaboradorId ? String(form.colaboradorId) : ''} onValueChange={v => setForm(f => ({ ...f, colaboradorId: Number(v) }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
-                    {(editing?.tipo === 'Por atrasos' ? (['Por atrasos'] as TipoFalta[]) : TIPO_OPTIONS_MANUAL).map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    {colaboradores.map(c => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.departamento}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data</Label>
+                  <Input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tipo</Label>
+                  <Select
+                    value={form.tipo}
+                    onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoFalta }))}
+                    disabled={editing?.tipo === 'Por atrasos'}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(editing?.tipo === 'Por atrasos' ? (['Por atrasos'] as TipoFalta[]) : TIPO_OPTIONS_MANUAL).map(t => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Motivo</Label>
+                <Input value={form.motivo} onChange={e => setForm(f => ({ ...f, motivo: e.target.value }))} placeholder="Opcional para injustificada" />
+              </div>
+              <div className="space-y-2">
+                <Label>Registado por</Label>
+                <Input value={form.registadoPor} onChange={e => setForm(f => ({ ...f, registadoPor: e.target.value }))} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Motivo</Label>
-              <Input value={form.motivo} onChange={e => setForm(f => ({ ...f, motivo: e.target.value }))} placeholder="Opcional para injustificada" />
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={!form.colaboradorId || !form.data}>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.colaboradorId || !form.data}
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Registado por</Label>
-              <Input value={form.registadoPor} onChange={e => setForm(f => ({ ...f, registadoPor: e.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.colaboradorId || !form.data}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

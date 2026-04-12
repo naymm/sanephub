@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Reuniao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -32,6 +38,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+const LIST_PATH = '/secretaria/reunioes';
+const NOVO_PATH = '/secretaria/reunioes/novo';
+
 const TIPO_OPTIONS: Reuniao['tipo'][] = ['Ordinária', 'Extraordinária', 'Informal', 'Comissão'];
 const STATUS_OPTIONS: Reuniao['status'][] = ['Agendada', 'Realizada', 'Cancelada', 'Adiada'];
 
@@ -47,6 +56,7 @@ const emptyForm: Omit<Reuniao, 'id'> = {
 };
 
 export default function ReunioesPage() {
+  const navigate = useNavigate();
   const { reunioes, addReuniao, updateReuniao, deleteReuniao, colaboradores } = useData();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<Reuniao['tipo'] | 'todos'>('todos');
@@ -60,6 +70,32 @@ export default function ReunioesPage() {
   const [form, setForm] = useState<Omit<Reuniao, 'id'>>(emptyForm);
   const [participantesOpen, setParticipantesOpen] = useState(false);
   const [participantesSearch, setParticipantesSearch] = useState('');
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({ ...emptyForm, data: new Date().toISOString().slice(0, 10) });
+  }, []);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({ ...emptyForm, data: new Date().toISOString().slice(0, 10) });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const colaboradoresOrdenados = useMemo(
     () => [...colaboradores].sort((a, b) => a.nome.localeCompare(b.nome, 'pt')),
@@ -97,11 +133,7 @@ export default function ReunioesPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ ...emptyForm, data: new Date().toISOString().slice(0, 10) });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (r: Reuniao) => {
     setEditing(r);
@@ -129,11 +161,16 @@ export default function ReunioesPage() {
 
   const save = async () => {
     if (!form.titulo.trim() || !form.data || !form.local.trim()) return;
+    const wasEditing = !!editing;
     try {
       if (editing) await updateReuniao(editing.id, form);
       else await addReuniao(form);
       setDialogOpen(false);
       setEditing(null);
+      if (!wasEditing && isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -277,12 +314,18 @@ export default function ReunioesPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma reunião encontrada.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar reunião' : 'Nova reunião'}</DialogTitle>
-            <DialogDescription>Dados da reunião.</DialogDescription>
-          </DialogHeader>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Secretaria Geral"
+          screenTitle={editing ? 'Editar reunião' : 'Nova reunião'}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar reunião' : 'Nova reunião',
+            'Dados da reunião.',
+          )}
+          formBody={
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Título</Label>
@@ -402,11 +445,29 @@ export default function ReunioesPage() {
               )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.titulo.trim() || !form.data || !form.local.trim()}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={() => void save()} disabled={!form.titulo.trim() || !form.data || !form.local.trim()}>Guardar</Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.titulo.trim() || !form.data || !form.local.trim()}
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

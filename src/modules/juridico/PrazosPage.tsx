@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { PrazoLegal } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -16,10 +22,10 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -35,7 +41,11 @@ import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSo
 const PRIORIDADE_OPCOES: PrazoLegal['prioridade'][] = ['Baixa', 'Média', 'Alta', 'Crítica'];
 const STATUS_OPCOES: PrazoLegal['status'][] = ['Pendente', 'Em Tratamento', 'Concluído', 'Vencido'];
 
+const LIST_PATH = '/juridico/prazos';
+const NOVO_PATH = '/juridico/prazos/novo';
+
 export default function PrazosPage() {
+  const navigate = useNavigate();
   const { prazos, addPrazo, updatePrazo, deletePrazo, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
@@ -87,7 +97,7 @@ export default function PrazosPage() {
     return '';
   };
 
-  const openCreate = () => {
+  const prepareCreate = useCallback(() => {
     setEditing(null);
     setForm({
       empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
@@ -101,8 +111,30 @@ export default function PrazosPage() {
       vinculoProcesso: '',
       vinculoContrato: '',
     });
-    setDialogOpen(true);
-  };
+  }, [empresaIdForNew, user?.nome]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({});
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (p: PrazoLegal) => {
     setEditing(p);
@@ -135,6 +167,10 @@ export default function PrazosPage() {
       else await addPrazo(payload);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -311,13 +347,19 @@ export default function PrazosPage() {
       )}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar prazo legal' : 'Novo prazo legal'}</DialogTitle>
-            <DialogDescription>Registo de prazo processual ou obrigação legal.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Jurídico"
+          screenTitle={editing ? 'Editar prazo legal' : 'Novo prazo legal'}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar prazo legal' : 'Novo prazo legal',
+            'Registo de prazo processual ou obrigação legal.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
             {currentEmpresaId === 'consolidado' && (
               <div className="space-y-2">
                 <Label>Empresa</Label>
@@ -392,13 +434,33 @@ export default function PrazosPage() {
               <Textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} rows={2} placeholder="Opcional" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.titulo?.trim() || !form.dataLimite}>
-              {editing ? 'Guardar' : 'Registar prazo'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={!form.titulo?.trim() || !form.dataLimite}>
+                {editing ? 'Guardar' : 'Registar prazo'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.titulo?.trim() || !form.dataLimite}
+                onClick={() => void save()}
+              >
+                {editing ? 'Guardar' : 'Registar prazo'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>

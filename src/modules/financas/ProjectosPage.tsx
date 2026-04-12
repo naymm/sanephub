@@ -1,23 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Projecto } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz, formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Eye } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
@@ -31,7 +30,11 @@ import {
 
 const STATUS_OPTIONS: Projecto['status'][] = ['Activo', 'Concluído', 'Suspenso', 'Cancelado'];
 
+const LIST_PATH = '/financas/projectos';
+const NOVO_PATH = '/financas/projectos/novo';
+
 export default function ProjectosPage() {
+  const navigate = useNavigate();
   const { projectos, addProjecto, updateProjecto, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
@@ -54,6 +57,56 @@ export default function ProjectosPage() {
     status: 'Activo',
   });
 
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    const today = new Date().toISOString().slice(0, 10);
+    setForm({
+      empresaId: empresaIdForNew,
+      codigo: '',
+      nome: '',
+      descricao: '',
+      responsavel: '',
+      orcamentoTotal: 0,
+      gasto: 0,
+      dataInicio: today,
+      dataFim: today,
+      status: 'Activo',
+    });
+  }, [empresaIdForNew]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    const today = new Date().toISOString().slice(0, 10);
+    setForm({
+      empresaId: empresaIdForNew,
+      codigo: '',
+      nome: '',
+      descricao: '',
+      responsavel: '',
+      orcamentoTotal: 0,
+      gasto: 0,
+      dataInicio: today,
+      dataFim: today,
+      status: 'Activo',
+    });
+  }, [empresaIdForNew]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
   const filtered = projectos.filter(p => {
     const matchSearch =
       p.codigo.toLowerCase().includes(search.toLowerCase()) ||
@@ -74,23 +127,7 @@ export default function ProjectosPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    const today = new Date().toISOString().slice(0, 10);
-    setForm({
-      empresaId: empresaIdForNew,
-      codigo: '',
-      nome: '',
-      descricao: '',
-      responsavel: '',
-      orcamentoTotal: 0,
-      gasto: 0,
-      dataInicio: today,
-      dataFim: today,
-      status: 'Activo',
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (p: Projecto) => {
     setEditing(p);
@@ -116,12 +153,73 @@ export default function ProjectosPage() {
       else await addProjecto({ ...form, empresaId: form.empresaId ?? empresaIdForNew });
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
   };
 
   const percentGasto = (p: Projecto) => (p.orcamentoTotal > 0 ? Math.round((p.gasto / p.orcamentoTotal) * 100) : 0);
+
+  const title = editing ? 'Editar projecto' : 'Novo projecto';
+  const saveDisabled = !form.codigo.trim() || !form.nome.trim();
+
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Código</Label>
+          <Input value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value }))} placeholder="ex: PROJ-001" disabled={!!editing} />
+        </div>
+        <div className="space-y-2">
+          <Label>Nome</Label>
+          <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Descrição</Label>
+        <Input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Descrição" />
+      </div>
+      <div className="space-y-2">
+        <Label>Responsável</Label>
+        <Input value={form.responsavel} onChange={e => setForm(f => ({ ...f, responsavel: e.target.value }))} placeholder="Nome" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Orçamento Total (Kz)</Label>
+          <Input type="number" min={0} value={form.orcamentoTotal || ''} onChange={e => setForm(f => ({ ...f, orcamentoTotal: Number(e.target.value) || 0 }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Gasto (Kz)</Label>
+          <Input type="number" min={0} value={form.gasto || ''} onChange={e => setForm(f => ({ ...f, gasto: Number(e.target.value) || 0 }))} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Data Início</Label>
+          <Input type="date" value={form.dataInicio} onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Data Fim</Label>
+          <Input type="date" value={form.dataFim} onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Status</Label>
+        <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as Projecto['status'] }))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map(s => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -236,68 +334,36 @@ export default function ProjectosPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum projecto encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar projecto' : 'Novo projecto'}</DialogTitle>
-            <DialogDescription>Dados do projecto.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Código</Label>
-                <Input value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value }))} placeholder="ex: PROJ-001" disabled={!!editing} />
-              </div>
-              <div className="space-y-2">
-                <Label>Nome</Label>
-                <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome" />
-              </div>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Finanças"
+          screenTitle={title}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(title, 'Dados do projecto.')}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={saveDisabled}>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>
+                Guardar
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Descrição" />
-            </div>
-            <div className="space-y-2">
-              <Label>Responsável</Label>
-              <Input value={form.responsavel} onChange={e => setForm(f => ({ ...f, responsavel: e.target.value }))} placeholder="Nome" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Orçamento Total (Kz)</Label>
-                <Input type="number" min={0} value={form.orcamentoTotal || ''} onChange={e => setForm(f => ({ ...f, orcamentoTotal: Number(e.target.value) || 0 }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Gasto (Kz)</Label>
-                <Input type="number" min={0} value={form.gasto || ''} onChange={e => setForm(f => ({ ...f, gasto: Number(e.target.value) || 0 }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Data Início</Label>
-                <Input type="date" value={form.dataInicio} onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Data Fim</Label>
-                <Input type="date" value={form.dataFim} onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as Projecto['status'] }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.codigo.trim() || !form.nome.trim()}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

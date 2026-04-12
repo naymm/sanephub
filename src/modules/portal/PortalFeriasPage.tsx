@@ -1,7 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '@/context/DataContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Ferias } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -9,14 +15,7 @@ import { formatDate, diasEntre } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -37,7 +36,11 @@ const STATUS_OPTIONS: { value: Ferias['status'] | 'todos'; label: string }[] = [
   { value: 'Cancelado', label: 'Cancelado' },
 ];
 
+const LIST_PATH = '/portal/ferias';
+const NOVO_PATH = '/portal/ferias/novo';
+
 export default function PortalFeriasPage() {
+  const navigate = useNavigate();
   const colaboradorId = useColaboradorId();
   const { ferias, addFerias } = useData();
   const [statusFilter, setStatusFilter] = useState<Ferias['status'] | 'todos'>('todos');
@@ -74,13 +77,11 @@ export default function PortalFeriasPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const updateDias = (inicio: string, fim: string) => {
-    const d = diasEntre(inicio, fim);
-    setForm(prev => ({ ...prev, dias: d >= 0 ? d : 0 }));
-  };
-
-  const openCreate = () => {
-    if (colaboradorId == null) return;
+  const prepareCreate = useCallback(() => {
+    if (colaboradorId == null) {
+      navigate(LIST_PATH, { replace: true });
+      return;
+    }
     const today = new Date().toISOString().slice(0, 10);
     setForm({
       colaboradorId,
@@ -90,7 +91,43 @@ export default function PortalFeriasPage() {
       status: 'Pendente',
       solicitadoEm: today,
     });
-    setDialogOpen(true);
+  }, [colaboradorId, navigate]);
+
+  const resetModal = useCallback(() => {
+    setForm({
+      colaboradorId: 0,
+      dataInicio: '',
+      dataFim: '',
+      dias: 0,
+      status: 'Pendente',
+      solicitadoEm: new Date().toISOString().slice(0, 10),
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const updateDias = (inicio: string, fim: string) => {
+    const d = diasEntre(inicio, fim);
+    setForm(prev => ({ ...prev, dias: d >= 0 ? d : 0 }));
+  };
+
+  const openCreate = () => {
+    if (colaboradorId == null) return;
+    openCreateNavigateOrDialog();
   };
 
   const save = async () => {
@@ -98,6 +135,10 @@ export default function PortalFeriasPage() {
     try {
       await addFerias(form);
       setDialogOpen(false);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
       toast.success('Pedido de férias enviado. Aguarde aprovação dos Recursos Humanos.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao enviar');
@@ -196,13 +237,19 @@ export default function PortalFeriasPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum pedido de férias encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Solicitar férias</DialogTitle>
-            <DialogDescription>Indique o período desejado. O pedido será analisado pelos Recursos Humanos.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Portal"
+          screenTitle="Solicitar férias"
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            'Solicitar férias',
+            'Indique o período desejado. O pedido será analisado pelos Recursos Humanos.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Data início</Label>
@@ -218,11 +265,33 @@ export default function PortalFeriasPage() {
               <Input type="number" min={1} value={form.dias} readOnly className="bg-muted/50" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.dataInicio || !form.dataFim || form.dias <= 0}>Enviar pedido</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={!form.dataInicio || !form.dataFim || form.dias <= 0}>
+                Enviar pedido
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.dataInicio || !form.dataFim || form.dias <= 0}
+                onClick={() => void save()}
+              >
+                Enviar pedido
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { DocumentoOficial } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -39,6 +45,9 @@ import { cn } from '@/lib/utils';
 import { gerarPdfDespacho } from '@/utils/despachoPdf';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
+
+const LIST_PATH = '/secretaria/documentos';
+const NOVO_PATH = '/secretaria/documentos/novo';
 
 const TIPO_OPTIONS: DocumentoOficial['tipo'][] = ['Deliberação', 'Despacho', 'Circular', 'Convocatória', 'Comunicado Interno'];
 const STATUS_OPTIONS: DocumentoOficial['status'][] = ['Rascunho', 'Em Revisão', 'Aprovado', 'Publicado', 'Arquivado', 'Assinado'];
@@ -89,6 +98,7 @@ function nomeacaoPorColaborador(
 }
 
 export default function DocumentosOficiaisPage() {
+  const navigate = useNavigate();
   const { documentosOficiais, addDocumentoOficial, updateDocumentoOficial, deleteDocumentoOficial, empresas, colaboradores } = useData();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -123,6 +133,70 @@ export default function DocumentosOficiaisPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
 
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({
+      tipo: 'Comunicado Interno',
+      numero: nextNumero('Comunicado Interno', documentosOficiais),
+      titulo: '',
+      data: new Date().toISOString().slice(0, 10),
+      autor: user?.nome ?? '',
+      status: 'Rascunho',
+      empresaId: null,
+      despachoTipo: undefined,
+      colaboradorId: null,
+      tratamento: undefined,
+      funcao: '',
+      direccao: '',
+      acumulaFuncao: false,
+      numeroEspacoExoneracao: '',
+      dataReferenciaNomeacao: undefined,
+      pcaAssinado: false,
+      pcaAssinadoEm: undefined,
+      pcaAssinadoPor: undefined,
+    });
+  }, [documentosOficiais, user?.nome]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      tipo: 'Comunicado Interno',
+      numero: nextNumero('Comunicado Interno', documentosOficiais),
+      titulo: '',
+      data: new Date().toISOString().slice(0, 10),
+      autor: user?.nome ?? '',
+      status: 'Rascunho',
+      empresaId: null,
+      despachoTipo: undefined,
+      colaboradorId: null,
+      tratamento: undefined,
+      funcao: '',
+      direccao: '',
+      acumulaFuncao: false,
+      numeroEspacoExoneracao: '',
+      dataReferenciaNomeacao: undefined,
+      pcaAssinado: false,
+      pcaAssinadoEm: undefined,
+      pcaAssinadoPor: undefined,
+    });
+  }, [documentosOficiais, user?.nome]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
   const filtered = documentosOficiais.filter(d => {
     const matchSearch =
       d.numero.toLowerCase().includes(search.toLowerCase()) ||
@@ -146,30 +220,7 @@ export default function DocumentosOficiaisPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({
-      tipo: 'Comunicado Interno',
-      numero: nextNumero('Comunicado Interno', documentosOficiais),
-      titulo: '',
-      data: new Date().toISOString().slice(0, 10),
-      autor: user?.nome ?? '',
-      status: 'Rascunho',
-      empresaId: null,
-      despachoTipo: undefined,
-      colaboradorId: null,
-      tratamento: undefined,
-      funcao: '',
-      direccao: '',
-      acumulaFuncao: false,
-      numeroEspacoExoneracao: '',
-      dataReferenciaNomeacao: undefined,
-      pcaAssinado: false,
-      pcaAssinadoEm: undefined,
-      pcaAssinadoPor: undefined,
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (d: DocumentoOficial) => {
     setEditing(d);
@@ -277,11 +328,16 @@ export default function DocumentosOficiaisPage() {
         }
       }
     }
+    const wasEditing = !!editing;
     try {
       if (editing) await updateDocumentoOficial(editing.id, form);
       else await addDocumentoOficial(form);
       setDialogOpen(false);
       setEditing(null);
+      if (!wasEditing && isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -456,12 +512,18 @@ export default function DocumentosOficiaisPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar documento' : 'Novo documento'}</DialogTitle>
-            <DialogDescription>Documento oficial.</DialogDescription>
-          </DialogHeader>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Secretaria Geral"
+          screenTitle={editing ? 'Editar documento' : 'Novo documento'}
+          desktopContentClassName="max-w-3xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar documento' : 'Novo documento',
+            'Documento oficial.',
+          )}
+          formBody={
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Tipo</Label>
@@ -711,11 +773,34 @@ export default function DocumentosOficiaisPage() {
               </Select>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.numero.trim() || !form.titulo.trim() || !form.data || !form.autor.trim()}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={() => void save()}
+                disabled={!form.numero.trim() || !form.titulo.trim() || !form.data || !form.autor.trim()}
+              >
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.numero.trim() || !form.titulo.trim() || !form.data || !form.autor.trim()}
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

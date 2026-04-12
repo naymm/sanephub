@@ -1,23 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { CentroCusto } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Eye } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
@@ -29,7 +28,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+const LIST_PATH = '/financas/centros-custo';
+const NOVO_PATH = '/financas/centros-custo/novo';
+
 export default function CentrosCustoPage() {
+  const navigate = useNavigate();
   const { centrosCusto, addCentroCusto, updateCentroCusto, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
@@ -49,6 +52,52 @@ export default function CentrosCustoPage() {
     orcamentoAnual: 0,
     gastoActual: 0,
     status: 'Activo',
+  });
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({
+      empresaId: empresaIdForNew,
+      codigo: '',
+      nome: '',
+      descricao: '',
+      responsavel: '',
+      orcamentoMensal: 0,
+      orcamentoAnual: 0,
+      gastoActual: 0,
+      status: 'Activo',
+    });
+  }, [empresaIdForNew]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      empresaId: empresaIdForNew,
+      codigo: '',
+      nome: '',
+      descricao: '',
+      responsavel: '',
+      orcamentoMensal: 0,
+      orcamentoAnual: 0,
+      gastoActual: 0,
+      status: 'Activo',
+    });
+  }, [empresaIdForNew]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
   });
 
   const filtered = centrosCusto.filter(cc => {
@@ -71,21 +120,7 @@ export default function CentrosCustoPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({
-      empresaId: empresaIdForNew,
-      codigo: '',
-      nome: '',
-      descricao: '',
-      responsavel: '',
-      orcamentoMensal: 0,
-      orcamentoAnual: 0,
-      gastoActual: 0,
-      status: 'Activo',
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (cc: CentroCusto) => {
     setEditing(cc);
@@ -110,6 +145,10 @@ export default function CentrosCustoPage() {
       else await addCentroCusto({ ...form, empresaId: form.empresaId ?? empresaIdForNew });
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -117,6 +156,58 @@ export default function CentrosCustoPage() {
 
   const percentUtil = (cc: CentroCusto) =>
     cc.orcamentoAnual > 0 ? Math.round((cc.gastoActual / cc.orcamentoAnual) * 100) : 0;
+
+  const title = editing ? 'Editar centro de custo' : 'Novo centro de custo';
+  const saveDisabled = !form.codigo.trim() || !form.nome.trim();
+
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Código</Label>
+          <Input value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value }))} placeholder="ex: CC-001" disabled={!!editing} />
+        </div>
+        <div className="space-y-2">
+          <Label>Nome</Label>
+          <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Descrição</Label>
+        <Input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Descrição" />
+      </div>
+      <div className="space-y-2">
+        <Label>Responsável</Label>
+        <Input value={form.responsavel} onChange={e => setForm(f => ({ ...f, responsavel: e.target.value }))} placeholder="Nome do responsável" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Orçamento Mensal (Kz)</Label>
+          <Input type="number" min={0} value={form.orcamentoMensal || ''} onChange={e => setForm(f => ({ ...f, orcamentoMensal: Number(e.target.value) || 0 }))} />
+        </div>
+        <div className="space-y-2">
+          <Label>Orçamento Anual (Kz)</Label>
+          <Input type="number" min={0} value={form.orcamentoAnual || ''} onChange={e => setForm(f => ({ ...f, orcamentoAnual: Number(e.target.value) || 0 }))} />
+        </div>
+      </div>
+      {editing && (
+        <div className="space-y-2">
+          <Label>Gasto Actual (Kz)</Label>
+          <Input type="number" min={0} value={form.gastoActual || ''} onChange={e => setForm(f => ({ ...f, gastoActual: Number(e.target.value) || 0 }))} />
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label>Status</Label>
+        <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as 'Activo' | 'Inactivo' }))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Activo">Activo</SelectItem>
+            <SelectItem value="Inactivo">Inactivo</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -231,63 +322,36 @@ export default function CentrosCustoPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum centro de custo encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar centro de custo' : 'Novo centro de custo'}</DialogTitle>
-            <DialogDescription>Dados do centro de custo.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Código</Label>
-                <Input value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value }))} placeholder="ex: CC-001" disabled={!!editing} />
-              </div>
-              <div className="space-y-2">
-                <Label>Nome</Label>
-                <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome" />
-              </div>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Finanças"
+          screenTitle={title}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(title, 'Dados do centro de custo.')}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={saveDisabled}>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>
+                Guardar
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Descrição" />
-            </div>
-            <div className="space-y-2">
-              <Label>Responsável</Label>
-              <Input value={form.responsavel} onChange={e => setForm(f => ({ ...f, responsavel: e.target.value }))} placeholder="Nome do responsável" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Orçamento Mensal (Kz)</Label>
-                <Input type="number" min={0} value={form.orcamentoMensal || ''} onChange={e => setForm(f => ({ ...f, orcamentoMensal: Number(e.target.value) || 0 }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Orçamento Anual (Kz)</Label>
-                <Input type="number" min={0} value={form.orcamentoAnual || ''} onChange={e => setForm(f => ({ ...f, orcamentoAnual: Number(e.target.value) || 0 }))} />
-              </div>
-            </div>
-            {editing && (
-              <div className="space-y-2">
-                <Label>Gasto Actual (Kz)</Label>
-                <Input type="number" min={0} value={form.gastoActual || ''} onChange={e => setForm(f => ({ ...f, gastoActual: Number(e.target.value) || 0 }))} />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as 'Activo' | 'Inactivo' }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Activo">Activo</SelectItem>
-                  <SelectItem value="Inactivo">Inactivo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.codigo.trim() || !form.nome.trim()}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

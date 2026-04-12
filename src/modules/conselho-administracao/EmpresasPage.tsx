@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Empresa } from '@/types';
 import { MODULOS_ATIVOS_PADRAO_GRUPO } from '@/utils/empresaModulos';
 import { Building2, Users, FileText, Plus, Pencil } from 'lucide-react';
@@ -12,14 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 
 const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
@@ -36,7 +35,11 @@ const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'comunicacao-interna', label: 'Comunicação interna' },
 ];
 
+const LIST_PATH = '/conselho-administracao/empresas';
+const NOVO_PATH = '/conselho-administracao/empresas/novo';
+
 export default function EmpresasPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { empresas, addEmpresa, updateEmpresa, colaboradores, requisicoes } = useData();
   const { currentEmpresaId, setCurrentEmpresaId, isGroupLevel } = useTenant();
@@ -52,16 +55,7 @@ export default function EmpresasPage() {
     modulosAtivos: undefined,
   });
 
-  const isAdmin = user?.perfil === 'Admin';
-  const filtered = empresas.filter(
-    e => (e.nome.toLowerCase().includes(search.toLowerCase()) || e.codigo.toLowerCase().includes(search.toLowerCase()))
-  );
-  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
-
-  const countColabs = (empresaId: number) => colaboradores.filter(c => c.empresaId === empresaId).length;
-  const countReqs = (empresaId: number) => requisicoes.filter(r => r.empresaId === empresaId).length;
-
-  const openCreate = () => {
+  const prepareCreate = useCallback(() => {
     setEditing(null);
     setForm({
       codigo: '',
@@ -71,8 +65,46 @@ export default function EmpresasPage() {
       activo: true,
       modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO],
     });
-    setDialogOpen(true);
-  };
+  }, []);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      codigo: '',
+      nome: '',
+      nif: '',
+      morada: '',
+      activo: true,
+      modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO],
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const isAdmin = user?.perfil === 'Admin';
+  const filtered = empresas.filter(
+    e => (e.nome.toLowerCase().includes(search.toLowerCase()) || e.codigo.toLowerCase().includes(search.toLowerCase()))
+  );
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const countColabs = (empresaId: number) => colaboradores.filter(c => c.empresaId === empresaId).length;
+  const countReqs = (empresaId: number) => requisicoes.filter(r => r.empresaId === empresaId).length;
+
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (empresa: Empresa) => {
     setEditing(empresa);
@@ -110,10 +142,87 @@ export default function EmpresasPage() {
       else await addEmpresa(payload);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
   };
+
+  const title = editing ? 'Editar empresa' : 'Nova empresa';
+  const empresaFormDescription = useMemo(
+    () =>
+      `Preencha os dados da empresa do grupo. Código e nome são obrigatórios. ${
+        editing
+          ? 'O pacote de módulos pode ser ajustado; por defeito o grupo usa o mesmo conjunto em todas as unidades.'
+          : 'Os módulos vêm pré-preenchidos com o pacote padrão do grupo (igual ao da Sanep SGPS); pode alterar antes de guardar.'
+      }`,
+    [editing],
+  );
+  const saveDisabled = !form.codigo.trim() || !form.nome.trim();
+
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Código</Label>
+          <Input
+            value={form.codigo}
+            onChange={e => setForm(f => ({ ...f, codigo: e.target.value.toUpperCase().replace(/\s/g, '') }))}
+            placeholder="ex: SANEP-SGPS"
+            disabled={!!editing}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>NIF</Label>
+          <Input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} placeholder="Opcional" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Nome</Label>
+        <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Razão social" />
+      </div>
+      <div className="space-y-2">
+        <Label>Morada</Label>
+        <Textarea value={form.morada} onChange={e => setForm(f => ({ ...f, morada: e.target.value }))} placeholder="Opcional" rows={2} className="resize-none" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox id="activo" checked={form.activo} onCheckedChange={c => setForm(f => ({ ...f, activo: c === true }))} />
+        <Label htmlFor="activo" className="cursor-pointer">Empresa activa (visível no login e no selector)</Label>
+      </div>
+      <div className="space-y-2 border-t border-border/80 pt-4">
+        <Label>Módulos permitidos</Label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Se nenhum for seleccionado, não restringe por empresa (ver perfil do utilizador).
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 text-xs h-8"
+            onClick={() => setForm(f => ({ ...f, modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO] }))}
+          >
+            Pacote grupo (Sanep SGPS)
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          {MODULOS_DISPONIVEIS.map(m => (
+            <div key={m.id} className="flex items-center gap-2">
+              <Checkbox
+                id={`mod-${m.id}`}
+                checked={(form.modulosAtivos ?? []).includes(m.id)}
+                onCheckedChange={() => toggleModulo(m.id)}
+              />
+              <Label htmlFor={`mod-${m.id}`} className="cursor-pointer text-sm font-normal">{m.label}</Label>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -217,82 +326,36 @@ export default function EmpresasPage() {
       <DataTablePagination {...pagination.paginationProps} />
 
       {/* Dialog Nova / Editar empresa (só Admin) */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar empresa' : 'Nova empresa'}</DialogTitle>
-            <DialogDescription>
-              Preencha os dados da empresa do grupo. Código e nome são obrigatórios.{' '}
-              {editing
-                ? 'O pacote de módulos pode ser ajustado; por defeito o grupo usa o mesmo conjunto em todas as unidades.'
-                : 'Os módulos vêm pré-preenchidos com o pacote padrão do grupo (igual ao da Sanep SGPS); pode alterar antes de guardar.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Código</Label>
-                <Input
-                  value={form.codigo}
-                  onChange={e => setForm(f => ({ ...f, codigo: e.target.value.toUpperCase().replace(/\s/g, '') }))}
-                  placeholder="ex: SANEP-SGPS"
-                  disabled={!!editing}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>NIF</Label>
-                <Input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} placeholder="Opcional" />
-              </div>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Conselho de Administração"
+          screenTitle={title}
+          desktopContentClassName="max-w-md max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(title, empresaFormDescription)}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={saveDisabled}>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>
+                Guardar
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Razão social" />
-            </div>
-            <div className="space-y-2">
-              <Label>Morada</Label>
-              <Textarea value={form.morada} onChange={e => setForm(f => ({ ...f, morada: e.target.value }))} placeholder="Opcional" rows={2} className="resize-none" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox id="activo" checked={form.activo} onCheckedChange={c => setForm(f => ({ ...f, activo: c === true }))} />
-              <Label htmlFor="activo" className="cursor-pointer">Empresa activa (visível no login e no selector)</Label>
-            </div>
-            <div className="space-y-2 border-t border-border/80 pt-4">
-              <Label>Módulos permitidos</Label>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Se nenhum for seleccionado, não restringe por empresa (ver perfil do utilizador).
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 text-xs h-8"
-                  onClick={() =>
-                    setForm(f => ({ ...f, modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO] }))
-                  }
-                >
-                  Pacote grupo (Sanep SGPS)
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                {MODULOS_DISPONIVEIS.map(m => (
-                  <div key={m.id} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`mod-${m.id}`}
-                      checked={(form.modulosAtivos ?? []).includes(m.id)}
-                      onCheckedChange={() => toggleModulo(m.id)}
-                    />
-                    <Label htmlFor={`mod-${m.id}`} className="cursor-pointer text-sm font-normal">{m.label}</Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.codigo.trim() || !form.nome.trim()}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import type { Noticia } from '@/types';
@@ -12,7 +12,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { Label } from '@/components/ui/label';
 
 import { Search, Plus, Pencil, Trash2, Eye, Star, Megaphone } from 'lucide-react';
@@ -21,6 +26,9 @@ import { cn } from '@/lib/utils';
 const NOTIF_TARGET_PROFILES = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'];
 
 const todayISO = () => new Date().toISOString();
+
+const LIST_PATH = '/comunicacao-interna/noticias';
+const NOVO_PATH = '/comunicacao-interna/noticias/novo';
 
 const emptyForm: Omit<Noticia, 'id' | 'empresaId'> = {
   titulo: '',
@@ -47,6 +55,41 @@ export default function NoticiasPage() {
 
   const [form, setForm] = useState<Omit<Noticia, 'id' | 'empresaId'>>(emptyForm);
 
+  const prepareCreate = useCallback(() => {
+    if (!isAdmin) {
+      navigate(LIST_PATH, { replace: true });
+      return;
+    }
+    if (!empresaIdForMutation) {
+      toast.error('Para criar notícias, selecione uma empresa (não use “consolidado”).');
+      navigate(LIST_PATH, { replace: true });
+      return;
+    }
+    setEditing(null);
+    setForm({ ...emptyForm });
+  }, [empresaIdForMutation, isAdmin, navigate]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({ ...emptyForm });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
   const sorted = useMemo(() => {
     return [...noticias]
       .sort((a, b) => {
@@ -72,9 +115,7 @@ export default function NoticiasPage() {
       toast.error('Para criar notícias, selecione uma empresa (não use “consolidado”).');
       return;
     }
-    setEditing(null);
-    setForm({ ...emptyForm });
-    setDialogOpen(true);
+    openCreateNavigateOrDialog();
   };
 
   const openEdit = (n: Noticia) => {
@@ -204,6 +245,10 @@ export default function NoticiasPage() {
         }
 
         setDialogOpen(false);
+        if (isNovoRoute) {
+          endMobileCreateFlow();
+          navigate(LIST_PATH, { replace: true });
+        }
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar notícia.');
@@ -307,14 +352,19 @@ export default function NoticiasPage() {
         )}
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar notícia' : 'Nova notícia'}</DialogTitle>
-            <DialogDescription>Crie/actualize a notícia. Pode carregar imagem e definir destaque.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Comunicação Interna"
+          screenTitle={editing ? 'Editar notícia' : 'Nova notícia'}
+          desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar notícia' : 'Nova notícia',
+            'Crie/actualize a notícia. Pode carregar imagem e definir destaque.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label>Título</Label>
               <Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
@@ -364,14 +414,28 @@ export default function NoticiasPage() {
               </div>
             </div>
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => void save()} className="bg-primary text-primary-foreground">
-              {editing ? 'Guardar alterações' : 'Publicar / Guardar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} className="bg-primary text-primary-foreground">
+                {editing ? 'Guardar alterações' : 'Publicar / Guardar'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl bg-primary text-primary-foreground" onClick={() => void save()}>
+                {editing ? 'Guardar alterações' : 'Publicar / Guardar'}
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
     </div>
   );

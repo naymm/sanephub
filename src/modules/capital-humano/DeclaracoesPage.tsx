@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { useAuth } from '@/context/AuthContext';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -12,14 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -49,7 +48,11 @@ import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSo
 const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
 const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
 
+const LIST_PATH = '/capital-humano/declaracoes';
+const NOVO_PATH = '/capital-humano/declaracoes/novo';
+
 export default function DeclaracoesPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { declaracoes, addDeclaracao, updateDeclaracao, deleteDeclaracao, colaboradores } = useData();
   const { addNotification } = useNotifications();
@@ -68,6 +71,43 @@ export default function DeclaracoesPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [colabSelectOpen, setColabSelectOpen] = useState(false);
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({
+      colaboradorId: colaboradores[0]?.id ?? 0,
+      tipo: 'Para Banco',
+      dataPedido: new Date().toISOString().slice(0, 10),
+      status: 'Pendente',
+    });
+  }, [colaboradores]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setColabSelectOpen(false);
+    setForm({
+      colaboradorId: colaboradores[0]?.id ?? 0,
+      tipo: 'Para Banco',
+      dataPedido: new Date().toISOString().slice(0, 10),
+      status: 'Pendente',
+    });
+  }, [colaboradores]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
   const canEliminar = user?.perfil === 'Admin';
@@ -115,16 +155,7 @@ export default function DeclaracoesPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
-      tipo: 'Para Banco',
-      dataPedido: new Date().toISOString().slice(0, 10),
-      status: 'Pendente',
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (d: Declaracao) => {
     setEditing(d);
@@ -163,6 +194,10 @@ export default function DeclaracoesPage() {
       }
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -364,117 +399,145 @@ export default function DeclaracoesPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma declaração encontrada.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar declaração' : 'Nova declaração'}</DialogTitle>
-            <DialogDescription>Pedido de declaração para o colaborador.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Colaborador</Label>
-              <Popover open={colabSelectOpen} onOpenChange={setColabSelectOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={colabSelectOpen}
-                    className="w-full justify-between font-normal"
-                  >
-                    {form.colaboradorId
-                      ? (colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar')
-                      : 'Seleccionar colaborador'}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Pesquisar colaborador..." />
-                    <CommandList>
-                      <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
-                      <CommandGroup>
-                        {colaboradores.map(c => (
-                          <CommandItem
-                            key={c.id}
-                            value={c.nome}
-                            onSelect={() => {
-                              setForm(f => ({ ...f, colaboradorId: c.id }));
-                              setColabSelectOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                'mr-2 h-4 w-4',
-                                form.colaboradorId === c.id ? 'opacity-100' : 'opacity-0'
-                              )}
-                            />
-                            {c.nome} — {c.departamento}
-                          </CommandItem>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Capital Humano"
+          screenTitle={editing ? 'Editar declaração' : 'Nova declaração'}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar declaração' : 'Nova declaração',
+            'Pedido de declaração para o colaborador.',
+          )}
+          formBody={
+            <div className="grid gap-4 py-2">
+              <div className="space-y-2">
+                <Label>Colaborador</Label>
+                <Popover open={colabSelectOpen} onOpenChange={setColabSelectOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={colabSelectOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {form.colaboradorId
+                        ? (colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar')
+                        : 'Seleccionar colaborador'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Pesquisar colaborador..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {colaboradores.map(c => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.nome}
+                              onSelect={() => {
+                                setForm(f => ({ ...f, colaboradorId: c.id }));
+                                setColabSelectOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  form.colaboradorId === c.id ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              {c.nome} — {c.departamento}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoDeclaracao }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TIPO_OPTIONS.map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Descrição (opcional)</Label>
+                <Input value={form.descricao ?? ''} onChange={e => setForm(f => ({ ...f, descricao: e.target.value || undefined }))} placeholder="ex: Crédito habitação" />
+              </div>
+              <div className="space-y-2">
+                <Label>Data pedido</Label>
+                <Input type="date" value={form.dataPedido} onChange={e => setForm(f => ({ ...f, dataPedido: e.target.value }))} />
+              </div>
+              {editing && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Data emissão</Label>
+                      <Input type="date" value={form.dataEmissao ?? ''} onChange={e => setForm(f => ({ ...f, dataEmissao: e.target.value || undefined }))} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data entrega</Label>
+                      <Input type="date" value={form.dataEntrega ?? ''} onChange={e => setForm(f => ({ ...f, dataEntrega: e.target.value || undefined }))} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as StatusDeclaracao }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map(s => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
                         ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoDeclaracao }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TIPO_OPTIONS.map(t => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição (opcional)</Label>
-              <Input value={form.descricao ?? ''} onChange={e => setForm(f => ({ ...f, descricao: e.target.value || undefined }))} placeholder="ex: Crédito habitação" />
-            </div>
-            <div className="space-y-2">
-              <Label>Data pedido</Label>
-              <Input type="date" value={form.dataPedido} onChange={e => setForm(f => ({ ...f, dataPedido: e.target.value }))} />
-            </div>
-            {editing && (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Data emissão</Label>
-                    <Input type="date" value={form.dataEmissao ?? ''} onChange={e => setForm(f => ({ ...f, dataEmissao: e.target.value || undefined }))} />
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Data entrega</Label>
-                    <Input type="date" value={form.dataEntrega ?? ''} onChange={e => setForm(f => ({ ...f, dataEntrega: e.target.value || undefined }))} />
+                    <Label>Emitido por</Label>
+                    <Input value={form.emitidoPor ?? ''} onChange={e => setForm(f => ({ ...f, emitidoPor: e.target.value || undefined }))} />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as StatusDeclaracao }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Emitido por</Label>
-                  <Input value={form.emitidoPor ?? ''} onChange={e => setForm(f => ({ ...f, emitidoPor: e.target.value || undefined }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Observações</Label>
-                  <Textarea value={form.observacoes ?? ''} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value || undefined }))} rows={2} />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.colaboradorId || !form.dataPedido}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+                  <div className="space-y-2">
+                    <Label>Observações</Label>
+                    <Textarea value={form.observacoes ?? ''} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value || undefined }))} rows={2} />
+                  </div>
+                </>
+              )}
+            </div>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void save()} disabled={!form.colaboradorId || !form.dataPedido}>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.colaboradorId || !form.dataPedido}
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       <Dialog

@@ -99,6 +99,7 @@ const App = () => (
                   <Route path="/conselho-administracao/saude-financeira" element={<SaudeFinanceiraPage />} />
                   <Route path="/conselho-administracao/actividade" element={<ActividadeOrganizacionalPage />} />
                   <Route path="/conselho-administracao/empresas" element={<EmpresasPage />} />
+                  <Route path="/conselho-administracao/empresas/novo" element={<EmpresasPage />} />
                   <Route path="/conselho-administracao" element={<ConselhoDashboardPage />} />
                   {/* Planeamento */}
                   <Route path="/planeamento/relatorios" element={<PlaneamentoRelatoriosPage />} />
@@ -109,58 +110,87 @@ const App = () => (
                   <Route path="/planeamento/dashboard" element={<PlaneamentoDashboardPage />} />
                   {/* Capital Humano */}
                   <Route path="/capital-humano/colaboradores" element={<ColaboradoresPage />} />
+                  <Route path="/capital-humano/colaboradores/novo" element={<ColaboradoresPage />} />
                   <Route path="/capital-humano/ferias" element={<FeriasPage />} />
+                  <Route path="/capital-humano/ferias/novo" element={<FeriasPage />} />
                   <Route path="/capital-humano/faltas" element={<FaltasPage />} />
+                  <Route path="/capital-humano/faltas/novo" element={<FaltasPage />} />
                   <Route path="/capital-humano/recibos" element={<RecibosPage />} />
+                  <Route path="/capital-humano/recibos/novo" element={<RecibosPage />} />
                   <Route path="/capital-humano/declaracoes" element={<DeclaracoesPage />} />
+                  <Route path="/capital-humano/declaracoes/novo" element={<DeclaracoesPage />} />
                   <Route path="/capital-humano/processamento-salarial" element={<ProcessamentoSalarialPage />} />
                   <Route path="/capital-humano/marcacoes-ponto" element={<TimePunchesPage />} />
                   <Route path="/capital-humano/zonas-trabalho" element={<GeofencesPage />} />
+                  <Route path="/capital-humano/zonas-trabalho/novo" element={<GeofencesPage />} />
                   {/* Finanças */}
                   <Route path="/financas/requisicoes" element={<RequisicoesPage />} />
+                  <Route path="/financas/requisicoes/novo" element={<RequisicoesPage />} />
                   <Route path="/financas/bancos" element={<BancosPage />} />
+                  <Route path="/financas/bancos/novo" element={<BancosPage />} />
                   <Route path="/financas/contas-bancarias" element={<ContasBancariasPage />} />
+                  <Route path="/financas/contas-bancarias/novo" element={<ContasBancariasPage />} />
                   <Route path="/financas/tesouraria" element={<TesourariaPage />} />
+                  <Route path="/financas/tesouraria/novo" element={<TesourariaPage />} />
                   <Route path="/financas/centros-custo" element={<CentrosCustoPage />} />
+                  <Route path="/financas/centros-custo/novo" element={<CentrosCustoPage />} />
                   <Route path="/financas/projectos" element={<ProjectosPage />} />
+                  <Route path="/financas/projectos/novo" element={<ProjectosPage />} />
                   <Route path="/financas/relatorios" element={<RelatoriosPage />} />
                   {/* Contabilidade */}
                   <Route path="/contabilidade/pagamentos" element={<PagamentosPage />} />
                   <Route path="/contabilidade/pendencias" element={<PendenciasPage />} />
+                  <Route path="/contabilidade/pendencias/novo" element={<PendenciasPage />} />
                   {/* Secretaria Geral */}
                   <Route path="/secretaria/reunioes" element={<ReunioesPage />} />
+                  <Route path="/secretaria/reunioes/novo" element={<ReunioesPage />} />
                   <Route path="/secretaria/actas" element={<ActasPage />} />
+                  <Route path="/secretaria/actas/novo" element={<ActasPage />} />
                   <Route path="/secretaria/documentos" element={<DocumentosOficiaisPage />} />
+                  <Route path="/secretaria/documentos/novo" element={<DocumentosOficiaisPage />} />
                   <Route path="/gestao-documentos" element={<GestaoDocumentosPage />} />
                   <Route path="/secretaria/gestao-documentos" element={<Navigate to="/gestao-documentos" replace />} />
                   <Route path="/secretaria/correspondencias" element={<CorrespondenciasPage />} />
+                  <Route path="/secretaria/correspondencias/novo" element={<CorrespondenciasPage />} />
                   <Route path="/secretaria/arquivo" element={<ArquivoPage />} />
                   {/* Jurídico */}
                   <Route path="/juridico/contratos" element={<ContratosPage />} />
+                  <Route path="/juridico/contratos/novo" element={<ContratosPage />} />
                   <Route path="/juridico/processos" element={<ProcessosJudiciaisPage />} />
+                  <Route path="/juridico/processos/novo" element={<ProcessosJudiciaisPage />} />
                   <Route path="/juridico/processos-disciplinares" element={<ProcessosDisciplinaresPage />} />
+                  <Route path="/juridico/processos-disciplinares/novo" element={<ProcessosDisciplinaresPage />} />
                   <Route path="/juridico/processos-disciplinares/:id" element={<ProcessosDisciplinaresPage />} />
                   <Route path="/juridico/prazos" element={<PrazosPage />} />
+                  <Route path="/juridico/prazos/novo" element={<PrazosPage />} />
                   <Route path="/juridico/riscos" element={<RiscosJuridicosPage />} />
+                  <Route path="/juridico/riscos/novo" element={<RiscosJuridicosPage />} />
                   <Route path="/juridico/rescisoes" element={<RescisoesContratuaisPage />} />
+                  <Route path="/juridico/rescisoes/novo" element={<RescisoesContratuaisPage />} />
                   <Route path="/juridico/arquivo" element={<ArquivoJuridicoPage />} />
                   {/* Portal Colaborador */}
                   <Route path="/portal/dados" element={<PortalDadosPage />} />
                   <Route path="/portal/ferias" element={<PortalFeriasPage />} />
+                  <Route path="/portal/ferias/novo" element={<PortalFeriasPage />} />
                   <Route path="/portal/faltas" element={<GenericModulePage title="As Minhas Faltas" module="portal" />} />
                   <Route path="/portal/recibos" element={<PortalRecibosPage />} />
                   <Route path="/portal/declaracoes" element={<PortalDeclaracoesPage />} />
                   <Route path="/portal/requisicoes" element={<PortalRequisicoesPage />} />
+                  <Route path="/portal/requisicoes/novo" element={<PortalRequisicoesPage />} />
                   {/* Comunicação Interna */}
                   <Route path="/comunicacao-interna/noticias" element={<NoticiasPage />} />
+                  <Route path="/comunicacao-interna/noticias/novo" element={<NoticiasPage />} />
                   <Route path="/comunicacao-interna/noticias/:id" element={<NoticiaDetalhePage />} />
                   <Route path="/comunicacao-interna/eventos" element={<EventosPage />} />
+                  <Route path="/comunicacao-interna/eventos/novo" element={<EventosPage />} />
                   <Route path="/comunicacao-interna/eventos/:id" element={<EventoDetalhePage />} />
                   <Route path="/comunicacao-interna/aniversarios" element={<AniversariosPage />} />
                   {/* Config */}
                   <Route path="/configuracoes" element={<GenericModulePage title="Configurações" module="config" />} />
                   <Route path="/configuracoes/utilizadores" element={<UtilizadoresPage />} />
+                  <Route path="/configuracoes/utilizadores/novo" element={<UtilizadoresPage />} />
                   <Route path="/configuracoes/departamentos" element={<DepartamentosPage />} />
+                  <Route path="/configuracoes/departamentos/novo" element={<DepartamentosPage />} />
                   <Route path="/configuracoes/modulos-recursos" element={<ModulosRecursosPage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />

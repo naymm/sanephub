@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -7,6 +8,11 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { inferBucketFromStoragePublicUrl, resolveComprovativoPublicUrl } from '@/utils/storageComprovativo';
 import { movimentoSaidaPrecisaFacturaFinal } from '@/utils/tesourariaDocumentos';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { MovimentoTesouraria, CategoriaSaidaTesouraria, MetodoPagamentoTesouraria } from '@/types';
 import { formatKz, formatDate } from '@/utils/formatters';
@@ -53,6 +59,9 @@ const CATEGORIAS_SAIDA: { value: CategoriaSaidaTesouraria; label: string }[] = [
 
 type FormState = Omit<MovimentoTesouraria, 'id' | 'referencia' | 'registadoEm'> & { id?: number; referencia?: string; registadoEm?: string };
 
+const LIST_PATH = '/financas/tesouraria';
+const NOVO_PATH = '/financas/tesouraria/novo';
+
 const emptyForm = (empresaId: number, tipo: 'entrada' | 'saida'): FormState => ({
   empresaId,
   tipo,
@@ -67,6 +76,8 @@ const emptyForm = (empresaId: number, tipo: 'entrada' | 'saida'): FormState => (
 });
 
 export default function TesourariaPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const {
     movimentosTesouraria,
@@ -141,9 +152,44 @@ export default function TesourariaPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
-  const openCreate = (tipo: 'entrada' | 'saida') => {
+  const prepareCreate = useCallback(() => {
+    const tipoParam = searchParams.get('tipo');
+    const tipo: 'entrada' | 'saida' = tipoParam === 'saida' ? 'saida' : 'entrada';
+    const eid = typeof empresaIdForNew === 'number' ? empresaIdForNew : 1;
     setFormTipo(tipo);
-    setForm(emptyForm(empresaIdForNew, tipo));
+    setForm(emptyForm(eid, tipo));
+    setEditing(null);
+  }, [empresaIdForNew, searchParams]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    const eid = typeof empresaIdForNew === 'number' ? empresaIdForNew : 1;
+    setFormTipo('entrada');
+    setForm(emptyForm(eid, 'entrada'));
+  }, [empresaIdForNew]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
+  const openCreate = (tipo: 'entrada' | 'saida') => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      navigate(`${NOVO_PATH}?tipo=${tipo}`);
+      return;
+    }
+    setFormTipo(tipo);
+    setForm(emptyForm(typeof empresaIdForNew === 'number' ? empresaIdForNew : 1, tipo));
     setEditing(null);
     setDialogOpen(true);
   };
@@ -273,6 +319,10 @@ export default function TesourariaPage() {
       }
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -305,6 +355,12 @@ export default function TesourariaPage() {
 
   const podeEditarMovimento =
     user?.perfil === 'Admin' || user?.perfil === 'Financeiro' || user?.perfil === 'Contabilidade';
+
+  const tesourariaFormTitle = editing ? 'Editar movimento' : formTipo === 'entrada' ? 'Registar entrada' : 'Registar saída';
+  const tesourariaFormDesc =
+    formTipo === 'entrada'
+      ? 'Registe o recebimento e associe à empresa e origem.'
+      : 'Registe o pagamento. Em saídas é obrigatório anexar pelo menos uma proforma ou uma factura final (PDF).';
 
   const confirmarAnexarFacturaFinalRapido = async (file: File) => {
     if (!movAnexarFacturaFinal || !isSupabaseConfigured() || !supabase) return;
@@ -553,17 +609,16 @@ export default function TesourariaPage() {
       <DataTablePagination {...pagination.paginationProps} />
 
       {/* Dialog Criar/Editar */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar movimento' : formTipo === 'entrada' ? 'Registar entrada' : 'Registar saída'}</DialogTitle>
-            <DialogDescription>
-              {formTipo === 'entrada'
-                ? 'Registe o recebimento e associe à empresa e origem.'
-                : 'Registe o pagamento. Em saídas é obrigatório anexar pelo menos uma proforma ou uma factura final (PDF).'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Finanças"
+          screenTitle={tesourariaFormTitle}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(tesourariaFormTitle, tesourariaFormDesc)}
+          formBody={
+            <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Empresa</Label>
               <Select
@@ -865,20 +920,44 @@ export default function TesourariaPage() {
               <Textarea value={form.observacoes ?? ''} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value || undefined }))} rows={2} className="resize-none" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={() => void save()}
-              disabled={
-                !form.descricao.trim() ||
-                form.valor <= 0 ||
-                (!editing && form.tipo === 'saida' && !saidaTemProformaOuFactura(form))
-              }
-            >
-              Guardar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void save()}
+                disabled={
+                  !form.descricao.trim() ||
+                  form.valor <= 0 ||
+                  (!editing && form.tipo === 'saida' && !saidaTemProformaOuFactura(form))
+                }
+              >
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={
+                  !form.descricao.trim() ||
+                  form.valor <= 0 ||
+                  (!editing && form.tipo === 'saida' && !saidaTemProformaOuFactura(form))
+                }
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       {/* Dialog Ver */}

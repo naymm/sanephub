@@ -1,23 +1,22 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import type { Geofence } from '@/types';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -29,6 +28,9 @@ import { Search, Plus, Pencil, Trash2, MapPin, ExternalLink } from 'lucide-react
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
+const LIST_PATH = '/capital-humano/zonas-trabalho';
+const NOVO_PATH = '/capital-humano/zonas-trabalho/novo';
+
 const emptyForm: Omit<Geofence, 'id' | 'createdAt' | 'updatedAt'> = {
   empresaId: 1,
   nome: '',
@@ -39,6 +41,7 @@ const emptyForm: Omit<Geofence, 'id' | 'createdAt' | 'updatedAt'> = {
 };
 
 export default function GeofencesPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { empresas, geofences, addGeofence, updateGeofence, deleteGeofence } = useData();
   const canEliminar = user?.perfil === 'Admin';
@@ -49,6 +52,34 @@ export default function GeofencesPage() {
   const [form, setForm] = useState(emptyForm);
 
   const empresaOptions = useMemo(() => empresas.filter(e => e.activo), [empresas]);
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    const defaultEmpresa =
+      currentEmpresaId === 'consolidado' ? (empresaOptions[0]?.id ?? 1) : (currentEmpresaId as number);
+    setForm({ ...emptyForm, empresaId: defaultEmpresa });
+  }, [currentEmpresaId, empresaOptions]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm(emptyForm);
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
 
   const filtered = useMemo(() => {
     return geofences.filter(g => {
@@ -74,13 +105,7 @@ export default function GeofencesPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    const defaultEmpresa =
-      currentEmpresaId === 'consolidado' ? (empresaOptions[0]?.id ?? 1) : (currentEmpresaId as number);
-    setForm({ ...emptyForm, empresaId: defaultEmpresa });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (g: Geofence) => {
     setEditing(g);
@@ -117,6 +142,10 @@ export default function GeofencesPage() {
       }
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -139,6 +168,88 @@ export default function GeofencesPage() {
 
   const mapPreviewUrl = (lat: number, lng: number) =>
     `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
+
+  const title = editing ? 'Editar zona de trabalho' : 'Nova zona de trabalho';
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="space-y-2">
+        <Label>Empresa</Label>
+        <Select
+          value={String(form.empresaId)}
+          onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
+          disabled={currentEmpresaId !== 'consolidado'}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Empresa" />
+          </SelectTrigger>
+          <SelectContent>
+            {empresaOptions.map(e => (
+              <SelectItem key={e.id} value={String(e.id)}>
+                {e.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {currentEmpresaId !== 'consolidado' ? (
+          <p className="text-xs text-muted-foreground">A zona fica associada à empresa do contexto actual.</p>
+        ) : null}
+      </div>
+      <div className="space-y-2">
+        <Label>Nome da zona</Label>
+        <Input
+          value={form.nome}
+          onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+          placeholder="ex: Sede Central"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Latitude</Label>
+          <Input
+            type="number"
+            step="any"
+            value={Number.isFinite(form.centerLat) ? form.centerLat : ''}
+            onChange={e => setForm(f => ({ ...f, centerLat: Number(e.target.value) }))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Longitude</Label>
+          <Input
+            type="number"
+            step="any"
+            value={Number.isFinite(form.centerLng) ? form.centerLng : ''}
+            onChange={e => setForm(f => ({ ...f, centerLng: Number(e.target.value) }))}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Raio (metros)</Label>
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          value={Number.isFinite(form.radiusMeters) ? form.radiusMeters : ''}
+          onChange={e => setForm(f => ({ ...f, radiusMeters: Number(e.target.value) }))}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="activo"
+          checked={form.activo}
+          onCheckedChange={c => setForm(f => ({ ...f, activo: c === true }))}
+        />
+        <Label htmlFor="activo" className="cursor-pointer font-normal">
+          Zona activa
+        </Label>
+      </div>
+      <Button variant="outline" size="sm" className="w-fit gap-2" asChild>
+        <a href={mapPreviewUrl(form.centerLat, form.centerLng)} target="_blank" rel="noopener noreferrer">
+          <ExternalLink className="h-4 w-4" />
+          Pré-visualizar no mapa
+        </a>
+      </Button>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -275,101 +386,39 @@ export default function GeofencesPage() {
       )}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar zona de trabalho' : 'Nova zona de trabalho'}</DialogTitle>
-            <DialogDescription>
-              A empresa associa esta zona ao seu tenant. Use coordenadas decimais (ex.: Luanda ≈ −8,838 / 13,234).
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Empresa</Label>
-              <Select
-                value={String(form.empresaId)}
-                onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
-                disabled={currentEmpresaId !== 'consolidado'}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {empresaOptions.map(e => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {currentEmpresaId !== 'consolidado' ? (
-                <p className="text-xs text-muted-foreground">A zona fica associada à empresa do contexto actual.</p>
-              ) : null}
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Capital Humano"
+          screenTitle={title}
+          desktopContentClassName="max-w-md max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            title,
+            'A empresa associa esta zona ao seu tenant. Use coordenadas decimais (ex.: Luanda ≈ −8,838 / 13,234).',
+          )}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={!form.nome.trim()}>
+                {editing ? 'Guardar' : 'Criar'}
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={!form.nome.trim()} onClick={() => void save()}>
+                {editing ? 'Guardar' : 'Criar'}
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Nome da zona</Label>
-              <Input
-                value={form.nome}
-                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-                placeholder="ex: Sede Central"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Latitude</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={Number.isFinite(form.centerLat) ? form.centerLat : ''}
-                  onChange={e => setForm(f => ({ ...f, centerLat: Number(e.target.value) }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Longitude</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={Number.isFinite(form.centerLng) ? form.centerLng : ''}
-                  onChange={e => setForm(f => ({ ...f, centerLng: Number(e.target.value) }))}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Raio (metros)</Label>
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                value={Number.isFinite(form.radiusMeters) ? form.radiusMeters : ''}
-                onChange={e => setForm(f => ({ ...f, radiusMeters: Number(e.target.value) }))}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="activo"
-                checked={form.activo}
-                onCheckedChange={c => setForm(f => ({ ...f, activo: c === true }))}
-              />
-              <Label htmlFor="activo" className="cursor-pointer font-normal">
-                Zona activa
-              </Label>
-            </div>
-            <Button variant="outline" size="sm" className="w-fit gap-2" asChild>
-              <a href={mapPreviewUrl(form.centerLat, form.centerLng)} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4" />
-                Pré-visualizar no mapa
-              </a>
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={save} disabled={!form.nome.trim()}>
-              {editing ? 'Guardar' : 'Criar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
     </div>
   );

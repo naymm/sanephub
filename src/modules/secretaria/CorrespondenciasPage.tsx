@@ -1,22 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import type { Correspondencia } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -32,7 +31,11 @@ const TIPO_OPTIONS: Correspondencia['tipo'][] = ['Entrada', 'Saída'];
 const PRIORIDADE_OPTIONS: Correspondencia['prioridade'][] = ['Normal', 'Urgente', 'Confidencial'];
 const ESTADO_OPTIONS: Correspondencia['estadoResposta'][] = ['Pendente', 'Respondida', 'Não requer', 'Arquivada'];
 
+const LIST_PATH = '/secretaria/correspondencias';
+const NOVO_PATH = '/secretaria/correspondencias/novo';
+
 export default function CorrespondenciasPage() {
+  const navigate = useNavigate();
   const { correspondencias, addCorrespondencia, updateCorrespondencia, deleteCorrespondencia } = useData();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<Correspondencia['tipo'] | 'todos'>('todos');
@@ -51,6 +54,50 @@ export default function CorrespondenciasPage() {
     data: new Date().toISOString().slice(0, 10),
     prioridade: 'Normal',
     estadoResposta: 'Pendente',
+  });
+
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({
+      tipo: 'Entrada',
+      remetente: '',
+      destinatario: '',
+      assunto: '',
+      referencia: '',
+      data: new Date().toISOString().slice(0, 10),
+      prioridade: 'Normal',
+      estadoResposta: 'Pendente',
+    });
+  }, []);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      tipo: 'Entrada',
+      remetente: '',
+      destinatario: '',
+      assunto: '',
+      referencia: '',
+      data: new Date().toISOString().slice(0, 10),
+      prioridade: 'Normal',
+      estadoResposta: 'Pendente',
+    });
+  }, []);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
   });
 
   const filtered = correspondencias.filter(c => {
@@ -76,20 +123,7 @@ export default function CorrespondenciasPage() {
   );
   const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({
-      tipo: 'Entrada',
-      remetente: '',
-      destinatario: '',
-      assunto: '',
-      referencia: '',
-      data: new Date().toISOString().slice(0, 10),
-      prioridade: 'Normal',
-      estadoResposta: 'Pendente',
-    });
-    setDialogOpen(true);
-  };
+  const openCreate = () => openCreateNavigateOrDialog();
 
   const openEdit = (c: Correspondencia) => {
     setEditing(c);
@@ -113,6 +147,10 @@ export default function CorrespondenciasPage() {
       else await addCorrespondencia(form);
       setDialogOpen(false);
       setEditing(null);
+      if (isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -126,6 +164,72 @@ export default function CorrespondenciasPage() {
       toast.error(e instanceof Error ? e.message : 'Erro ao remover');
     }
   };
+
+  const title = editing ? 'Editar correspondência' : 'Nova correspondência';
+  const saveDisabled =
+    !form.remetente.trim() || !form.destinatario.trim() || !form.assunto.trim() || !form.data;
+
+  const formBody = (
+    <div className="grid gap-4 py-2">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Tipo</Label>
+          <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as Correspondencia['tipo'] }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TIPO_OPTIONS.map(t => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Data</Label>
+          <Input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Remetente</Label>
+        <Input value={form.remetente} onChange={e => setForm(f => ({ ...f, remetente: e.target.value }))} placeholder="Quem envia" />
+      </div>
+      <div className="space-y-2">
+        <Label>Destinatário</Label>
+        <Input value={form.destinatario} onChange={e => setForm(f => ({ ...f, destinatario: e.target.value }))} placeholder="Quem recebe" />
+      </div>
+      <div className="space-y-2">
+        <Label>Assunto</Label>
+        <Input value={form.assunto} onChange={e => setForm(f => ({ ...f, assunto: e.target.value }))} placeholder="Assunto da correspondência" />
+      </div>
+      <div className="space-y-2">
+        <Label>Referência</Label>
+        <Input value={form.referencia} onChange={e => setForm(f => ({ ...f, referencia: e.target.value }))} placeholder="Ex: OF-MF-2024-1234" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Prioridade</Label>
+          <Select value={form.prioridade} onValueChange={v => setForm(f => ({ ...f, prioridade: v as Correspondencia['prioridade'] }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PRIORIDADE_OPTIONS.map(p => (
+                <SelectItem key={p} value={p}>{p}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Estado resposta</Label>
+          <Select value={form.estadoResposta} onValueChange={v => setForm(f => ({ ...f, estadoResposta: v as Correspondencia['estadoResposta'] }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ESTADO_OPTIONS.map(e => (
+                <SelectItem key={e} value={e}>{e}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -266,76 +370,36 @@ export default function CorrespondenciasPage() {
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma correspondência encontrada.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar correspondência' : 'Nova correspondência'}</DialogTitle>
-            <DialogDescription>Registo de entrada ou saída.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as Correspondencia['tipo'] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPO_OPTIONS.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Data</Label>
-                <Input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
-              </div>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Secretaria Geral"
+          screenTitle={title}
+          desktopContentClassName="max-w-lg"
+          desktopHeader={mobileCreateDesktopHeader(title, 'Registo de entrada ou saída.')}
+          formBody={formBody}
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={saveDisabled}>
+                Guardar
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>
+                Guardar
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Remetente</Label>
-              <Input value={form.remetente} onChange={e => setForm(f => ({ ...f, remetente: e.target.value }))} placeholder="Quem envia" />
-            </div>
-            <div className="space-y-2">
-              <Label>Destinatário</Label>
-              <Input value={form.destinatario} onChange={e => setForm(f => ({ ...f, destinatario: e.target.value }))} placeholder="Quem recebe" />
-            </div>
-            <div className="space-y-2">
-              <Label>Assunto</Label>
-              <Input value={form.assunto} onChange={e => setForm(f => ({ ...f, assunto: e.target.value }))} placeholder="Assunto da correspondência" />
-            </div>
-            <div className="space-y-2">
-              <Label>Referência</Label>
-              <Input value={form.referencia} onChange={e => setForm(f => ({ ...f, referencia: e.target.value }))} placeholder="Ex: OF-MF-2024-1234" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Prioridade</Label>
-                <Select value={form.prioridade} onValueChange={v => setForm(f => ({ ...f, prioridade: v as Correspondencia['prioridade'] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PRIORIDADE_OPTIONS.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Estado resposta</Label>
-                <Select value={form.estadoResposta} onValueChange={v => setForm(f => ({ ...f, estadoResposta: v as Correspondencia['estadoResposta'] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {ESTADO_OPTIONS.map(e => (
-                      <SelectItem key={e} value={e}>{e}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.remetente.trim() || !form.destinatario.trim() || !form.assunto.trim() || !form.data}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

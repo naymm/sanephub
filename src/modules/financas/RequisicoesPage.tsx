@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import { useTenant } from '@/context/TenantContext';
 import { hasModuleAccess, useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -52,6 +58,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
+const LIST_PATH = '/financas/requisicoes';
+const NOVO_PATH = '/financas/requisicoes/novo';
+
 const STATUS_OPTIONS: { value: StatusRequisicao | 'todos'; label: string }[] = [
   { value: 'todos', label: 'Todos' },
   { value: 'Pendente', label: 'Pendente' },
@@ -87,6 +96,7 @@ function nextNum(requisicoes: Requisicao[]): string {
 }
 
 export default function RequisicoesPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const {
     requisicoes,
@@ -140,6 +150,42 @@ export default function RequisicoesPage() {
   const [anexarFacturaReq, setAnexarFacturaReq] = useState<Requisicao | null>(null);
   const [anexarFacturaReqSubmitting, setAnexarFacturaReqSubmitting] = useState(false);
 
+  const prepareCreate = useCallback(() => {
+    setEditing(null);
+    setForm({
+      ...emptyRequisicao,
+      empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
+      data: new Date().toISOString().slice(0, 10),
+    });
+    setValorInput('');
+  }, [empresaIdForNew]);
+
+  const resetModal = useCallback(() => {
+    setEditing(null);
+    setForm({
+      ...emptyRequisicao,
+      empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
+      data: new Date().toISOString().slice(0, 10),
+    });
+    setValorInput('');
+  }, [empresaIdForNew]);
+
+  const {
+    isNovoRoute,
+    showMobileCreate,
+    openCreateNavigateOrDialog,
+    closeMobileCreate,
+    onDialogOpenChange,
+    endMobileCreateFlow,
+  } = useMobileCreateRoute({
+    listPath: LIST_PATH,
+    novoPath: NOVO_PATH,
+    dialogOpen,
+    setDialogOpen,
+    prepareCreate,
+    resetModal,
+  });
+
   const getFirstTruthy = (arr?: string[]) => (arr ?? []).find(v => !!v) ?? null;
   const getLastTruthy = (arr?: string[]) => {
     const xs = (arr ?? []).filter(v => !!v);
@@ -177,14 +223,7 @@ export default function RequisicoesPage() {
       toast.error('Sem permissão para criar requisições.');
       return;
     }
-    setEditing(null);
-    setForm({
-      ...emptyRequisicao,
-      empresaId: typeof empresaIdForNew === 'number' ? empresaIdForNew : 1,
-      data: new Date().toISOString().slice(0, 10),
-    });
-    setValorInput('');
-    setDialogOpen(true);
+    openCreateNavigateOrDialog();
   };
 
   const openEdit = (r: Requisicao) => {
@@ -420,6 +459,7 @@ export default function RequisicoesPage() {
 
   const save = async () => {
     if (!form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0) return;
+    const wasEditing = !!editing;
     try {
       if (editing) {
         if (!canEditRequisicao) {
@@ -432,6 +472,10 @@ export default function RequisicoesPage() {
       }
       setDialogOpen(false);
       setEditing(null);
+      if (!wasEditing && isNovoRoute) {
+        endMobileCreateFlow();
+        navigate(LIST_PATH, { replace: true });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
     }
@@ -751,12 +795,18 @@ export default function RequisicoesPage() {
       <DataTablePagination {...pagination.paginationProps} />
 
       {/* Dialog Criar/Editar */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar requisição' : 'Nova requisição'}</DialogTitle>
-            <DialogDescription>Preencha os dados da requisição de despesa.</DialogDescription>
-          </DialogHeader>
+      <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={closeMobileCreate}
+          moduleKicker="Finanças"
+          screenTitle={editing ? 'Editar requisição' : 'Nova requisição'}
+          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopHeader={mobileCreateDesktopHeader(
+            editing ? 'Editar requisição' : 'Nova requisição',
+            'Preencha os dados da requisição de despesa.',
+          )}
+          formBody={
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -976,11 +1026,29 @@ export default function RequisicoesPage() {
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+          desktopFooter={
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={() => void save()} disabled={!form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0}>Guardar</Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.fornecedor.trim() || !form.descricao.trim() || form.valor <= 0}
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
+            </div>
+          }
+        />
       </Dialog>
 
       {/* Dialog Ver */}
