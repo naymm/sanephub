@@ -1,13 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { rpcPerfilTemPontoPin } from '@/lib/pontoPinRpc';
 import { MobilePinUnlockOverlay } from '@/components/mobile/MobilePinUnlockOverlay';
 
 const SESSION_UNLOCK_KEY = 'sanep_msl_unlocked_uid';
 
-const IDLE_MS = 60_000;
+/** Inactividade antes de pedir PIN (mobile e desktop; 5 minutos). */
+const IDLE_MS = 5 * 60_000;
 const BACKGROUND_LOCK_MS = 5_000;
 
 type Ctx = {
@@ -48,15 +48,14 @@ function clearUnlocked(): void {
 
 export function MobileSessionLockProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, isAuthReady } = useAuth();
-  const isMobile = useIsMobileViewport();
   const [pinUnlocked, setPinUnlocked] = useState(false);
-  /** null = a carregar; só bloqueia no mobile quando true (PIN de ponto definido no perfil). */
+  /** null = a carregar; bloqueia quando true (PIN de ponto definido no perfil). */
   const [temPontoPin, setTemPontoPin] = useState<boolean | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!user || !isMobile || !isSupabaseConfigured() || !supabase) {
+    if (!user || !isSupabaseConfigured() || !supabase) {
       setTemPontoPin(null);
       return;
     }
@@ -72,7 +71,7 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
     return () => {
       cancelled = true;
     };
-  }, [user?.id, isMobile]);
+  }, [user?.id]);
 
   const pinConfigured = temPontoPin === true;
 
@@ -92,13 +91,13 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
   }, [lock]);
 
   useEffect(() => {
-    if (!user || !isMobile) {
+    if (!user) {
       setPinUnlocked(false);
       return;
     }
     const sid = readUnlockedUserId();
     setPinUnlocked(sid === String(user.id));
-  }, [user?.id, isMobile]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) clearUnlocked();
@@ -113,14 +112,14 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
 
   const scheduleIdle = useCallback(() => {
     clearIdleTimer();
-    if (!isMobile || !user || !pinConfigured || !pinUnlocked) return;
+    if (!user || !pinConfigured || !pinUnlocked) return;
     idleTimerRef.current = setTimeout(() => {
       lock();
     }, IDLE_MS);
-  }, [isMobile, user, pinConfigured, pinUnlocked, lock, clearIdleTimer]);
+  }, [user, pinConfigured, pinUnlocked, lock, clearIdleTimer]);
 
   useEffect(() => {
-    if (!isMobile || !user || !pinConfigured || !pinUnlocked) {
+    if (!user || !pinConfigured || !pinUnlocked) {
       clearIdleTimer();
       return;
     }
@@ -132,10 +131,10 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
       clearIdleTimer();
       events.forEach(e => window.removeEventListener(e, reset));
     };
-  }, [isMobile, user, pinConfigured, pinUnlocked, scheduleIdle, clearIdleTimer]);
+  }, [user, pinConfigured, pinUnlocked, scheduleIdle, clearIdleTimer]);
 
   useEffect(() => {
-    if (!isMobile || !user || !pinConfigured) return;
+    if (!user || !pinConfigured) return;
 
     const onVis = () => {
       if (document.visibilityState === 'hidden') {
@@ -156,12 +155,11 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
       document.removeEventListener('visibilitychange', onVis);
       if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
     };
-  }, [isMobile, user, pinConfigured, lock]);
+  }, [user, pinConfigured, lock]);
 
   const needsUnlock = Boolean(
     isAuthReady &&
       isAuthenticated &&
-      isMobile &&
       user &&
       pinConfigured &&
       !pinUnlocked &&

@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { AppSplashOverlay } from "@/components/AppSplashOverlay";
 import { MobileSessionLockProvider } from "@/context/MobileSessionLockContext";
 import { TenantProvider } from "@/context/TenantContext";
 import { DataProvider } from "@/context/DataContext";
@@ -77,6 +78,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <AppSplashOverlay />
       <TenantProvider>
         <DataProvider>
         <NotificationProvider>

@@ -3,6 +3,8 @@ import { useAuth } from '@/context/AuthContext';
 import { PONTO_PIN_LENGTH, rpcVerificarMeuPontoPin } from '@/lib/pontoPinRpc';
 import { supabase } from '@/lib/supabase';
 import { MobilePinDots, MobilePinKeypad } from '@/components/mobile/MobilePinKeypad';
+import { PontoPinOtpFields } from '@/components/ponto/PontoPinOtpFields';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { toast } from 'sonner';
 import { LogOut } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,6 +22,7 @@ function firstNameFromNome(nome: string | undefined): string {
 
 export function MobilePinUnlockOverlay({ onSuccess }: Props) {
   const { logout, user } = useAuth();
+  const isMobileViewport = useIsMobileViewport();
   const [digits, setDigits] = useState('');
   const [busy, setBusy] = useState(false);
   const attemptRef = useRef(0);
@@ -68,14 +71,76 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
     setDigits(prev => prev.slice(0, -1));
   };
 
+  if (!isMobileViewport) {
+    return (
+      <div
+        className="fixed inset-0 z-[100] flex min-h-[100dvh] items-center justify-center overflow-hidden overscroll-none p-6"
+        role="dialog"
+        aria-modal
+        aria-labelledby="pin-unlock-title"
+      >
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[hsl(var(--navy))]/40 via-transparent to-[hsl(var(--navy))]/50" aria-hidden />
+
+        <div className="relative w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-white/10 bg-[hsl(var(--navy))]/95 p-10 shadow-2xl ring-1 ring-white/5 duration-200">
+          <div className="flex flex-col items-center text-center">
+            <img
+              src="/logo-white.png"
+              alt="GRUPO SANEP"
+              className="mb-6 h-10 w-auto max-w-[200px] object-contain"
+              width={200}
+              height={40}
+            />
+            <Avatar className="h-16 w-16 ring-2 ring-white/15">
+              {avatarPhotoUrl ? (
+                <AvatarImage src={avatarPhotoUrl} alt="" className="object-cover" />
+              ) : null}
+              <AvatarFallback className="bg-white/10 text-lg font-semibold text-white">{avatarFallback}</AvatarFallback>
+            </Avatar>
+            <h1 id="pin-unlock-title" className="mt-5 text-2xl font-bold tracking-tight text-white">
+              Olá, {greeting}
+            </h1>
+            <p className="mt-2 text-sm text-white/75">
+              Olá,{' '}
+               Utilize o PIN para continuar.
+            </p>
+            {user?.email ? (
+              <p className="mt-2 max-w-full truncate text-xs text-white/45">{user.email}</p>
+            ) : null}
+
+            <div className="mt-8 w-full">
+              <PontoPinOtpFields
+                variant="dark"
+                value={digits}
+                onChange={setDigits}
+                disabled={busy}
+                autoFocus
+                containerClassName="gap-1"
+              />
+            </div>
+
+            <button
+              type="button"
+              className="mt-10 flex items-center justify-center gap-2 text-sm text-white/55 transition hover:text-[hsl(var(--primary))]"
+              onClick={() => logout()}
+            >
+              <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+              Terminar sessão
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="fixed inset-0 z-[100] h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none lg:hidden"
+      className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] items-stretch justify-center overflow-hidden overscroll-none"
       role="dialog"
       aria-modal
       aria-labelledby="pin-unlock-title"
     >
-      <div className="relative flex h-full max-h-full min-h-0 flex-col bg-[hsl(var(--navy))]">
+      <div className="relative flex h-full w-full max-h-full min-h-0 flex-col bg-[hsl(var(--navy))]">
         <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-[hsl(var(--navy))] via-[hsl(var(--navy))] to-[hsl(var(--navy-lighter))] px-5 pb-10 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))]">
           <div
             className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-white/[0.06]"

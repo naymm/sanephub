@@ -433,6 +433,13 @@ export default function Dashboard() {
 
   if (!user) return null;
 
+  const canComunicacao = hasModuleAccess(user, 'comunicacao-interna');
+  const canCapitalHumano = hasModuleAccess(user, 'capital-humano');
+  const canFinancas = hasModuleAccess(user, 'financas');
+  const canContabilidade = hasModuleAccess(user, 'contabilidade');
+  const canSecretaria = hasModuleAccess(user, 'secretaria');
+  const canJuridico = hasModuleAccess(user, 'juridico');
+
   const quickLinks = [
     { label: 'Requisições', path: '/financas/requisicoes', module: 'financas' },
     { label: 'Declarações', path: '/capital-humano/declaracoes', module: 'capital-humano' },
@@ -440,6 +447,14 @@ export default function Dashboard() {
     { label: 'Reuniões', path: '/secretaria/reunioes', module: 'secretaria' },
     { label: 'Contratos', path: '/juridico/contratos', module: 'juridico' },
   ].filter(l => hasModuleAccess(user, l.module));
+
+  const kpiFlags = [canContabilidade, canFinancas, canCapitalHumano, canJuridico];
+  const kpiCount = kpiFlags.filter(Boolean).length;
+
+  const hasNewsColumn = canComunicacao;
+  const rightHasCalendarOrBirthdays = canComunicacao;
+  const hasRightColumn = quickLinks.length > 0 || rightHasCalendarOrBirthdays;
+  const hasMainGrid = hasNewsColumn || hasRightColumn;
 
   return (
     <div className="space-y-8">
@@ -454,18 +469,18 @@ export default function Dashboard() {
             Olá, {user.nome.split(' ')[0]}! Bem vindo(a) à intranet
           </h1>
           <p className="text-white/90 text-sm mt-1">
-            Centro de comunicação e recursos relacionados com colaboradores
+            Resumo e atalhos dos módulos a que tem acesso
           </p>
           <p className="text-white/80 text-xs mt-2 capitalize">{getCurrentDatePT()}</p>
         </div>
       </div>
 
-      {/* Destaque: aniversariantes do dia (visível logo abaixo do hero) */}
-      {birthdaysLoading ? (
+      {/* Destaque: aniversariantes (módulo Comunicação interna) */}
+      {canComunicacao && birthdaysLoading ? (
         <div className="rounded-2xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           A carregar aniversariantes…
         </div>
-      ) : birthdaysToday.length > 0 ? (
+      ) : canComunicacao && birthdaysToday.length > 0 ? (
         <div
           className="rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50 to-amber-100/80 dark:from-amber-950/50 dark:to-amber-900/30 dark:border-amber-800/60 px-4 py-4 sm:px-6"
           role="region"
@@ -510,44 +525,68 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      ) : birthdaysError ? (
+      ) : canComunicacao && birthdaysError ? (
         <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {birthdaysError}
         </div>
       ) : null}
 
-      {/* KPI Grid (corporativo) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          title="Receita"
-          value={formatKz(receita)}
-          icon={<TrendingUp className="h-5 w-5" />}
-          description="Pagamentos recebidos"
-        />
-        <KpiCard
-          title="Despesas"
-          value={formatKz(despesas)}
-          icon={<Receipt className="h-5 w-5" />}
-          description="Requisições pagas"
-        />
-        <KpiCard
-          title="Clientes"
-          value={activeClients}
-          icon={<UsersRound className="h-5 w-5" />}
-          description="Colaboradores ativos"
-        />
-        <KpiCard
-          title="Retenção"
-          value={retencao}
-          icon={<ShieldCheck className="h-5 w-5" />}
-          description="Contratos com mais de 90 dias"
-          className={retencao <= 0 ? 'border-destructive/30' : ''}
-        />
-      </div>
+      {/* KPIs por módulo: contabilidade / finanças / capital humano / jurídico */}
+      {kpiCount > 0 ? (
+        <div
+          className={cn(
+            'grid gap-4 grid-cols-1',
+            kpiCount >= 2 && 'sm:grid-cols-2',
+            kpiCount >= 3 && 'lg:grid-cols-3',
+            kpiCount >= 4 && 'lg:grid-cols-4',
+          )}
+        >
+          {canContabilidade ? (
+            <KpiCard
+              title="Receita"
+              value={formatKz(receita)}
+              icon={<TrendingUp className="h-5 w-5" />}
+              description="Pagamentos recebidos"
+            />
+          ) : null}
+          {canFinancas ? (
+            <KpiCard
+              title="Despesas"
+              value={formatKz(despesas)}
+              icon={<Receipt className="h-5 w-5" />}
+              description="Requisições pagas"
+            />
+          ) : null}
+          {canCapitalHumano ? (
+            <KpiCard
+              title="Clientes"
+              value={activeClients}
+              icon={<UsersRound className="h-5 w-5" />}
+              description="Colaboradores ativos"
+            />
+          ) : null}
+          {canJuridico ? (
+            <KpiCard
+              title="Retenção"
+              value={retencao}
+              icon={<ShieldCheck className="h-5 w-5" />}
+              description="Contratos com mais de 90 dias"
+              className={retencao <= 0 ? 'border-destructive/30' : ''}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
-      {/* Conteúdo principal (2 colunas) */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {/* Conteúdo principal: notícias (comunicação) + atalhos / calendário / aniversários */}
+      {hasMainGrid ? (
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-6',
+          hasNewsColumn && hasRightColumn && 'xl:grid-cols-2',
+        )}
+      >
         {/* Esquerda: Feed de notícias */}
+        {hasNewsColumn ? (
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -632,9 +671,12 @@ export default function Dashboard() {
             )}
           </div>
         </section>
+        ) : null}
 
         {/* Direita: Atalhos + Calendário + Eventos */}
+        {hasRightColumn ? (
         <section className="space-y-4">
+          {quickLinks.length > 0 ? (
           <div className="bg-card rounded-xl border border-border/80 p-5">
             <h2 className="text-base font-semibold text-foreground">Links rápidos</h2>
             <p className="text-sm text-muted-foreground mt-1">Atalhos para acções frequentes.</p>
@@ -653,12 +695,11 @@ export default function Dashboard() {
                   </div>
                 </button>
               ))}
-              {quickLinks.length === 0 && (
-                <div className="col-span-full text-sm text-muted-foreground">Sem atalhos para o seu perfil.</div>
-              )}
             </div>
           </div>
+          ) : null}
 
+          {rightHasCalendarOrBirthdays ? (
           <div className="bg-card rounded-xl border border-border/80 p-5">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -747,7 +788,9 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+          ) : null}
 
+          {rightHasCalendarOrBirthdays ? (
           <div className="bg-card rounded-xl border border-border/80 p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -789,11 +832,15 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+          ) : null}
 
         </section>
+        ) : null}
       </div>
+      ) : null}
 
-      {/* Documentos */}
+      {/* Documentos oficiais (Secretaria) */}
+      {canSecretaria ? (
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -850,6 +897,7 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }
