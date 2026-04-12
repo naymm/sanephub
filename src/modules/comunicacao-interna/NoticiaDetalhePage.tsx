@@ -9,6 +9,7 @@ import type { Noticia, NoticiaComentario } from '@/types';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -247,7 +248,11 @@ export default function NoticiaDetalhePage() {
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden">
           {noticia.imagemUrl && (
             <div className="h-60 bg-muted/30 overflow-hidden">
-              <img src={noticia.imagemUrl} alt={noticia.titulo} className="w-full h-full object-cover" />
+              <img
+              src={normalizePublicMediaUrl(noticia.imagemUrl) ?? noticia.imagemUrl}
+              alt={noticia.titulo}
+              className="w-full h-full object-cover"
+            />
             </div>
           )}
           <div className="p-6 space-y-4">

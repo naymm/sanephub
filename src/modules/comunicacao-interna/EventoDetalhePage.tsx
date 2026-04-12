@@ -6,6 +6,7 @@ import type { Evento } from '@/types';
 
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 
 export default function EventoDetalhePage() {
   const { id } = useParams();
@@ -46,7 +47,11 @@ export default function EventoDetalhePage() {
       <div className="bg-card border border-border/80 rounded-xl overflow-hidden">
         {evento.imagemUrl && (
           <div className="h-60 bg-muted/30 overflow-hidden">
-            <img src={evento.imagemUrl} alt={evento.titulo} className="w-full h-full object-cover" />
+            <img
+            src={normalizePublicMediaUrl(evento.imagemUrl) ?? evento.imagemUrl}
+            alt={evento.titulo}
+            className="w-full h-full object-cover"
+          />
           </div>
         )}
 

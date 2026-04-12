@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 
 import { Search, Plus, Pencil, Trash2, Eye, Star, Megaphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 
 const NOTIF_TARGET_PROFILES = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'];
 
@@ -306,7 +307,11 @@ export default function NoticiasPage() {
           >
             {n.imagemUrl && (
               <div className="h-36 bg-muted/30 overflow-hidden">
-                <img src={n.imagemUrl} alt={n.titulo} className="w-full h-full object-cover" />
+                <img
+                  src={normalizePublicMediaUrl(n.imagemUrl) ?? n.imagemUrl}
+                  alt={n.titulo}
+                  className="w-full h-full object-cover"
+                />
               </div>
             )}
             <div className="p-4 space-y-2">
@@ -387,7 +392,11 @@ export default function NoticiasPage() {
                   }}
                 />
                 {form.imagemUrl && (
-                  <img src={form.imagemUrl} alt="Pré-visualização" className="w-full h-32 object-cover rounded-xl border" />
+                  <img
+                    src={normalizePublicMediaUrl(form.imagemUrl) ?? form.imagemUrl}
+                    alt="Pré-visualização"
+                    className="w-full h-32 object-cover rounded-xl border"
+                  />
                 )}
               </div>
 

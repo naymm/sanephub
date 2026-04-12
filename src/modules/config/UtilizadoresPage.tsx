@@ -33,6 +33,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Check, ChevronsUpDown } from 'lucide-react';
@@ -737,7 +738,7 @@ export default function UtilizadoresPage() {
               {form.assinaturaImagemUrl && (
                 <div className="mt-2 flex items-center gap-3">
                   <img
-                    src={form.assinaturaImagemUrl}
+                    src={normalizePublicMediaUrl(form.assinaturaImagemUrl) ?? form.assinaturaImagemUrl}
                     alt="Pré-visualização da assinatura"
                     className="h-12 border border-border/80 rounded bg-muted object-contain"
                   />

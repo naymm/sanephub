@@ -179,7 +179,15 @@ export function IntranetTopbar() {
   }, [principalModules, selectedPrincipalModuleId]);
 
   return (
-    <header className="sticky top-0 z-30 w-full border-b border-border/80 bg-[#1C1C1C] backdrop-blur-sm max-md:border-border/40 max-md:bg-gradient-to-br max-md:from-[hsl(var(--navy))] max-md:to-[hsl(var(--navy-lighter))]">
+    <>
+      <header
+        className={cn(
+          'z-30 w-full border-b border-border/80 bg-[#1C1C1C] backdrop-blur-sm max-md:border-border/40 max-md:bg-gradient-to-br max-md:from-[hsl(var(--navy))] max-md:to-[hsl(var(--navy-lighter))]',
+          'pt-[env(safe-area-inset-top,0px)]',
+          /* Fixo no viewport: mobile (notch) e desktop (scroll) */
+          'fixed left-0 right-0 top-0',
+        )}
+      >
       <div className="mx-auto flex h-16 items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 lg:px-8 min-w-0 max-w-full">
         {/* Left: apps + logo (menu completo na barra inferior «Mais» em mobile) */}
         <div className="flex items-center gap-1 sm:gap-3 min-w-0 flex-1 md:flex-initial">
@@ -511,6 +519,12 @@ export function IntranetTopbar() {
         </div>
       </div>
     </header>
+      {/* Reserva altura quando o header é fixed (mobile); em md+ o header continua no fluxo */}
+      <div
+        className="max-md:h-[calc(4rem+env(safe-area-inset-top,0px))] max-md:shrink-0 md:hidden"
+        aria-hidden
+      />
+    </>
   );
 }
 

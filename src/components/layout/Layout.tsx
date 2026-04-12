@@ -76,6 +76,11 @@ export function Layout() {
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-background flex flex-col">
       <IntranetTopbar />
       <HorizontalMenu />
+      {/* Altura do header fixo + menu horizontal (desktop); mobile: só topbar (spacer no IntranetTopbar) */}
+      <div
+        className="hidden shrink-0 md:block md:h-[calc(env(safe-area-inset-top,0px)+4rem+1px+52px+1px)]"
+        aria-hidden
+      />
       <main
         className={cn(
           'flex-1 overflow-x-hidden w-full min-w-0 pt-4 pb-28 max-md:bg-muted/45 md:bg-background md:pt-5 md:pb-5 lg:pt-8 lg:pb-8',

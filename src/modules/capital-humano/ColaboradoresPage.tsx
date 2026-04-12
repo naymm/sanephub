@@ -46,6 +46,7 @@ import {
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { cn } from '@/lib/utils';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 import {
   criarPastaColaboradorNaGestao,
   nomePastaColaboradorMaiusculo,
@@ -272,7 +273,8 @@ function ColaboradorPreviewFoto({
   nome: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const clean = (fotoUrl ?? '').trim();
+  const raw = (fotoUrl ?? '').trim();
+  const clean = normalizePublicMediaUrl(raw) ?? raw;
   useEffect(() => {
     setFailed(false);
   }, [clean]);
@@ -290,7 +292,6 @@ function ColaboradorPreviewFoto({
       src={clean}
       alt=""
       className="h-32 w-32 rounded-lg border-2 border-border object-cover shadow-sm"
-      referrerPolicy="no-referrer"
       loading="eager"
       decoding="async"
       onError={() => setFailed(true)}
@@ -1031,7 +1032,11 @@ export default function ColaboradoresPage() {
       <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-start">
         <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-full border-2 border-border bg-background shadow-sm">
           {fotoMostrada ? (
-            <img src={fotoMostrada} alt="" className="h-full w-full object-cover" />
+            <img
+              src={normalizePublicMediaUrl(fotoMostrada) ?? fotoMostrada}
+              alt=""
+              className="h-full w-full object-cover"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground">
               <User className="h-14 w-14 opacity-60" aria-hidden />
@@ -1729,7 +1734,7 @@ export default function ColaboradoresPage() {
                   <td className="py-3 px-2 align-middle">
                     {c.fotoPerfilUrl ? (
                       <img
-                        src={c.fotoPerfilUrl}
+                        src={normalizePublicMediaUrl(c.fotoPerfilUrl) ?? c.fotoPerfilUrl}
                         alt=""
                         className="h-9 w-9 rounded-full object-cover border border-border/80"
                       />
@@ -1783,7 +1788,7 @@ export default function ColaboradoresPage() {
           renderSummary={c => ({
             avatar: c.fotoPerfilUrl ? (
               <img
-                src={c.fotoPerfilUrl}
+                src={normalizePublicMediaUrl(c.fotoPerfilUrl) ?? c.fotoPerfilUrl}
                 alt=""
                 className="h-10 w-10 rounded-full border border-border/80 object-cover"
               />

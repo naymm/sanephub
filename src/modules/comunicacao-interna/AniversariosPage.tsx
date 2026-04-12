@@ -15,6 +15,7 @@ import { Calendar as UiCalendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { pt } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 
 type BirthdayPerson = {
   id: number;
@@ -269,7 +270,9 @@ export default function AniversariosPage() {
               >
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                    {looksLikeUrl(p.avatar) ? <AvatarImage src={p.avatar ?? undefined} /> : null}
+                    {looksLikeUrl(p.avatar) ? (
+                      <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
+                    ) : null}
                     <AvatarFallback>
                       {(p.name || '?')
                         .split(/\s+/)
@@ -352,7 +355,9 @@ export default function AniversariosPage() {
                           <span className="text-lg font-bold leading-tight">{day}</span>
                         </div>
                         <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                          {looksLikeUrl(p.avatar) ? <AvatarImage src={p.avatar ?? undefined} /> : null}
+                          {looksLikeUrl(p.avatar) ? (
+                            <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
+                          ) : null}
                           <AvatarFallback>
                             {(p.name || '?')
                               .split(/\s+/)

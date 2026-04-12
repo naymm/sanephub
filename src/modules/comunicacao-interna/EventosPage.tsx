@@ -21,6 +21,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Search, Plus, Pencil, Trash2, Eye, CalendarDays, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 
 const NOTIF_TARGET_PROFILES = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'];
 
@@ -264,7 +265,11 @@ export default function EventosPage() {
           <div key={e.id} className="rounded-xl border border-border/80 bg-card overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             {e.imagemUrl && (
               <div className="h-36 bg-muted/30 overflow-hidden">
-                <img src={e.imagemUrl} alt={e.titulo} className="w-full h-full object-cover" />
+                <img
+                  src={normalizePublicMediaUrl(e.imagemUrl) ?? e.imagemUrl}
+                  alt={e.titulo}
+                  className="w-full h-full object-cover"
+                />
               </div>
             )}
             <div className="p-4 space-y-2">
@@ -378,7 +383,11 @@ export default function EventosPage() {
                 </div>
                 {form.imagemUrl && (
                   <div className="rounded-xl border overflow-hidden">
-                    <img src={form.imagemUrl} alt="Pré-visualização" className="w-full h-32 object-cover" />
+                    <img
+                    src={normalizePublicMediaUrl(form.imagemUrl) ?? form.imagemUrl}
+                    alt="Pré-visualização"
+                    className="w-full h-32 object-cover"
+                  />
                   </div>
                 )}
               </div>

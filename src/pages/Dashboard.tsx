@@ -20,6 +20,7 @@ import { hasModuleAccess } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 
 type BirthdayPerson = {
   id: number;
@@ -491,7 +492,9 @@ export default function Dashboard() {
                   className="inline-flex items-center gap-2 rounded-lg border border-amber-300/60 bg-background/70 dark:border-amber-700/50 px-2.5 py-1.5 text-left hover:bg-background transition-colors"
                 >
                   <Avatar className="h-8 w-8 ring-1 ring-border/50">
-                    {looksLikeUrl(p.avatar) ? <AvatarImage src={p.avatar ?? undefined} /> : null}
+                    {looksLikeUrl(p.avatar) ? (
+                      <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
+                    ) : null}
                     <AvatarFallback className="text-xs">
                       {(p.name || '?')
                         .split(/\s+/)
@@ -589,7 +592,7 @@ export default function Dashboard() {
                 <div className="mt-3 overflow-hidden rounded-xl border border-border/60">
                   {n.imageUrl ? (
                     <img
-                      src={n.imageUrl}
+                      src={normalizePublicMediaUrl(n.imageUrl) ?? n.imageUrl}
                       alt={n.title}
                       className="h-44 w-full object-cover"
                     />
@@ -763,7 +766,9 @@ export default function Dashboard() {
                 birthdaysToday.map(p => (
                   <div key={p.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/30 px-3 py-2">
                     <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                      {looksLikeUrl(p.avatar) ? <AvatarImage src={p.avatar ?? undefined} /> : null}
+                      {looksLikeUrl(p.avatar) ? (
+                        <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
+                      ) : null}
                       <AvatarFallback>
                         {(p.name || '?')
                           .split(/\s+/)

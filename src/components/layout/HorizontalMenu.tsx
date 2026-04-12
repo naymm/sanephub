@@ -38,7 +38,7 @@ export function HorizontalMenu() {
     );
 
   return (
-    <nav className="sticky z-20 top-16 hidden md:block bg-background/95 backdrop-blur-sm border-b border-border/80">
+    <nav className="z-20 hidden md:fixed md:left-0 md:right-0 md:block md:top-[calc(env(safe-area-inset-top,0px)+4rem+1px)] bg-background/95 backdrop-blur-sm border-b border-border/80">
       <div className="mx-auto px-4 sm:px-6 lg:px-8 h-[52px] flex items-center gap-2 overflow-x-auto">
         {hasPortalColaborador && hasAnyNonPortalModule ? (
           <>
