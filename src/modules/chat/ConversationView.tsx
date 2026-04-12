@@ -44,11 +44,26 @@ import { userAvatarFallbackLabel, userAvatarImageSrc } from '@/utils/userAvatar'
 import { Input } from '@/components/ui/input';
 import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { useVisualViewportBottomInset } from '@/hooks/useVisualViewportBottomInset';
+import { useChatTypingBroadcast } from '@/modules/chat/useChatTypingBroadcast';
 
 interface ConversationViewProps {
   conversationId: string | null;
   /** Mobile: voltar à lista de conversas. */
   onMobileBack?: () => void;
+}
+
+function ChatTypingEllipsis() {
+  return (
+    <span className="inline-flex h-3.5 items-end gap-px pb-0.5" aria-hidden>
+      {[0, 1, 2].map(i => (
+        <span
+          key={i}
+          className="block h-1 w-1 rounded-full bg-current opacity-70 motion-safe:animate-pulse"
+          style={{ animationDelay: `${i * 160}ms` }}
+        />
+      ))}
+    </span>
+  );
 }
 
 function ChatDateSeparator({ dateStr }: { dateStr: string }) {
@@ -116,7 +131,26 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   const isMobileComposer = useIsMobileViewport();
   const keyboardBottomInset = useVisualViewportBottomInset();
 
+  const typingEnabled =
+    usesMessagePagination && !!conversationId && (user?.id ?? 0) > 0;
+  const { typingPeerIds, onComposerActivity, setTypingInactive } = useChatTypingBroadcast({
+    conversationId,
+    profileId: user?.id ?? 0,
+    enabled: typingEnabled,
+  });
+
   const conv = useMemo(() => conversations.find(c => c.id === conversationId), [conversations, conversationId]);
+
+  const typingSubtitle = useMemo(() => {
+    if (typingPeerIds.length === 0) return null;
+    const names = typingPeerIds
+      .map(id => usuarios.find(u => u.id === id)?.nome)
+      .filter((n): n is string => Boolean(n));
+    if (names.length === 0) return 'A escrever';
+    if (names.length === 1) return `${names[0]} está a escrever`;
+    if (names.length === 2) return `${names[0]} e ${names[1]} estão a escrever`;
+    return `${names.slice(0, 2).join(', ')} e mais ${names.length - 2} estão a escrever`;
+  }, [typingPeerIds, usuarios]);
 
   const headerPeer = useMemo(() => {
     if (!conv || conv.type === 'group') return null;
@@ -231,13 +265,23 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     } else {
       setMentionQuery(null);
     }
+    if (typingEnabled) {
+      if (v.trim().length === 0) {
+        setTypingInactive();
+      } else {
+        onComposerActivity();
+      }
+    }
   };
 
   const insertMention = (nome: string) => {
     const before = input.slice(0, mentionAnchor);
     const after = input.slice(mentionAnchor).replace(/@\w*$/, '');
-    setInput(`${before}@${nome} ${after}`);
+    const next = `${before}@${nome} ${after}`;
+    mobileInputDraftRef.current = next;
+    setInput(next);
     setMentionQuery(null);
+    if (typingEnabled) onComposerActivity();
   };
 
   const mentionCandidates = useMemo(() => {
@@ -280,6 +324,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   };
 
   const handleSend = () => {
+    if (typingEnabled) setTypingInactive();
     clearIosTextSelection();
     const ta =
       mobileComposerTextareaRef.current ??
@@ -435,8 +480,17 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
               <ChevronLeft className="h-6 w-6" />
             </button>
           )}
-          <div className="hidden min-w-0 flex-1 items-center md:flex">
+          <div className="hidden min-w-0 flex-1 flex-col md:flex">
             <h2 className="truncate font-semibold">{getConversationDisplayName(conv)}</h2>
+            {typingSubtitle ? (
+              <p
+                className="mt-0.5 flex min-h-4 min-w-0 items-center gap-1.5 truncate text-xs italic text-muted-foreground"
+                aria-live="polite"
+              >
+                <ChatTypingEllipsis />
+                <span className="truncate">{typingSubtitle}…</span>
+              </p>
+            ) : null}
           </div>
           <div className="flex min-w-0 flex-1 items-center gap-3 md:hidden">
             <Avatar className="h-11 w-11 border border-zinc-100 shadow-sm">
@@ -456,9 +510,21 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
               <h2 className="truncate text-base font-bold leading-tight text-zinc-900">
                 {getConversationDisplayName(conv)}
               </h2>
-              <p className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
-                <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-                Na intranet
+              <p className="mt-0.5 flex min-h-4 min-w-0 items-center gap-1.5 text-[11px] font-medium">
+                {typingSubtitle ? (
+                  <span
+                    className="flex min-w-0 items-center gap-1.5 truncate italic text-amber-800 dark:text-amber-200"
+                    aria-live="polite"
+                  >
+                    <ChatTypingEllipsis />
+                    <span className="truncate">{typingSubtitle}…</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-emerald-600">
+                    <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                    Na intranet
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -767,6 +833,9 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
               onChange={handleInputChange}
               onInput={handleInputChange}
               onKeyDown={handleKeyDown}
+              onBlur={() => {
+                if (typingEnabled) setTypingInactive();
+              }}
               placeholder="Escreva uma mensagem… (@ menciona)"
               className="min-h-11 max-h-32 resize-none pr-2 text-base md:text-sm"
               rows={1}
@@ -904,6 +973,9 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                   onChange={handleInputChange}
                   onInput={handleInputChange}
                   onKeyDown={handleKeyDown}
+                  onBlur={() => {
+                    if (typingEnabled) setTypingInactive();
+                  }}
                   placeholder="Mensagem…"
                   enterKeyHint="send"
                   inputMode="text"
@@ -946,7 +1018,14 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                         key={em}
                         type="button"
                         className="rounded-lg p-1.5 text-2xl transition-colors hover:bg-zinc-100"
-                        onClick={() => setInput(prev => prev + em)}
+                        onClick={() => {
+                          setInput(prev => {
+                            const n = prev + em;
+                            mobileInputDraftRef.current = n;
+                            return n;
+                          });
+                          if (typingEnabled) onComposerActivity();
+                        }}
                       >
                         {em}
                       </button>
