@@ -4,7 +4,7 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 
 /**
- * Botão flutuante para Gestão documental (empilhado acima do chat no canto inferior direito).
+ * Botão flutuante para Gestão documental (canto inferior direito, abaixo do ponto e do chat).
  */
 export function GestaoDocumentosFloatingButton() {
   const { user } = useAuth();

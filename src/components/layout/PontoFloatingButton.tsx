@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Clock } from 'lucide-react';
+import { Fingerprint } from 'lucide-react';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -353,7 +353,7 @@ export function PontoFloatingButton() {
         aria-label={ariaLabel}
         title={titleBtn}
       >
-        <Clock className="h-6 w-6" />
+        <Fingerprint className="h-6 w-6" strokeWidth={2} aria-hidden />
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -406,7 +406,7 @@ export function PontoFloatingButton() {
                 <PontoPinOtpFields value={pinValue} onChange={setPinValue} disabled={loading} />
               </div>
             )}
-            <p className="text-muted-foreground">
+            {/* <p className="text-muted-foreground">
               {precisaLocalizacao ? (
                 <>
                   A empresa tem <strong className="text-foreground">{zonasValidacaoPonto.length}</strong> zona(s) de ponto
@@ -419,7 +419,7 @@ export function PontoFloatingButton() {
                   
                 </>
               )}
-            </p>
+            </p> */}
           </div>
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
