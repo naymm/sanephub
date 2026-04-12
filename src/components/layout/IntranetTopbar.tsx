@@ -28,7 +28,7 @@ import {
   UserCircle,
   Users,
 } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Input } from '@/components/ui/input';
 import { formatRelative } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
+import { userAvatarFallbackLabel, userAvatarImageSrc } from '@/utils/userAvatar';
 import type { NotificationAudienceOptions } from '@/context/NotificationContext';
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
@@ -57,6 +58,9 @@ export function IntranetTopbar() {
   const navigate = useNavigate();
 
   if (!user) return null;
+
+  const headerAvatarSrc = userAvatarImageSrc(user);
+  const headerAvatarFallback = userAvatarFallbackLabel(user);
 
   const notifAudience: NotificationAudienceOptions | undefined =
     user.perfil === 'Colaborador' ? { colaboradorId: user.colaboradorId } : undefined;
@@ -441,7 +445,12 @@ export function IntranetTopbar() {
             aria-label="Abrir conta e perfil"
           >
             <Avatar className="h-9 w-9 ring-1 ring-white/25">
-              <AvatarFallback className="bg-white/15 text-xs font-medium text-white">{user.avatar}</AvatarFallback>
+              {headerAvatarSrc ? (
+                <AvatarImage src={headerAvatarSrc} alt="" className="object-cover" />
+              ) : null}
+              <AvatarFallback className="bg-white/15 text-xs font-medium text-white">
+                {headerAvatarFallback}
+              </AvatarFallback>
             </Avatar>
           </Link>
 
@@ -449,7 +458,12 @@ export function IntranetTopbar() {
             <DropdownMenuTrigger asChild>
               <button className="hidden min-h-9 min-w-min items-center justify-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted/80 md:flex">
                 <Avatar className="h-9 w-9 ring-1 ring-border/50">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">{user.avatar}</AvatarFallback>
+                  {headerAvatarSrc ? (
+                    <AvatarImage src={headerAvatarSrc} alt="" className="object-cover" />
+                  ) : null}
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                    {headerAvatarFallback}
+                  </AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>

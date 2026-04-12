@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { MobilePinDots, MobilePinKeypad } from '@/components/mobile/MobilePinKeypad';
 import { toast } from 'sonner';
 import { LogOut } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { userAvatarFallbackLabel, userAvatarImageSrc } from '@/utils/userAvatar';
 
 type Props = {
   onSuccess: () => void;
@@ -23,6 +25,8 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
   const attemptRef = useRef(0);
 
   const greeting = firstNameFromNome(user?.nome);
+  const avatarPhotoUrl = userAvatarImageSrc(user);
+  const avatarFallback = userAvatarFallbackLabel(user);
 
   useEffect(() => {
     if (digits.length !== PONTO_PIN_LENGTH || !supabase) return;
@@ -66,13 +70,13 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] min-h-[100dvh] overflow-y-auto lg:hidden"
+      className="fixed inset-0 z-[100] h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none lg:hidden"
       role="dialog"
       aria-modal
       aria-labelledby="pin-unlock-title"
     >
-      <div className="relative flex min-h-[100dvh] flex-col bg-[hsl(var(--navy))]">
-        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-[hsl(var(--navy))] via-[hsl(var(--navy))] to-[hsl(var(--navy-lighter))] px-5 pb-16 pt-[max(2rem,calc(env(safe-area-inset-top,0px)+1.25rem))]">
+      <div className="relative flex h-full max-h-full min-h-0 flex-col bg-[hsl(var(--navy))]">
+        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-[hsl(var(--navy))] via-[hsl(var(--navy))] to-[hsl(var(--navy-lighter))] px-5 pb-10 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))]">
           <div
             className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-white/[0.06]"
             aria-hidden
@@ -91,26 +95,39 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
             <img
               src="/logo-white.png"
               alt="GRUPO SANEP"
-              className="mb-5 h-12 w-auto max-w-[220px] object-contain"
-              width={220}
-              height={48}
+              className="mb-3 h-10 w-auto max-w-[200px] object-contain"
+              width={200}
+              height={40}
             />
           </div>
         </div>
 
-        <div className="relative z-[1] -mt-10 flex min-h-0 flex-1 flex-col rounded-t-[1.85rem] bg-background px-5 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] pt-8 shadow-[0_-12px_40px_rgba(0,0,0,0.12)]">
-          <h1 id="pin-unlock-title" className="text-center text-2xl font-bold tracking-tight text-foreground">
+        <div className="relative z-[1] -mt-8 flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[1.85rem] bg-background px-5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] pt-5 shadow-[0_-12px_40px_rgba(0,0,0,0.12)]">
+          <div className="flex shrink-0 justify-center">
+            <Avatar className="h-14 w-14 ring-2 ring-border/40">
+              {avatarPhotoUrl ? (
+                <AvatarImage src={avatarPhotoUrl} alt="" className="object-cover" />
+              ) : null}
+              <AvatarFallback className="text-base font-semibold">{avatarFallback}</AvatarFallback>
+            </Avatar>
+          </div>
+          <h1 id="pin-unlock-title" className="mt-3 shrink-0 text-center text-xl font-bold tracking-tight text-foreground">
             Olá, {greeting}
           </h1>
-          <p className="mt-2 text-center text-sm text-muted-foreground">Introduza o PIN para continuar</p>
+          <p className="mt-1 shrink-0 text-center text-sm text-muted-foreground">Introduza o PIN para continuar</p>
 
-          <div className="mt-8 w-full">
-            <MobilePinDots filled={digits.length} total={PONTO_PIN_LENGTH} size="md" />
+          <div className="mt-2 w-full shrink-0">
+            <MobilePinDots
+              filled={digits.length}
+              total={PONTO_PIN_LENGTH}
+              size="sm"
+              className="py-0.5"
+            />
           </div>
 
-          <div className="mt-10 w-full flex-1">
+          <div className="flex min-h-0 w-full flex-1 flex-col justify-center py-1">
             <MobilePinKeypad
-              variant="card"
+              variant="cardDense"
               onDigit={append}
               onBackspace={backspace}
               disabled={busy}
@@ -119,7 +136,7 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
 
           <button
             type="button"
-            className="mx-auto mt-8 flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground transition hover:text-foreground"
+            className="mx-auto mt-auto flex shrink-0 items-center justify-center gap-2 py-2 text-sm text-muted-foreground transition hover:text-foreground"
             onClick={() => logout()}
           >
             <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />

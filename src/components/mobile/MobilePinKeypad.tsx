@@ -5,24 +5,30 @@ type Props = {
   onDigit: (d: string) => void;
   onBackspace: () => void;
   disabled?: boolean;
-  /** Teclas claras com bordo fino (ecrãs tipo cartão branco / referência PWA). */
-  variant?: 'default' | 'card';
+  /** Teclas claras com bordo fino (ecrãs tipo cartão branco / referência PWA). `cardDense` = mais compacto (ecrã PIN sem scroll). */
+  variant?: 'default' | 'card' | 'cardDense';
 };
 
 export function MobilePinKeypad({ onDigit, onBackspace, disabled, variant = 'default' }: Props) {
   const keys: Array<string | 'back' | null> = ['1', '2', '3', '4', '5', '6', '7', '8', '9', null, '0', 'back'];
 
-  const digitClass =
-    variant === 'card'
-      ? 'rounded-full border border-border/40 bg-background text-xl font-semibold text-foreground shadow-none transition active:scale-95 active:bg-muted/30 disabled:opacity-40'
-      : 'rounded-full border border-border/80 bg-muted/30 text-xl font-semibold text-foreground shadow-sm transition active:scale-95 active:bg-muted/60 disabled:opacity-40';
+  const isLight = variant === 'card' || variant === 'cardDense';
 
-  const backClass =
-    variant === 'card'
-      ? 'rounded-full border border-border/40 bg-background text-foreground shadow-none transition active:scale-95 active:bg-muted/30 disabled:opacity-40'
-      : 'rounded-full border border-border/80 bg-muted/40 text-foreground shadow-sm transition active:scale-95 disabled:opacity-40';
+  const digitClass = isLight
+    ? cn(
+        'rounded-full border border-border/40 bg-background font-semibold text-foreground shadow-none transition active:scale-95 active:bg-muted/30 disabled:opacity-40',
+        variant === 'cardDense' ? 'text-lg' : 'text-xl',
+      )
+    : 'rounded-full border border-border/80 bg-muted/30 text-xl font-semibold text-foreground shadow-sm transition active:scale-95 active:bg-muted/60 disabled:opacity-40';
 
-  const gridGap = variant === 'card' ? 'gap-5 max-w-[300px]' : 'gap-4 max-w-[280px]';
+  const backClass = isLight
+    ? 'rounded-full border border-border/40 bg-background text-foreground shadow-none transition active:scale-95 active:bg-muted/30 disabled:opacity-40'
+    : 'rounded-full border border-border/80 bg-muted/40 text-foreground shadow-sm transition active:scale-95 disabled:opacity-40';
+
+  const gridGap =
+    variant === 'cardDense' ? 'gap-3 max-w-[260px]' : variant === 'card' ? 'gap-5 max-w-[300px]' : 'gap-4 max-w-[280px]';
+
+  const deleteIconClass = variant === 'cardDense' ? 'h-5 w-5' : 'h-6 w-6';
 
   return (
     <div className={cn('mx-auto grid w-full grid-cols-3 px-2', gridGap)}>
@@ -40,7 +46,7 @@ export function MobilePinKeypad({ onDigit, onBackspace, disabled, variant = 'def
               className={cn('flex aspect-square items-center justify-center', backClass)}
               aria-label="Apagar"
             >
-              <Delete className="h-6 w-6" strokeWidth={1.75} />
+              <Delete className={deleteIconClass} strokeWidth={1.75} />
             </button>
           );
         }
@@ -64,10 +70,12 @@ export function MobilePinDots({
   filled,
   total = 4,
   size = 'sm',
+  className,
 }: {
   filled: number;
   total?: number;
   size?: 'sm' | 'md';
+  className?: string;
 }) {
   const dot =
     size === 'md'
@@ -77,7 +85,7 @@ export function MobilePinDots({
   const gap = size === 'md' ? 'gap-4' : 'gap-3';
 
   return (
-    <div className={cn('flex justify-center py-2', gap)} aria-hidden>
+    <div className={cn('flex justify-center py-2', gap, className)} aria-hidden>
       {Array.from({ length: total }).map((_, i) => (
         <span
           key={i}

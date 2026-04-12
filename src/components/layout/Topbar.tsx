@@ -8,7 +8,7 @@ import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Bell, ChevronRight, FileText, LogOut, User, Settings, Building2, ChevronDown } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/popover';
 import { formatRelative } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
+import { userAvatarFallbackLabel, userAvatarImageSrc } from '@/utils/userAvatar';
 
 const routeTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -83,6 +84,9 @@ export function Topbar() {
   const navigate = useNavigate();
 
   if (!user) return null;
+
+  const headerAvatarSrc = userAvatarImageSrc(user);
+  const headerAvatarFallback = userAvatarFallbackLabel(user);
 
   const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
   const canShowModule = (moduleId?: string) => {
@@ -201,8 +205,11 @@ export function Topbar() {
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/80 transition-colors">
               <Avatar className="h-8 w-8 ring-1 ring-border/50">
+                {headerAvatarSrc ? (
+                  <AvatarImage src={headerAvatarSrc} alt="" className="object-cover" />
+                ) : null}
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                  {user.avatar}
+                  {headerAvatarFallback}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden md:block text-left min-w-0">

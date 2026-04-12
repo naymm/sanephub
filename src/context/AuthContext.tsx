@@ -9,6 +9,24 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
 const STORAGE_USUARIOS = 'sanep_usuarios';
 
+async function mergeFotoPerfilFromColaborador(
+  client: NonNullable<typeof supabase>,
+  u: Usuario,
+  colaboradorId: number | null | undefined,
+): Promise<Usuario> {
+  if (colaboradorId == null) return u;
+  const { data, error } = await client
+    .from('colaboradores')
+    .select('foto_perfil_url')
+    .eq('id', colaboradorId)
+    .maybeSingle();
+  if (error || !data) return u;
+  const url = (data as { foto_perfil_url?: string | null }).foto_perfil_url;
+  const t = typeof url === 'string' ? url.trim() : '';
+  if (!t) return u;
+  return { ...u, fotoPerfilUrl: t };
+}
+
 function profileToUsuario(p: ProfileRow): Usuario {
   return {
     id: p.id,
@@ -131,8 +149,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select(PROFILES_SELECT_PUBLIC)
       .eq('auth_user_id', authUserId)
       .maybeSingle();
-    if (!error && data) setUser(profileToUsuario(data as ProfileRow));
-    else setUser(null);
+    if (error || !data) {
+      setUser(null);
+      return;
+    }
+    const row = data as ProfileRow;
+    let u = profileToUsuario(row);
+    u = await mergeFotoPerfilFromColaborador(supabase, u, row.colaborador_id);
+    setUser(u);
   }, []);
 
   useEffect(() => {
@@ -163,7 +187,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('[auth] Erro ao carregar lista de perfis', error);
       return;
     }
-    setUsuarios((data ?? []).map((row) => profileToUsuario(row as ProfileRow)));
+    const rows = (data ?? []) as ProfileRow[];
+    const colabIds = [
+      ...new Set(
+        rows
+          .map(r => r.colaborador_id)
+          .filter((id): id is number => typeof id === 'number' && id > 0),
+      ),
+    ];
+    let fotoByColabId = new Map<number, string>();
+    if (colabIds.length > 0) {
+      const { data: fotos, error: fotoErr } = await supabase
+        .from('colaboradores')
+        .select('id, foto_perfil_url')
+        .in('id', colabIds);
+      if (!fotoErr && fotos) {
+        for (const r of fotos as { id: number; foto_perfil_url?: string | null }[]) {
+          const u = r.foto_perfil_url?.trim();
+          if (u) fotoByColabId.set(r.id, u);
+        }
+      }
+    }
+    setUsuarios(
+      rows.map(row => {
+        let u = profileToUsuario(row);
+        const cid = row.colaborador_id;
+        if (cid != null && fotoByColabId.has(cid)) {
+          u = { ...u, fotoPerfilUrl: fotoByColabId.get(cid)! };
+        }
+        return u;
+      }),
+    );
   }, []);
 
   useEffect(() => {
@@ -224,7 +278,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
           return false;
         }
-        setUser(profileToUsuario(profile as ProfileRow));
+        const prow = profile as ProfileRow;
+        let u = profileToUsuario(prow);
+        u = await mergeFotoPerfilFromColaborador(supabase, u, prow.colaborador_id);
+        setUser(u);
         return true;
       }
       const idLower = identificador.trim().toLowerCase();
