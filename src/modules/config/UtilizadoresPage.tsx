@@ -66,7 +66,7 @@ type UsuarioFormState = Omit<Usuario, 'id'> & { empresaId?: number | null };
 
 export default function UtilizadoresPage() {
   const { user: currentUser, usuarios, setUsuarios, createUserInSupabase } = useAuth();
-  const { empresas, colaboradores } = useData();
+  const { empresas, colaboradoresTodos } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
@@ -164,7 +164,13 @@ export default function UtilizadoresPage() {
       form.perfil === 'Colaborador' && Array.isArray(form.modulos) && form.modulos.length > 0
         ? [...new Set(['portal-colaborador', ...form.modulos])]
         : form.modulos;
-    const payload = { ...form, avatar, senha, modulos };
+    const colabLinked = form.colaboradorId
+      ? colaboradoresTodos.find(c => c.id === form.colaboradorId)
+      : undefined;
+    const numeroMecPerfil =
+      colabLinked?.numeroMec?.trim() ? colabLinked.numeroMec.trim() : null;
+
+    const payload = { ...form, avatar, senha, modulos, numeroMec: numeroMecPerfil ?? undefined };
 
     if (editing) {
       if (isSupabaseConfigured() && supabase) {
@@ -182,6 +188,7 @@ export default function UtilizadoresPage() {
               modulos: modulos ?? null,
               empresa_id: form.empresaId ?? null,
               colaborador_id: form.colaboradorId ?? null,
+              numero_mec: numeroMecPerfil,
               assinatura_linha: (form.assinaturaLinha ?? '').trim() || null,
               assinatura_cargo: (form.assinaturaCargo ?? '').trim() || null,
               assinatura_imagem_url: (form.assinaturaImagemUrl ?? '').trim() || null,
@@ -223,6 +230,7 @@ export default function UtilizadoresPage() {
           modulos: modulos ?? null,
           empresa_id: form.empresaId ?? null,
           colaborador_id: form.colaboradorId ?? null,
+          numero_mec: numeroMecPerfil,
         });
         setDialogOpen(false);
         setEditing(null);
@@ -497,7 +505,7 @@ export default function UtilizadoresPage() {
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-between font-normal">
                     {form.colaboradorId != null
-                      ? `${colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar colaborador'}`
+                      ? `${colaboradoresTodos.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar colaborador'}`
                       : 'Nenhum — utilizador sem ficha de colaborador'}
                     <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
                   </Button>
@@ -518,7 +526,7 @@ export default function UtilizadoresPage() {
                           <Check className={cn('mr-2 h-4 w-4', form.colaboradorId == null ? 'opacity-100' : 'opacity-0')} />
                           Nenhum
                         </CommandItem>
-                        {colaboradores.map(c => (
+                        {colaboradoresTodos.map(c => (
                           <CommandItem
                             key={c.id}
                             value={c.nome}

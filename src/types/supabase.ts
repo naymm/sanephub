@@ -24,6 +24,9 @@ export interface Database {
           modulos: string[] | null;
           colaborador_id: number | null;
           empresa_id: number | null;
+          numero_mec?: string | null;
+          /** Nunca pedir em select público; só RPC bcrypt. */
+          ponto_pin_hash?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -41,6 +44,7 @@ export interface Database {
           modulos?: string[] | null;
           colaborador_id?: number | null;
           empresa_id?: number | null;
+          numero_mec?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -58,6 +62,7 @@ export interface Database {
           modulos?: string[] | null;
           colaborador_id?: number | null;
           empresa_id?: number | null;
+          numero_mec?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -204,6 +209,22 @@ export interface Database {
       resolve_login_email: {
         Args: { p_username: string };
         Returns: string | null;
+      };
+      perfil_tem_ponto_pin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      definir_meu_ponto_pin: {
+        Args: { pin_plain: string };
+        Returns: undefined;
+      };
+      alterar_meu_ponto_pin: {
+        Args: { pin_atual: string; pin_novo: string };
+        Returns: undefined;
+      };
+      verificar_meu_ponto_pin: {
+        Args: { pin_plain: string };
+        Returns: boolean;
       };
     };
     Enums: Record<string, never>;

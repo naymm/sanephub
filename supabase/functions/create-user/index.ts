@@ -22,6 +22,8 @@ interface CreateUserBody {
   modulos?: string[] | null;
   empresa_id?: number | null;
   colaborador_id?: number | null;
+  /** Se omitido e existir colaborador_id, obtém-se de public.colaboradores.numero_mec */
+  numero_mec?: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -85,6 +87,7 @@ Deno.serve(async (req) => {
       modulos = null,
       empresa_id = null,
       colaborador_id = null,
+      numero_mec: numeroMecBody = null,
     } = body;
 
     const username = (rawUsername ?? '')
@@ -105,6 +108,20 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
+
+    let numero_mec =
+      typeof numeroMecBody === 'string' && numeroMecBody.trim() !== ''
+        ? numeroMecBody.trim()
+        : null;
+    if (!numero_mec && colaborador_id != null) {
+      const { data: colabRow } = await supabase
+        .from('colaboradores')
+        .select('numero_mec')
+        .eq('id', colaborador_id)
+        .maybeSingle();
+      const raw = (colabRow as { numero_mec?: string | null } | null)?.numero_mec;
+      if (typeof raw === 'string' && raw.trim() !== '') numero_mec = raw.trim();
+    }
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email.trim(),
@@ -149,6 +166,7 @@ Deno.serve(async (req) => {
         modulos: Array.isArray(modulos) ? modulos : null,
         empresa_id: empresa_id ?? null,
         colaborador_id: colaborador_id ?? null,
+        numero_mec,
       })
       .select()
       .single();

@@ -1,14 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useData } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import type { Colaborador } from '@/types';
 import { formatDate } from '@/utils/formatters';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import {
+  rpcAlterarMeuPontoPin,
+  rpcDefinirMeuPontoPin,
+  rpcPerfilTemPontoPin,
+} from '@/lib/pontoPinRpc';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { User, MapPin, Briefcase, CreditCard } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { PontoPinOtpFields } from '@/components/ponto/PontoPinOtpFields';
+import { User, MapPin, Briefcase, CreditCard, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 
 /** Campos que o colaborador pode editar no portal (morada e contactos). */
@@ -27,9 +37,34 @@ const emptyContact: EditableContactFields = {
 };
 
 export default function PortalDadosPage() {
+  const { user } = useAuth();
   const colaboradorId = useColaboradorId();
   const { colaboradoresTodos, updateColaborador } = useData();
   const [form, setForm] = useState<EditableContactFields>(emptyContact);
+  const [temPontoPin, setTemPontoPin] = useState<boolean | null>(null);
+  const [pinDefinir, setPinDefinir] = useState('');
+  const [pinDefinirConf, setPinDefinirConf] = useState('');
+  const [pinAtual, setPinAtual] = useState('');
+  const [pinNovo, setPinNovo] = useState('');
+  const [pinNovoConf, setPinNovoConf] = useState('');
+  const [guardandoPin, setGuardandoPin] = useState(false);
+
+  const refreshTemPontoPin = useCallback(async () => {
+    if (!isSupabaseConfigured() || !supabase || !user) {
+      setTemPontoPin(null);
+      return;
+    }
+    try {
+      const v = await rpcPerfilTemPontoPin(supabase);
+      setTemPontoPin(v);
+    } catch {
+      setTemPontoPin(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void refreshTemPontoPin();
+  }, [refreshTemPontoPin]);
 
   const colaborador = colaboradorId != null
     ? colaboradoresTodos.find(c => c.id === colaboradorId) ?? null
@@ -54,6 +89,55 @@ export default function PortalDadosPage() {
       toast.success('Dados actualizados com sucesso.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
+    }
+  };
+
+  const handleDefinirPin = async () => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    if (pinDefinir.length !== 4 || pinDefinirConf.length !== 4) {
+      toast.error('Preencha os dois campos com 4 dígitos.');
+      return;
+    }
+    if (pinDefinir !== pinDefinirConf) {
+      toast.error('Os PINs não coincidem.');
+      return;
+    }
+    setGuardandoPin(true);
+    try {
+      await rpcDefinirMeuPontoPin(supabase, pinDefinir);
+      toast.success('PIN definido. Utilize-o ao marcar entrada ou saída.');
+      setPinDefinir('');
+      setPinDefinirConf('');
+      await refreshTemPontoPin();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao guardar o PIN');
+    } finally {
+      setGuardandoPin(false);
+    }
+  };
+
+  const handleAlterarPin = async () => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    if (pinAtual.length !== 4 || pinNovo.length !== 4 || pinNovoConf.length !== 4) {
+      toast.error('Preencha todos os campos com 4 dígitos.');
+      return;
+    }
+    if (pinNovo !== pinNovoConf) {
+      toast.error('O novo PIN e a confirmação não coincidem.');
+      return;
+    }
+    setGuardandoPin(true);
+    try {
+      await rpcAlterarMeuPontoPin(supabase, pinAtual, pinNovo);
+      toast.success('PIN alterado com sucesso.');
+      setPinAtual('');
+      setPinNovo('');
+      setPinNovoConf('');
+      await refreshTemPontoPin();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao alterar o PIN');
+    } finally {
+      setGuardandoPin(false);
     }
   };
 
@@ -256,7 +340,80 @@ export default function PortalDadosPage() {
         </CardContent>
       </Card>
 
-      
+      {isSupabaseConfigured() && supabase && user ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <KeyRound className="h-5 w-5" />
+              PIN para marcação de ponto
+            </CardTitle>
+            <CardDescription>
+              PIN de 4 dígitos para confirmar entrada e saída no relógio da intranet. É guardado de forma segura na sua
+              conta (hash criptográfico — não é possível recuperar o código original).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {temPontoPin === null ? (
+              <p className="text-sm text-muted-foreground">A carregar…</p>
+            ) : !temPontoPin ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Ainda não definiu um PIN. Escolha um código de 4 dígitos e confirme-o abaixo.
+                </p>
+                <div className="space-y-2">
+                  <Label>Novo PIN</Label>
+                  <PontoPinOtpFields value={pinDefinir} onChange={setPinDefinir} disabled={guardandoPin} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirmar PIN</Label>
+                  <PontoPinOtpFields value={pinDefinirConf} onChange={setPinDefinirConf} disabled={guardandoPin} />
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => void handleDefinirPin()}
+                  disabled={guardandoPin || pinDefinir.length !== 4 || pinDefinirConf.length !== 4}
+                >
+                  {guardandoPin ? 'A guardar…' : 'Guardar PIN'}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <Alert>
+                  <AlertTitle>PIN activo</AlertTitle>
+                  <AlertDescription>
+                    Para marcar o ponto na intranet será pedido este código. Para alterá-lo, preencha os três grupos
+                    abaixo.
+                  </AlertDescription>
+                </Alert>
+                <div className="space-y-2">
+                  <Label>PIN actual</Label>
+                  <PontoPinOtpFields value={pinAtual} onChange={setPinAtual} disabled={guardandoPin} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Novo PIN</Label>
+                  <PontoPinOtpFields value={pinNovo} onChange={setPinNovo} disabled={guardandoPin} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirmar novo PIN</Label>
+                  <PontoPinOtpFields value={pinNovoConf} onChange={setPinNovoConf} disabled={guardandoPin} />
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => void handleAlterarPin()}
+                  disabled={
+                    guardandoPin ||
+                    pinAtual.length !== 4 ||
+                    pinNovo.length !== 4 ||
+                    pinNovoConf.length !== 4
+                  }
+                >
+                  {guardandoPin ? 'A guardar…' : 'Alterar PIN'}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

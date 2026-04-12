@@ -40,6 +40,11 @@ export interface Usuario {
   modulos?: string[];
   /** ID do colaborador associado (portal do colaborador). Definido para perfil Colaborador. */
   colaboradorId?: number;
+  /**
+   * Nº mecanográfico espelhado de `colaboradores.numero_mec` (também em `profiles.numero_mec`).
+   * Usado na RLS de marcação de ponto; não depende só de `colaboradorId`.
+   */
+  numeroMec?: string | null;
   /** ID da empresa à qual o utilizador pertence. null/undefined = nível Grupo (Admin/PCA), com visão consolidada ou seleção de empresa. */
   empresaId?: number | null;
   /** Linha de assinatura digital (nome que aparece nos documentos). */

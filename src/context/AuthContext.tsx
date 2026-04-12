@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import type { Usuario, Perfil } from '@/types';
 import { USUARIOS_SEED } from '@/data/seed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { PROFILES_SELECT_PUBLIC } from '@/lib/profileColumns';
 import type { Database } from '@/types/supabase';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -23,6 +24,7 @@ function profileToUsuario(p: ProfileRow): Usuario {
     modulos: p.modulos ?? undefined,
     colaboradorId: p.colaborador_id ?? undefined,
     empresaId: p.empresa_id ?? undefined,
+    numeroMec: p.numero_mec?.trim() ? p.numero_mec.trim() : undefined,
     assinaturaLinha: (p as any).assinatura_linha ?? undefined,
     assinaturaCargo: (p as any).assinatura_cargo ?? undefined,
     assinaturaImagemUrl: (p as any).assinatura_imagem_url ?? undefined,
@@ -78,6 +80,7 @@ export interface CreateUserSupabasePayload {
   modulos?: string[] | null;
   empresa_id?: number | null;
   colaborador_id?: number | null;
+  numero_mec?: string | null;
 }
 
 interface AuthContextType {
@@ -125,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return;
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILES_SELECT_PUBLIC)
       .eq('auth_user_id', authUserId)
       .maybeSingle();
     if (!error && data) setUser(profileToUsuario(data as ProfileRow));
@@ -154,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured() || !supabase) return;
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILES_SELECT_PUBLIC)
       .order('id', { ascending: true });
     if (error) {
       console.error('[auth] Erro ao carregar lista de perfis', error);
@@ -214,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!authUserId) return false;
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
+          .select(PROFILES_SELECT_PUBLIC)
           .eq('auth_user_id', authUserId)
           .maybeSingle();
         if (profileError || !profile) {

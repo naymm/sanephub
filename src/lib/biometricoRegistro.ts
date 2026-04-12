@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import { pt } from 'date-fns/locale';
+import { formatarHoraEmFusoPonto } from '@/lib/pontoFusoHorario';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
 import type { NormalizedBiometricoRegistro } from '@/types';
 
@@ -87,13 +88,7 @@ function parseToDataIso(val: string | null): string | null {
 }
 
 function horaDeTimestamp(iso: string): string | null {
-  if (!iso?.trim()) return null;
-  const normalized = iso.includes('T') ? iso : `${iso.slice(0, 10)}T12:00:00`;
-  try {
-    return format(parseISO(normalized), 'HH:mm:ss', { locale: pt });
-  } catch {
-    return null;
-  }
+  return formatarHoraEmFusoPonto(iso);
 }
 
 function formatarDataPt(dataIso: string): string {
