@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/select';
 import { Plus, Eye } from 'lucide-react';
 import { toast } from 'sonner';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const STATUS_OPTIONS: { value: Ferias['status'] | 'todos'; label: string }[] = [
   { value: 'todos', label: 'Todos' },
@@ -60,6 +62,17 @@ export default function PortalFeriasPage() {
     return matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('inicio');
+  const mobileComparators = useMemo(
+    () => ({
+      inicio: (a: Ferias, b: Ferias) => a.dataInicio.localeCompare(b.dataInicio),
+      fim: (a: Ferias, b: Ferias) => a.dataFim.localeCompare(b.dataFim),
+      dias: (a: Ferias, b: Ferias) => a.dias - b.dias,
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const updateDias = (inicio: string, fim: string) => {
     const d = diasEntre(inicio, fim);
@@ -119,7 +132,7 @@ export default function PortalFeriasPage() {
         </SelectContent>
       </Select>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -146,6 +159,38 @@ export default function PortalFeriasPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={f => f.id}
+          sortBar={{
+            options: [
+              { key: 'inicio', label: 'Início' },
+              { key: 'fim', label: 'Fim' },
+              { key: 'dias', label: 'Dias' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={f => ({
+            title: `${formatDate(f.dataInicio)} → ${formatDate(f.dataFim)}`,
+            trailing: <StatusBadge status={f.status} />,
+          })}
+          renderDetails={f => [
+            { label: 'Início', value: formatDate(f.dataInicio) },
+            { label: 'Fim', value: formatDate(f.dataFim) },
+            { label: 'Dias', value: String(f.dias) },
+            { label: 'Solicitado em', value: formatDate(f.solicitadoEm) },
+            { label: 'Status', value: <StatusBadge status={f.status} /> },
+          ]}
+          renderActions={f => (
+            <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => { setViewItem(f); setViewOpen(true); }} aria-label="Ver detalhe">
+              <Eye className="h-4 w-4" />
+            </Button>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum pedido de férias encontrado.</p>}

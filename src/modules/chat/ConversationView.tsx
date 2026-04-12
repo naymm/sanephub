@@ -18,15 +18,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Paperclip, Send, Pin, X, Users, FileText, Link2, UserMinus, Search, Loader2 } from 'lucide-react';
+import { Paperclip, Send, Pin, X, Users, FileText, Link2, UserMinus, Search, Loader2, ChevronLeft } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 
 interface ConversationViewProps {
   conversationId: string | null;
+  /** Mobile: voltar à lista de conversas. */
+  onMobileBack?: () => void;
 }
 
-export function ConversationView({ conversationId }: ConversationViewProps) {
+const headerIconBtn =
+  'h-11 w-11 shrink-0 md:h-8 md:w-8';
+
+export function ConversationView({ conversationId, onMobileBack }: ConversationViewProps) {
   const { user, usuarios } = useAuth();
   const {
     conversations,
@@ -265,26 +270,52 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
 
   if (!conversationId || !conv) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-muted/30 text-muted-foreground">
-        <p className="text-sm">Seleccione uma conversa ou inicie uma nova.</p>
+      <div className="flex min-h-0 flex-1 flex-col bg-muted/30">
+        {onMobileBack && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/20 px-2 py-2 md:hidden">
+            <button
+              type="button"
+              onClick={onMobileBack}
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-foreground transition-colors hover:bg-muted/80"
+              aria-label="Voltar às conversas"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          </div>
+        )}
+        <div className="flex flex-1 items-center justify-center px-4 text-muted-foreground">
+          <p className="text-center text-sm">Seleccione uma conversa ou inicie uma nova.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-background">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-muted/20">
-        <h2 className="font-semibold truncate">{getConversationDisplayName(conv)}</h2>
-        <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/20 px-2 py-2 md:px-4 md:py-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {onMobileBack && (
+            <button
+              type="button"
+              onClick={onMobileBack}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-foreground transition-colors hover:bg-muted/80 md:hidden"
+              aria-label="Voltar às conversas"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          )}
+          <h2 className="truncate font-semibold">{getConversationDisplayName(conv)}</h2>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5 md:gap-1">
           {isGroup && (
               <Popover onOpenChange={open => !open && setGroupMembersSearch('')}>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Membros">
+                  <Button variant="ghost" size="icon" className={headerIconBtn} title="Membros">
                     <Users className="h-4 w-4" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80 p-0" align="end">
+                <PopoverContent className="w-[min(calc(100vw-2rem),20rem)] p-0 md:w-80" align="end">
                   <div className="p-2 border-b border-border">
                     <p className="text-xs font-medium text-muted-foreground px-1 pb-2">Membros do grupo</p>
                     <div className="relative">
@@ -349,7 +380,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           <Popover onOpenChange={open => !open && setGroupFilesSearch('')}>
             <PopoverTrigger asChild>
               <span className="relative inline-flex">
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="Ficheiros">
+                <Button variant="ghost" size="icon" className={headerIconBtn} title="Ficheiros">
                   <FileText className="h-4 w-4" />
                 </Button>
                 {convFiles.length > 0 && (
@@ -359,7 +390,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
                 )}
               </span>
             </PopoverTrigger>
-            <PopoverContent className="w-96 p-0" align="end">
+            <PopoverContent className="w-[min(calc(100vw-2rem),24rem)] p-0 md:w-96" align="end">
               <div className="p-2 border-b border-border">
                 <p className="text-xs font-medium text-muted-foreground px-1 pb-2">Ficheiros partilhados</p>
                 <div className="relative">
@@ -404,7 +435,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           <Popover onOpenChange={open => !open && setGroupLinksSearch('')}>
             <PopoverTrigger asChild>
               <span className="relative inline-flex">
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="Links">
+                <Button variant="ghost" size="icon" className={headerIconBtn} title="Links">
                   <Link2 className="h-4 w-4" />
                 </Button>
                 {convLinks.length > 0 && (
@@ -414,7 +445,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
                 )}
               </span>
             </PopoverTrigger>
-            <PopoverContent className="w-[420px] p-0" align="end">
+            <PopoverContent className="w-[min(calc(100vw-2rem),26rem)] p-0 md:w-[420px]" align="end">
               <div className="p-2 border-b border-border">
                 <p className="text-xs font-medium text-muted-foreground px-1 pb-2">Links partilhados</p>
                 <div className="relative">
@@ -456,11 +487,11 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           {pinned.length > 0 && (
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="Mensagens fixadas">
+                <Button variant="ghost" size="icon" className={headerIconBtn} title="Mensagens fixadas">
                   <Pin className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-80 p-2" align="end">
+              <PopoverContent className="w-[min(calc(100vw-2rem),20rem)] p-2 md:w-80" align="end">
                 <p className="text-xs font-medium text-muted-foreground px-2 py-1">Mensagens fixadas</p>
                 <div className="max-h-60 overflow-y-auto space-y-2">
                   {pinned.map(m => (
@@ -480,7 +511,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
       {/* Messages (scroll no viewport nativo para paginação estilo WhatsApp Web) */}
       <div
         ref={scrollViewportRef}
-        className="flex-1 min-h-0 overflow-y-auto p-4"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-4"
         onScroll={handleMessagesScroll}
       >
         {(usesMessagePagination
@@ -511,7 +542,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 border-t border-border p-3 bg-muted/20">
+      <div className="shrink-0 border-t border-border bg-muted/20 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-3 md:pb-3">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {attachments.map(a => (
@@ -520,30 +551,35 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
                 className="inline-flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs"
               >
                 {a.name}
-                <button type="button" onClick={() => removeAttachment(a.id)} className="p-0.5 hover:bg-muted-foreground/20 rounded">
-                  <X className="h-3 w-3" />
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(a.id)}
+                  className="flex min-h-8 min-w-8 items-center justify-center rounded-md p-1 hover:bg-muted-foreground/20"
+                  aria-label={`Remover ${a.name}`}
+                >
+                  <X className="h-4 w-4" />
                 </button>
               </span>
             ))}
           </div>
         )}
         <div className="flex gap-2">
-          <div className="relative flex-1">
+          <div className="relative min-w-0 flex-1">
             <Textarea
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Escreva uma mensagem... (use @ para mencionar)"
-              className="min-h-[44px] max-h-32 resize-none pr-10"
+              placeholder="Escreva uma mensagem… (@ menciona)"
+              className="min-h-11 max-h-32 resize-none pr-2 text-base md:text-sm"
               rows={1}
             />
             {mentionCandidates.length > 0 && (
-              <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border bg-popover shadow-lg py-1 z-10">
+              <div className="absolute bottom-full left-0 right-0 z-10 mb-1 max-h-48 overflow-y-auto rounded-lg border bg-popover py-1 shadow-lg">
                 {mentionCandidates.map(u => (
                   <button
                     key={u.id}
                     type="button"
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent"
+                    className="min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-accent md:min-h-9 md:py-1.5"
                     onClick={() => insertMention(u.nome)}
                   >
                     @{u.nome}

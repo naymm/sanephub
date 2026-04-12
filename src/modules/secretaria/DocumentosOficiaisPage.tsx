@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
@@ -37,6 +37,8 @@ import {
 import { Search, Plus, Pencil, Eye, Trash2, FileDown, ChevronsUpDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { gerarPdfDespacho } from '@/utils/despachoPdf';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_OPTIONS: DocumentoOficial['tipo'][] = ['Deliberação', 'Despacho', 'Circular', 'Convocatória', 'Comunicado Interno'];
 const STATUS_OPTIONS: DocumentoOficial['status'][] = ['Rascunho', 'Em Revisão', 'Aprovado', 'Publicado', 'Arquivado', 'Assinado'];
@@ -131,6 +133,18 @@ export default function DocumentosOficiaisPage() {
     return matchSearch && matchTipo && matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('numero');
+  const mobileComparators = useMemo(
+    () => ({
+      numero: (a: DocumentoOficial, b: DocumentoOficial) => a.numero.localeCompare(b.numero, 'pt', { sensitivity: 'base' }),
+      titulo: (a: DocumentoOficial, b: DocumentoOficial) => a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+      data: (a: DocumentoOficial, b: DocumentoOficial) => a.data.localeCompare(b.data),
+      tipo: (a: DocumentoOficial, b: DocumentoOficial) => a.tipo.localeCompare(b.tipo, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -316,7 +330,7 @@ export default function DocumentosOficiaisPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -367,6 +381,76 @@ export default function DocumentosOficiaisPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={d => d.id}
+          sortBar={{
+            options: [
+              { key: 'numero', label: 'Número' },
+              { key: 'titulo', label: 'Título' },
+              { key: 'data', label: 'Data' },
+              { key: 'tipo', label: 'Tipo' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={d => ({
+            title: d.titulo,
+            trailing: <StatusBadge status={d.status} />,
+          })}
+          renderDetails={d => [
+            { label: 'Número', value: <span className="font-mono text-xs">{d.numero}</span> },
+            { label: 'Tipo', value: d.tipo },
+            { label: 'Data', value: formatDate(d.data) },
+            { label: 'Autor', value: d.autor },
+            { label: 'Status', value: <StatusBadge status={d.status} /> },
+            {
+              label: 'Assinatura PCA',
+              value:
+                d.tipo === 'Despacho'
+                  ? d.pcaAssinado
+                    ? `Assinado por ${d.pcaAssinadoPor ?? 'PCA'} em ${d.pcaAssinadoEm ?? ''}`
+                    : 'Pendente de assinatura'
+                  : '—',
+            },
+          ]}
+          renderActions={d => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => { setViewItem(d); setViewOpen(true); }} aria-label="Ver">
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(d)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              {d.tipo === 'Despacho' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  onClick={() => handleGerarPdfDespacho(d)}
+                  disabled={!d.pcaAssinado}
+                  aria-label="Gerar PDF do despacho"
+                >
+                  <FileDown className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(d)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado.</p>}

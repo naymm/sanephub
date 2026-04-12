@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -13,6 +14,8 @@ import {
 } from '@/components/ui/select';
 import { Search, FileText, Mail, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 type TipoArquivo = 'todos' | 'Documento' | 'Correspondência' | 'Acta';
 
@@ -79,6 +82,16 @@ export default function ArquivoPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('data');
+  const mobileComparators = useMemo(
+    () => ({
+      data: (a: ItemArquivo, b: ItemArquivo) => a.data.localeCompare(b.data),
+      titulo: (a: ItemArquivo, b: ItemArquivo) => a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
   const Icon = ({ tipo }: { tipo: TipoArquivo }) => {
     if (tipo === 'Documento') return <FileText className="h-4 w-4 text-muted-foreground" />;
     if (tipo === 'Correspondência') return <Mail className="h-4 w-4 text-muted-foreground" />;
@@ -108,7 +121,7 @@ export default function ArquivoPage() {
         <Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="w-[140px] h-9" placeholder="Data até" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -137,6 +150,45 @@ export default function ArquivoPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={i => i.id}
+          sortBar={{
+            options: [
+              { key: 'data', label: 'Data' },
+              { key: 'titulo', label: 'Título' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={i => ({
+            avatar: <Icon tipo={i.tipo} />,
+            title: i.titulo,
+            trailing: <span className="text-xs text-muted-foreground">{i.tipo}</span>,
+          })}
+          renderDetails={i => [
+            { label: 'Tipo', value: i.tipo },
+            { label: 'Tipo (detalhe)', value: i.tipoRaw },
+            { label: 'Referência', value: i.ref },
+            { label: 'Título / Assunto', value: i.titulo },
+            { label: 'Data', value: formatDate(i.data) },
+            {
+              label: 'Módulo',
+              value:
+                i.tipo === 'Documento' ? 'Documentos oficiais' : i.tipo === 'Correspondência' ? 'Correspondências' : 'Actas',
+            },
+          ]}
+          renderActions={i => (
+            <Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0" asChild>
+              <Link to={i.link}>
+                Ver em {i.tipo === 'Documento' ? 'Documentos' : i.tipo === 'Correspondência' ? 'Correspondências' : 'Actas'}
+              </Link>
+            </Button>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -19,6 +19,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Eye } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import {
   Select,
   SelectContent,
@@ -58,6 +60,16 @@ export default function CentrosCustoPage() {
     return matchSearch && matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('nome');
+  const mobileComparators = useMemo(
+    () => ({
+      nome: (a: CentroCusto, b: CentroCusto) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }),
+      codigo: (a: CentroCusto, b: CentroCusto) => a.codigo.localeCompare(b.codigo, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -130,7 +142,7 @@ export default function CentrosCustoPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -164,6 +176,56 @@ export default function CentrosCustoPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={cc => cc.id}
+          sortBar={{
+            options: [
+              { key: 'nome', label: 'Nome' },
+              { key: 'codigo', label: 'Código' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={cc => ({ title: `${cc.codigo} — ${cc.nome}` })}
+          renderDetails={cc => [
+            { label: 'Código', value: cc.codigo },
+            { label: 'Nome', value: cc.nome },
+            { label: 'Responsável', value: cc.responsavel },
+            { label: 'Orçamento Anual', value: formatKz(cc.orcamentoAnual) },
+            { label: 'Gasto', value: formatKz(cc.gastoActual) },
+            {
+              label: 'Utilização',
+              value: (
+                <span className={percentUtil(cc) > 90 ? 'text-destructive font-medium' : undefined}>{percentUtil(cc)}%</span>
+              ),
+            },
+            { label: 'Status', value: <StatusBadge status={cc.status} /> },
+          ]}
+          renderActions={cc => (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => {
+                  setViewItem(cc);
+                  setViewOpen(true);
+                }}
+                aria-label="Ver"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(cc)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum centro de custo encontrado.</p>}

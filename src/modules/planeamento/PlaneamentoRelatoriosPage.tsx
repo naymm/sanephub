@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
@@ -19,6 +19,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Eye, Pencil, Send, FileText } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const STATUS_LABEL: Record<StatusRelatorioPlaneamento, string> = {
   Rascunho: 'Rascunho',
@@ -82,6 +84,18 @@ export default function PlaneamentoRelatoriosPage() {
     new Set([...relatoriosPlaneamento.map(r => r.mesAno), mesActualLuanda]),
   ).sort().reverse();
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('mesAno');
+  const mobileComparators = useMemo(
+    () => ({
+      mesAno: (a: RelatorioMensalPlaneamento, b: RelatorioMensalPlaneamento) => a.mesAno.localeCompare(b.mesAno),
+      empresa: (a: RelatorioMensalPlaneamento, b: RelatorioMensalPlaneamento) =>
+        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+    }),
+    [empresas],
+  );
+
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const submeter = async (r: RelatorioMensalPlaneamento) => {
     if (r.status !== 'Rascunho') return;
@@ -148,7 +162,7 @@ export default function PlaneamentoRelatoriosPage() {
         </Select>
       </div>
 
-      <div className="rounded-lg border border-border/80 overflow-hidden">
+      <div className="hidden md:block table-container overflow-x-auto rounded-lg border border-border/80 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80 bg-muted/40">
@@ -205,6 +219,114 @@ export default function PlaneamentoRelatoriosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={r => r.id}
+          sortBar={{
+            options: [
+              { key: 'empresa', label: 'Empresa' },
+              { key: 'mesAno', label: 'Mês/Ano' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={r => ({
+            title: empresaNome(r.empresaId),
+            trailing: (
+              <span
+                className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                  r.status === 'Rascunho'
+                    ? 'bg-muted text-muted-foreground'
+                    : r.status === 'Submetido'
+                      ? 'bg-[#d4a926]/10 text-[#a57e26] dark:text-[#d4a926]'
+                      : r.status === 'Em análise'
+                        ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                        : 'bg-green-500/10 text-green-700 dark:text-green-400'
+                }`}
+              >
+                {STATUS_LABEL[r.status]}
+              </span>
+            ),
+          })}
+          renderDetails={r => [
+            { label: 'Empresa', value: empresaNome(r.empresaId) },
+            { label: 'Mês/Ano', value: mesAnoLabel(r.mesAno) },
+            {
+              label: 'Status',
+              value: (
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    r.status === 'Rascunho'
+                      ? 'bg-muted text-muted-foreground'
+                      : r.status === 'Submetido'
+                        ? 'bg-[#d4a926]/10 text-[#a57e26] dark:text-[#d4a926]'
+                        : r.status === 'Em análise'
+                          ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                          : 'bg-green-500/10 text-green-700 dark:text-green-400'
+                  }`}
+                >
+                  {STATUS_LABEL[r.status]}
+                </span>
+              ),
+            },
+            { label: 'EBITDA', value: r.ebitda != null ? formatKz(r.ebitda) : '—' },
+          ]}
+          renderActions={r => (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => navigate(`/planeamento/relatorios/${r.id}`)}
+                aria-label="Ver"
+                title="Ver"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => gerarPdfRelatorioMensal(r, empresaNome(r.empresaId))}
+                aria-label="Exportar PDF"
+                title="Exportar PDF"
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+              {r.status === 'Rascunho' && canEdit && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0"
+                    onClick={() => navigate(`/planeamento/relatorios/${r.id}/editar`)}
+                    aria-label="Editar"
+                    title="Editar"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0 text-primary"
+                    onClick={() => submeter(r)}
+                    aria-label="Submeter"
+                    title="Submeter"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (

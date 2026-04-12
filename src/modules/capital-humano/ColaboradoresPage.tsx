@@ -30,6 +30,8 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Plus, Pencil, Eye, Trash2, UploadCloud, User, X, GraduationCap, Briefcase } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { cn } from '@/lib/utils';
 import {
   criarPastaColaboradorNaGestao,
@@ -475,6 +477,17 @@ export default function ColaboradoresPage() {
     setPage(0);
   };
   const resetPage = () => setPage(0);
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('nome');
+  const mobileSortComparators = useMemo(
+    () => ({
+      nome: (a: Colaborador, b: Colaborador) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }),
+      status: (a: Colaborador, b: Colaborador) =>
+        String(a.status).localeCompare(String(b.status), 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(paginatedSlice, mobileSort, mobileSortComparators);
 
   /** Nomes de departamento para o filtro da tabela (valores existentes nos colaboradores). */
   const departamentosFiltroOpcoes = usePaginated ? departamentosList : Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
@@ -938,7 +951,7 @@ export default function ColaboradoresPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -1006,6 +1019,80 @@ export default function ColaboradoresPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={c => c.id}
+          loading={loading}
+          sortBar={{
+            options: [
+              { key: 'nome', label: 'Nome' },
+              { key: 'status', label: 'Estado' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={c => ({
+            avatar: c.fotoPerfilUrl ? (
+              <img
+                src={c.fotoPerfilUrl}
+                alt=""
+                className="h-10 w-10 rounded-full border border-border/80 object-cover"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                {c.nome.trim().charAt(0).toLocaleUpperCase('pt-PT') || '?'}
+              </div>
+            ),
+            title: c.nome,
+            trailing: <StatusBadge status={c.status} />,
+          })}
+          renderDetails={c => {
+            const empresaNome = empresas.find(e => e.id === c.empresaId)?.nome;
+            const fields = [
+              {
+                label: 'Nº mecanográfico',
+                value: <span className="font-mono text-xs">{(c.numeroMec ?? '').trim() || '—'}</span>,
+              },
+              ...(currentEmpresaId === 'consolidado' ? [{ label: 'Empresa', value: empresaNome ?? '—' }] : []),
+              { label: 'Cargo', value: c.cargo },
+              { label: 'Departamento', value: c.departamento || '—' },
+              { label: 'Salário base', value: formatKz(c.salarioBase) },
+              { label: 'Email', value: c.emailCorporativo?.trim() ? c.emailCorporativo : '—' },
+            ];
+            return fields;
+          }}
+          renderActions={c => (
+            <>
+              <Button type="button" className="min-h-11 flex-1 gap-2" onClick={() => void openViewDetalhes(c)}>
+                <Eye className="h-4 w-4 shrink-0" />
+                Ver ficha
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => openEdit(c)}
+                aria-label="Editar colaborador"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(c)}
+                aria-label="Remover colaborador"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {!loading && paginatedSlice.length === 0 && (

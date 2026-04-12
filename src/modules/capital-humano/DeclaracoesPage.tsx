@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
@@ -43,6 +43,8 @@ import {
 import { Search, Plus, Pencil, Eye, Check, FileDown, Trash2, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
 const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
@@ -97,6 +99,21 @@ export default function DeclaracoesPage() {
     return matchSearch && matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('colab');
+  const mobileComparators = useMemo(
+    () => ({
+      colab: (a: Declaracao, b: Declaracao) => {
+        const na = colaboradores.find(c => c.id === a.colaboradorId)?.nome ?? 'N/A';
+        const nb = colaboradores.find(c => c.id === b.colaboradorId)?.nome ?? 'N/A';
+        return na.localeCompare(nb, 'pt', { sensitivity: 'base' });
+      },
+      tipo: (a: Declaracao, b: Declaracao) => a.tipo.localeCompare(b.tipo, 'pt', { sensitivity: 'base' }),
+      dataPedido: (a: Declaracao, b: Declaracao) => a.dataPedido.localeCompare(b.dataPedido),
+    }),
+    [colaboradores],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -234,7 +251,7 @@ export default function DeclaracoesPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -278,6 +295,70 @@ export default function DeclaracoesPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={d => d.id}
+          sortBar={{
+            options: [
+              { key: 'colab', label: 'Colaborador' },
+              { key: 'tipo', label: 'Tipo' },
+              { key: 'dataPedido', label: 'Pedido' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={d => ({
+            title: getColabName(d.colaboradorId),
+            trailing: <StatusBadge status={d.status} />,
+          })}
+          renderDetails={d => [
+            { label: 'Tipo', value: d.tipo },
+            { label: 'Data pedido', value: formatDate(d.dataPedido) },
+            { label: 'Data emissão', value: d.dataEmissao ? formatDate(d.dataEmissao) : '—' },
+            { label: 'Status', value: <StatusBadge status={d.status} /> },
+          ]}
+          renderActions={d => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => { setViewItem(d); setViewOpen(true); }} aria-label="Ver detalhe">
+                <Eye className="h-4 w-4" />
+              </Button>
+              {(d.status === 'Emitida' || d.status === 'Entregue') && (
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => handleImprimirPdf(d)} aria-label="Imprimir PDF">
+                  <FileDown className="h-4 w-4" />
+                </Button>
+              )}
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(d)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              {canEliminar && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => remove(d)}
+                  aria-label="Remover"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+              {d.status === 'Pendente' && (
+                <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => marcarEmitida(d)}>
+                  Emitir
+                </Button>
+              )}
+              {d.status === 'Emitida' && (
+                <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => marcarEntregue(d)}>
+                  <Check className="h-4 w-4 mr-1" />
+                  Entregue
+                </Button>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma declaração encontrada.</p>}

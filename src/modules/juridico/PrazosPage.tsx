@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Eye, CalendarClock } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const PRIORIDADE_OPCOES: PrazoLegal['prioridade'][] = ['Baixa', 'Média', 'Alta', 'Crítica'];
 const STATUS_OPCOES: PrazoLegal['status'][] = ['Pendente', 'Em Tratamento', 'Concluído', 'Vencido'];
@@ -61,6 +63,21 @@ export default function PrazosPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
+  const empresaNome = (id: number | undefined) => (id != null ? empresas.find(e => e.id === id)?.nome ?? String(id) : '—');
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('titulo');
+  const mobileComparators = useMemo(
+    () => ({
+      titulo: (a: PrazoLegal, b: PrazoLegal) => a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+      tipo: (a: PrazoLegal, b: PrazoLegal) => a.tipo.localeCompare(b.tipo, 'pt', { sensitivity: 'base' }),
+      dataLimite: (a: PrazoLegal, b: PrazoLegal) => a.dataLimite.localeCompare(b.dataLimite),
+      empresa: (a: PrazoLegal, b: PrazoLegal) =>
+        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+    }),
+    [empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
   const getRowClass = (p: PrazoLegal) => {
     if (p.status === 'Concluído') return '';
     const d = diasRestantes(p.dataLimite);
@@ -69,8 +86,6 @@ export default function PrazosPage() {
     if (d <= 15) return 'bg-amber-50/50 dark:bg-amber-950/20';
     return '';
   };
-
-  const empresaNome = (id: number | undefined) => (id != null ? empresas.find(e => e.id === id)?.nome ?? String(id) : '—');
 
   const openCreate = () => {
     setEditing(null);
@@ -175,7 +190,7 @@ export default function PrazosPage() {
         )}
       </div>
 
-      <div className="table-container overflow-x-auto rounded-lg border border-border/80">
+      <div className="hidden md:block table-container overflow-x-auto rounded-lg border border-border/80">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
@@ -221,6 +236,70 @@ export default function PrazosPage() {
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={p => p.id}
+          sortBar={{
+            options: [
+              ...(currentEmpresaId === 'consolidado' ? [{ key: 'empresa', label: 'Empresa' } as const] : []),
+              { key: 'titulo', label: 'Título' },
+              { key: 'tipo', label: 'Tipo' },
+              { key: 'dataLimite', label: 'Data limite' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={p => {
+            const d = diasRestantes(p.dataLimite);
+            return {
+              title: p.titulo,
+              trailing: (
+                <span className={cn('text-xs font-semibold', d < 0 ? 'text-destructive' : d <= 7 ? 'text-orange-600' : 'text-muted-foreground')}>
+                  {d < 0 ? `Vencido (${Math.abs(d)}d)` : `${d} dias`}
+                </span>
+              ),
+            };
+          }}
+          renderDetails={p => {
+            const d = diasRestantes(p.dataLimite);
+            return [
+              ...(currentEmpresaId === 'consolidado' ? [{ label: 'Empresa', value: empresaNome(p.empresaId) }] : []),
+              { label: 'Tipo', value: p.tipo },
+              { label: 'Data limite', value: formatDate(p.dataLimite) },
+              { label: 'Dias', value: d < 0 ? `Vencido (${Math.abs(d)}d)` : `${d} dias` },
+              { label: 'Prioridade', value: <StatusBadge status={p.prioridade} /> },
+              { label: 'Responsável', value: p.responsavel },
+              { label: 'Status', value: <StatusBadge status={p.status} pulse={p.status === 'Vencido'} /> },
+            ];
+          }}
+          renderActions={p => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openDetail(p)} aria-label="Ver">
+                <Eye className="h-4 w-4" />
+              </Button>
+              {canEdit && (
+                <>
+                  <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(p)} aria-label="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => remove(p)}
+                    aria-label="Remover"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (

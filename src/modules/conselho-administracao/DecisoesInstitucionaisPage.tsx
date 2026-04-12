@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { Search } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const DECISOES_MOCK = [
   { id: 1, titulo: 'Plano Estrategico 2024-2026', data: '2024-01-15', tipo: 'Planeamento', estado: 'Aprovada' },
@@ -12,6 +14,8 @@ const DECISOES_MOCK = [
   { id: 4, titulo: 'Mandato Director Geral', data: '2024-09-05', tipo: 'RH', estado: 'Em analise' },
   { id: 5, titulo: 'Politica Sustentabilidade', data: '2024-11-18', tipo: 'Politica', estado: 'Pendente' },
 ];
+
+type DecisaoRow = (typeof DECISOES_MOCK)[number];
 
 export default function DecisoesInstitucionaisPage() {
   const [search, setSearch] = useState('');
@@ -23,6 +27,30 @@ export default function DecisoesInstitucionaisPage() {
   );
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('data');
+  const mobileComparators = useMemo(
+    () => ({
+      data: (a: DecisaoRow, b: DecisaoRow) => a.data.localeCompare(b.data),
+      titulo: (a: DecisaoRow, b: DecisaoRow) => a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
+  const estadoBadge = (d: DecisaoRow) => (
+    <span
+      className={
+        d.estado === 'Aprovada'
+          ? 'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-500/10 text-green-700 dark:text-green-400'
+          : d.estado === 'Em analise'
+            ? 'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400'
+            : 'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-muted text-muted-foreground'
+      }
+    >
+      {d.estado}
+    </span>
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -33,7 +61,7 @@ export default function DecisoesInstitucionaisPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input placeholder="Pesquisar..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 pl-9" />
       </div>
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -66,6 +94,28 @@ export default function DecisoesInstitucionaisPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={d => d.id}
+          sortBar={{
+            options: [
+              { key: 'data', label: 'Data' },
+              { key: 'titulo', label: 'Título' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={d => ({ title: d.titulo, trailing: estadoBadge(d) })}
+          renderDetails={d => [
+            { label: 'Data', value: formatDate(d.data) },
+            { label: 'Título', value: d.titulo },
+            { label: 'Tipo', value: d.tipo },
+            { label: 'Estado', value: estadoBadge(d) },
+          ]}
+        />
       </div>
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma decisao encontrada.</p>}
       <DataTablePagination {...pagination.paginationProps} />

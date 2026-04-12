@@ -32,7 +32,7 @@ import {
 type ProximaAccaoPonto = 'entrada' | 'saida' | 'completo';
 
 /**
- * Marcação de entrada/saída pelo ERP (intranet), ao lado do botão de chat.
+ * Marcação de entrada/saída pelo ERP (intranet), no canto inferior direito.
  */
 export function PontoFloatingButton() {
   const { user } = useAuth();
@@ -72,13 +72,28 @@ export function PontoFloatingButton() {
     return empresas.find(e => e.id === empresaIdRegisto)?.nome ?? null;
   }, [empresaIdRegisto, empresas]);
 
+  /** Mesmo critério de visibilidade que o antigo FAB de chat: utilizadores com intranet. */
+  const mostrarFab =
+    isSupabaseConfigured() && !!user && hasModuleAccess(user, 'dashboard');
+
   const podeMarcar =
-    isSupabaseConfigured() &&
-    !!user &&
-    hasModuleAccess(user, 'dashboard') &&
+    mostrarFab &&
     numeroMecRegisto.length > 0 &&
     empresaIdRegisto != null &&
     Boolean(empresaNome?.trim());
+
+  const motivosNaoPodeMarcar = useMemo(() => {
+    const list: string[] = [];
+    if (!numeroMecRegisto.trim()) {
+      list.push('Número mecanográfico no perfil (em «Os Meus Dados» ou via RH).');
+    }
+    if (empresaIdRegisto == null) {
+      list.push('Associação a uma empresa no sistema.');
+    } else if (!empresaNome?.trim()) {
+      list.push('Dados da empresa incompletos — contacte o suporte.');
+    }
+    return list;
+  }, [numeroMecRegisto, empresaIdRegisto, empresaNome]);
 
   /** Zonas activas usadas na validação: atribuídas ao colaborador ou, se não houver, todas as da empresa. */
   const zonasValidacaoPonto = useMemo(() => {
@@ -315,24 +330,27 @@ export function PontoFloatingButton() {
     pinValue,
   ]);
 
-  if (!podeMarcar) return null;
+  if (!mostrarFab) return null;
 
-  const botaoClass =
-    proximaAccao === 'entrada'
+  const botaoClass = !podeMarcar
+    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+    : proximaAccao === 'entrada'
       ? 'bg-emerald-600 text-white hover:bg-emerald-600/90'
       : proximaAccao === 'saida'
         ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
         : 'bg-muted text-muted-foreground';
 
-  const ariaLabel =
-    proximaAccao === 'entrada'
+  const ariaLabel = !podeMarcar
+    ? 'Marcação de ponto — falta configuração no perfil'
+    : proximaAccao === 'entrada'
       ? 'Marcar entrada (ponto)'
       : proximaAccao === 'saida'
         ? 'Marcar saída (ponto)'
         : 'Ponto desactivado: entrada e saída já registadas hoje';
 
-  const titleBtn =
-    proximaAccao === 'entrada'
+  const titleBtn = !podeMarcar
+    ? 'Configurar para marcar ponto'
+    : proximaAccao === 'entrada'
       ? 'Marcar entrada'
       : proximaAccao === 'saida'
         ? 'Marcar saída'
@@ -342,12 +360,12 @@ export function PontoFloatingButton() {
     <>
       <button
         type="button"
-        disabled={diaCompleto}
+        disabled={podeMarcar && diaCompleto}
         onClick={() => setOpen(true)}
         className={cn(
           'relative z-10 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          !diaCompleto && 'hover:scale-105 active:scale-95',
-          diaCompleto && 'cursor-not-allowed opacity-70 shadow-none',
+          !(podeMarcar && diaCompleto) && 'hover:scale-105 active:scale-95',
+          podeMarcar && diaCompleto && 'cursor-not-allowed opacity-70 shadow-none',
           botaoClass,
         )}
         aria-label={ariaLabel}
@@ -360,15 +378,37 @@ export function PontoFloatingButton() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold tracking-tight">
-              {proximaAccao === 'saida' ? 'Marcar saída' : 'Marcar entrada'}
+              {!podeMarcar
+                ? 'Marcação de ponto'
+                : proximaAccao === 'saida'
+                  ? 'Marcar saída'
+                  : 'Marcar entrada'}
             </DialogTitle>
             <DialogDescription>
-              {proximaAccao === 'saida'
-                ? 'Confirme o PIN e a localização para registar a saída.'
-                : 'Confirme o PIN e a localização para registar a entrada.'}
+              {!podeMarcar
+                ? 'Complete os dados abaixo para poder registar entrada e saída.'
+                : proximaAccao === 'saida'
+                  ? 'Confirme o PIN e a localização para registar a saída.'
+                  : 'Confirme o PIN e a localização para registar a entrada.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-sm">
+            {!podeMarcar && (
+              <Alert>
+                <AlertTitle>Falta configuração</AlertTitle>
+                <AlertDescription className="space-y-3 pt-1">
+                  <p className="text-muted-foreground">Antes de marcar o ponto, é necessário:</p>
+                  <ul className="list-disc space-y-1 pl-4 text-foreground">
+                    {motivosNaoPodeMarcar.map((m, i) => (
+                      <li key={i}>{m}</li>
+                    ))}
+                  </ul>
+                  <Button type="button" variant="secondary" size="sm" asChild>
+                    <Link to="/portal/dados">Abrir Os Meus Dados</Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {/* <p className="text-muted-foreground">
               {proximaAccao === 'saida' ? (
                 <>
@@ -385,27 +425,24 @@ export function PontoFloatingButton() {
                 </>
               )}
             </p> */}
-            {temPontoPin === null ? (
-              <p className="text-muted-foreground">A verificar configuração do PIN…</p>
-            ) : temPontoPin === false ? (
-              <Alert variant="destructive">
-                <AlertTitle>PIN não configurado</AlertTitle>
-                <AlertDescription className="space-y-3">
-                  <p>Defina um PIN de 4 dígitos em «Os Meus Dados» no portal do colaborador para poder marcar o ponto.</p>
-                  <Button type="button" variant="secondary" size="sm" asChild>
-                    <Link to="/portal/dados">Abrir Os Meus Dados</Link>
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-2">
-                {/* <p className="font-medium text-foreground">Confirmar PIN</p>
-                <p className="text-muted-foreground">
-                  Introduza o código de 4 dígitos que definiu em Os Meus Dados para continuar.
-                </p> */}
-                <PontoPinOtpFields value={pinValue} onChange={setPinValue} disabled={loading} />
-              </div>
-            )}
+            {podeMarcar &&
+              (temPontoPin === null ? (
+                <p className="text-muted-foreground">A verificar configuração do PIN…</p>
+              ) : temPontoPin === false ? (
+                <Alert variant="destructive">
+                  <AlertTitle>PIN não configurado</AlertTitle>
+                  <AlertDescription className="space-y-3">
+                    <p>Defina um PIN de 4 dígitos em «Os Meus Dados» no portal do colaborador para poder marcar o ponto.</p>
+                    <Button type="button" variant="secondary" size="sm" asChild>
+                      <Link to="/portal/dados">Abrir Os Meus Dados</Link>
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-2">
+                  <PontoPinOtpFields value={pinValue} onChange={setPinValue} disabled={loading} />
+                </div>
+              ))}
             {/* <p className="text-muted-foreground">
               {precisaLocalizacao ? (
                 <>
@@ -429,24 +466,22 @@ export function PontoFloatingButton() {
               onClick={() => setOpen(false)}
               disabled={loading}
             >
-              Cancelar
+              {!podeMarcar ? 'Fechar' : 'Cancelar'}
             </Button>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              onClick={() => void confirmar()}
-              disabled={
-                loading ||
-                temPontoPin !== true ||
-                pinValue.length !== 4
-              }
-            >
-              {loading
-                ? 'A registar…'
-                : proximaAccao === 'saida'
-                  ? 'Confirmar saída'
-                  : 'Confirmar entrada'}
-            </Button>
+            {podeMarcar && (
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                onClick={() => void confirmar()}
+                disabled={loading || temPontoPin !== true || pinValue.length !== 4}
+              >
+                {loading
+                  ? 'A registar…'
+                  : proximaAccao === 'saida'
+                    ? 'Confirmar saída'
+                    : 'Confirmar entrada'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

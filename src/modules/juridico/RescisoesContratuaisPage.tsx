@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, FileText } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPOS_RESCISAO: TipoRescisao[] = ['Resolução', 'Revogação', 'Caducidade'];
 
@@ -46,6 +48,23 @@ export default function RescisoesContratuaisPage() {
   const getContrato = (id: number) => contratos.find(c => c.id === id);
   const getEmpresaNome = (empresaId: number) =>
     empresas.find(e => e.id === empresaId)?.nome ?? `Empresa ${empresaId}`;
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('dataRescisao');
+  const mobileComparators = useMemo(
+    () => ({
+      dataRescisao: (a: RescisaoContrato, b: RescisaoContrato) => a.dataRescisao.localeCompare(b.dataRescisao),
+      tipo: (a: RescisaoContrato, b: RescisaoContrato) => a.tipo.localeCompare(b.tipo, 'pt', { sensitivity: 'base' }),
+      contrato: (a: RescisaoContrato, b: RescisaoContrato) => {
+        const na = contratos.find(c => c.id === a.contratoId)?.numero ?? '';
+        const nb = contratos.find(c => c.id === b.contratoId)?.numero ?? '';
+        return na.localeCompare(nb, 'pt', { sensitivity: 'base' });
+      },
+      empresa: (a: RescisaoContrato, b: RescisaoContrato) =>
+        getEmpresaNome(a.empresaId).localeCompare(getEmpresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+    }),
+    [contratos, empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const contratosActivos = contratos.filter(c => c.status !== 'Rescindido' && c.status !== 'Expirado');
 
@@ -104,7 +123,7 @@ export default function RescisoesContratuaisPage() {
         )}
       </div>
 
-      <div className="table-container overflow-x-auto rounded-lg border border-border/80">
+      <div className="hidden md:block table-container overflow-x-auto rounded-lg border border-border/80">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
@@ -165,6 +184,66 @@ export default function RescisoesContratuaisPage() {
           </tbody>
         </table>
       </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={r => r.id}
+          sortBar={{
+            options: [
+              { key: 'contrato', label: 'Contrato' },
+              { key: 'empresa', label: 'Empresa' },
+              { key: 'tipo', label: 'Tipo' },
+              { key: 'dataRescisao', label: 'Data' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={r => {
+            const contrato = getContrato(r.contratoId);
+            return {
+              title: contrato?.numero ?? `Contrato #${r.contratoId}`,
+              trailing: (
+                <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
+                  {r.tipo}
+                </span>
+              ),
+            };
+          }}
+          renderDetails={r => {
+            const contrato = getContrato(r.contratoId);
+            return [
+              {
+                label: 'Contrato',
+                value: (
+                  <span>
+                    <span className="font-mono text-xs">{contrato?.numero ?? `Contrato #${r.contratoId}`}</span>
+                    {contrato ? (
+                      <span className="block text-xs text-muted-foreground mt-1">{contrato.objecto}</span>
+                    ) : null}
+                  </span>
+                ),
+              },
+              { label: 'Empresa', value: getEmpresaNome(r.empresaId) },
+              { label: 'Tipo de rescisão', value: r.tipo },
+              { label: 'Data de rescisão', value: formatDate(r.dataRescisao) },
+              { label: 'Motivo', value: r.motivoDetalhado },
+              {
+                label: 'Documento',
+                value: r.documentoPdf ? (
+                  <span className="inline-flex items-center gap-1">
+                    <FileText className="h-3 w-3" /> {r.documentoPdf}
+                  </span>
+                ) : (
+                  '—'
+                ),
+              },
+              { label: 'Registado', value: `${r.criadoPor} — ${formatDate(r.criadoEm.slice(0, 10))}` },
+            ];
+          }}
+        />
+      </div>
+
       <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

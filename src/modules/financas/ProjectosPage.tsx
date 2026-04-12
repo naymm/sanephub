@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -19,6 +19,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Eye } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import {
   Select,
   SelectContent,
@@ -61,6 +63,16 @@ export default function ProjectosPage() {
     return matchSearch && matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('nome');
+  const mobileComparators = useMemo(
+    () => ({
+      nome: (a: Projecto, b: Projecto) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }),
+      codigo: (a: Projecto, b: Projecto) => a.codigo.localeCompare(b.codigo, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -136,7 +148,7 @@ export default function ProjectosPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -168,6 +180,57 @@ export default function ProjectosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={p => p.id}
+          sortBar={{
+            options: [
+              { key: 'nome', label: 'Nome' },
+              { key: 'codigo', label: 'Código' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={p => ({ title: `${p.codigo} — ${p.nome}` })}
+          renderDetails={p => [
+            { label: 'Código', value: p.codigo },
+            { label: 'Nome', value: p.nome },
+            { label: 'Responsável', value: p.responsavel },
+            { label: 'Orçamento', value: formatKz(p.orcamentoTotal) },
+            { label: 'Gasto', value: formatKz(p.gasto) },
+            {
+              label: 'Utilização',
+              value: (
+                <span className={percentGasto(p) > 90 ? 'text-destructive font-medium' : undefined}>{percentGasto(p)}%</span>
+              ),
+            },
+            { label: 'Início / Fim', value: `${formatDate(p.dataInicio)} — ${formatDate(p.dataFim)}` },
+            { label: 'Status', value: <StatusBadge status={p.status} /> },
+          ]}
+          renderActions={p => (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => {
+                  setViewItem(p);
+                  setViewOpen(true);
+                }}
+                aria-label="Ver"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(p)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum projecto encontrado.</p>}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
@@ -42,6 +42,8 @@ import {
 import { Plus, Eye, FileDown, Check, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
 const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
@@ -78,6 +80,17 @@ export default function PortalDeclaracoesPage() {
     return matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('tipo');
+  const mobileComparators = useMemo(
+    () => ({
+      tipo: (a: Declaracao, b: Declaracao) => a.tipo.localeCompare(b.tipo, 'pt', { sensitivity: 'base' }),
+      dataPedido: (a: Declaracao, b: Declaracao) => a.dataPedido.localeCompare(b.dataPedido),
+      dataEmissao: (a: Declaracao, b: Declaracao) => (a.dataEmissao ?? '').localeCompare(b.dataEmissao ?? ''),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const handleImprimirPdf = async (d: Declaracao) => {
     if (d.status !== 'Emitida' && d.status !== 'Entregue') {
@@ -176,7 +189,7 @@ export default function PortalDeclaracoesPage() {
         </SelectContent>
       </Select>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -206,6 +219,43 @@ export default function PortalDeclaracoesPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={d => d.id}
+          sortBar={{
+            options: [
+              { key: 'tipo', label: 'Tipo' },
+              { key: 'dataPedido', label: 'Pedido' },
+              { key: 'dataEmissao', label: 'Emissão' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={d => ({
+            title: d.tipo,
+            trailing: <StatusBadge status={d.status} />,
+          })}
+          renderDetails={d => [
+            { label: 'Data pedido', value: formatDate(d.dataPedido) },
+            { label: 'Data emissão', value: d.dataEmissao ? formatDate(d.dataEmissao) : '—' },
+            { label: 'Status', value: <StatusBadge status={d.status} /> },
+          ]}
+          renderActions={d => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => { setViewItem(d); setViewOpen(true); }} aria-label="Ver detalhe">
+                <Eye className="h-4 w-4" />
+              </Button>
+              {(d.status === 'Emitida' || d.status === 'Entregue') && (
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => handleImprimirPdf(d)} aria-label="Imprimir PDF">
+                  <FileDown className="h-4 w-4" />
+                </Button>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma declaração encontrada.</p>}

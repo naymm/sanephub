@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
@@ -49,6 +49,8 @@ import { Search, Plus, Pencil, Eye, Check, X, Send, Banknote, Paperclip, Trash2,
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const STATUS_OPTIONS: { value: StatusRequisicao | 'todos'; label: string }[] = [
   { value: 'todos', label: 'Todos' },
@@ -157,6 +159,18 @@ export default function RequisicoesPage() {
     return matchSearch && matchStatus && matchCentro && matchDate;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('num');
+  const mobileComparators = useMemo(
+    () => ({
+      num: (a: Requisicao, b: Requisicao) => a.num.localeCompare(b.num, 'pt', { sensitivity: 'base' }),
+      fornecedor: (a: Requisicao, b: Requisicao) => a.fornecedor.localeCompare(b.fornecedor, 'pt', { sensitivity: 'base' }),
+      valor: (a: Requisicao, b: Requisicao) => a.valor - b.valor,
+      data: (a: Requisicao, b: Requisicao) => a.data.localeCompare(b.data),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     if (!canAccessFinancas) {
@@ -490,6 +504,132 @@ export default function RequisicoesPage() {
     }
   };
 
+  const renderRequisicaoAcoes = (r: Requisicao) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          Ações
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[240px]">
+        <DropdownMenuItem onSelect={() => openView(r)}>
+          <Eye className="h-4 w-4 mr-2" />
+          Ver
+        </DropdownMenuItem>
+        {canEditRequisicao && (
+          <DropdownMenuItem onSelect={() => openEdit(r)}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Editar
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={!(r.status === 'Pendente' && canAccessFinancas)} onSelect={() => aprovar(r)}>
+          <Check className="h-4 w-4 mr-2" />
+          Aceitar
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={!(r.status === 'Pendente' && canAccessFinancas)}
+          onSelect={() => {
+            setRejectReq(r);
+            setRejectOpen(true);
+          }}
+        >
+          <X className="h-4 w-4 mr-2" />
+          Rejeitar
+        </DropdownMenuItem>
+        {canAccessFinancas && r.status === 'Aprovado' && (
+          <DropdownMenuItem onSelect={() => openPagoDialog(r)} disabled={(r.comprovativoAnexos?.length ?? 0) > 0}>
+            <Banknote className="h-4 w-4 mr-2" />
+            Fazer pagamento
+          </DropdownMenuItem>
+        )}
+        {canAccessFinancas && precisaAnexarFacturaFinalReq(r) && (
+          <DropdownMenuItem onSelect={() => setAnexarFacturaReq(r)}>
+            <FileText className="h-4 w-4 mr-2" />
+            Anexar factura final
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={!canAccessFinancas || getFirstTruthy(r.proformaAnexos) == null}
+          onSelect={() => {
+            const candidate = getFirstTruthy(r.proformaAnexos);
+            if (!candidate) {
+              toast.error('Nenhuma factura proforma em PDF anexada para pré-visualizar.');
+              return;
+            }
+            void (async () => {
+              try {
+                const url = await resolveComprovativoPublicUrl(supabase!, 'proformas', candidate);
+                if (!url) {
+                  toast.error('Não foi possível resolver a pré-visualização da proforma.');
+                  return;
+                }
+                setPdfPreviewUrl(url);
+                setPdfPreviewOpen(true);
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar proforma');
+              }
+            })();
+          }}
+        >
+          Pré-visualizar: Proforma
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={!canAccessFinancas || getFirstTruthy(r.comprovativoAnexos) == null}
+          onSelect={() => {
+            const candidate = getFirstTruthy(r.comprovativoAnexos);
+            if (!candidate) {
+              toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
+              return;
+            }
+            void (async () => {
+              try {
+                const bucket = inferBucketFromStoragePublicUrl(candidate);
+                const url = await resolveComprovativoPublicUrl(supabase!, bucket, candidate);
+                if (!url) {
+                  toast.error('Não foi possível resolver a pré-visualização do comprovativo.');
+                  return;
+                }
+                setPdfPreviewUrl(url);
+                setPdfPreviewOpen(true);
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar comprovativo');
+              }
+            })();
+          }}
+        >
+          Pré-visualizar: Comprovativo
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={!canAccessFinancas || getLastTruthy(r.facturaFinalAnexos) == null}
+          onSelect={() => {
+            const candidate = getLastTruthy(r.facturaFinalAnexos);
+            if (!candidate) {
+              toast.error('Nenhuma factura final em PDF anexada para pré-visualizar.');
+              return;
+            }
+            void (async () => {
+              try {
+                const url = await resolveComprovativoPublicUrl(supabase!, 'proformas', candidate);
+                if (!url) {
+                  toast.error('Não foi possível resolver a pré-visualização da factura final.');
+                  return;
+                }
+                setPdfPreviewUrl(url);
+                setPdfPreviewOpen(true);
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar factura final');
+              }
+            })();
+          }}
+        >
+          Pré-visualizar: Factura final
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -535,7 +675,7 @@ export default function RequisicoesPage() {
         <Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="w-[140px] h-9" placeholder="Até" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -568,141 +708,41 @@ export default function RequisicoesPage() {
                 <td className="py-3 px-5 text-right font-mono">{formatKz(r.valor)}</td>
                 <td className="py-3 px-5 text-muted-foreground">{formatDate(r.data)}</td>
                 <td className="py-3 px-5"><StatusBadge status={r.status} /></td>
-                <td className="py-3 px-5 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        Ações
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-[240px]">
-                      <DropdownMenuItem onSelect={() => openView(r)}>
-                        <Eye className="h-4 w-4 mr-2" />
-                        Ver
-                      </DropdownMenuItem>
-                      {canEditRequisicao && (
-                        <DropdownMenuItem onSelect={() => openEdit(r)}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={!(r.status === 'Pendente' && canAccessFinancas)}
-                        onSelect={() => aprovar(r)}
-                      >
-                        <Check className="h-4 w-4 mr-2" />
-                        Aceitar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={!(r.status === 'Pendente' && canAccessFinancas)}
-                        onSelect={() => {
-                          setRejectReq(r);
-                          setRejectOpen(true);
-                        }}
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Rejeitar
-                      </DropdownMenuItem>
-                      {canAccessFinancas && r.status === 'Aprovado' && (
-                        <DropdownMenuItem
-                          onSelect={() => openPagoDialog(r)}
-                          disabled={(r.comprovativoAnexos?.length ?? 0) > 0}
-                        >
-                          <Banknote className="h-4 w-4 mr-2" />
-                          Fazer pagamento
-                        </DropdownMenuItem>
-                      )}
-                      {canAccessFinancas && precisaAnexarFacturaFinalReq(r) && (
-                        <DropdownMenuItem onSelect={() => setAnexarFacturaReq(r)}>
-                          <FileText className="h-4 w-4 mr-2" />
-                          Anexar factura final
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={!canAccessFinancas || getFirstTruthy(r.proformaAnexos) == null}
-                        onSelect={() => {
-                          const candidate = getFirstTruthy(r.proformaAnexos);
-                          if (!candidate) {
-                            toast.error('Nenhuma factura proforma em PDF anexada para pré-visualizar.');
-                            return;
-                          }
-                          void (async () => {
-                            try {
-                              const url = await resolveComprovativoPublicUrl(supabase!, 'proformas', candidate);
-                              if (!url) {
-                                toast.error('Não foi possível resolver a pré-visualização da proforma.');
-                                return;
-                              }
-                              setPdfPreviewUrl(url);
-                              setPdfPreviewOpen(true);
-                            } catch (e) {
-                              toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar proforma');
-                            }
-                          })();
-                        }}
-                      >
-                        Pré-visualizar: Proforma
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={!canAccessFinancas || getFirstTruthy(r.comprovativoAnexos) == null}
-                        onSelect={() => {
-                          const candidate = getFirstTruthy(r.comprovativoAnexos);
-                          if (!candidate) {
-                            toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
-                            return;
-                          }
-                          void (async () => {
-                            try {
-                              const bucket = inferBucketFromStoragePublicUrl(candidate);
-                              const url = await resolveComprovativoPublicUrl(supabase!, bucket, candidate);
-                              if (!url) {
-                                toast.error('Não foi possível resolver a pré-visualização do comprovativo.');
-                                return;
-                              }
-                              setPdfPreviewUrl(url);
-                              setPdfPreviewOpen(true);
-                            } catch (e) {
-                              toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar comprovativo');
-                            }
-                          })();
-                        }}
-                      >
-                        Pré-visualizar: Comprovativo
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={!canAccessFinancas || getLastTruthy(r.facturaFinalAnexos) == null}
-                        onSelect={() => {
-                          const candidate = getLastTruthy(r.facturaFinalAnexos);
-                          if (!candidate) {
-                            toast.error('Nenhuma factura final em PDF anexada para pré-visualizar.');
-                            return;
-                          }
-                          void (async () => {
-                            try {
-                              const url = await resolveComprovativoPublicUrl(supabase!, 'proformas', candidate);
-                              if (!url) {
-                                toast.error('Não foi possível resolver a pré-visualização da factura final.');
-                                return;
-                              }
-                              setPdfPreviewUrl(url);
-                              setPdfPreviewOpen(true);
-                            } catch (e) {
-                              toast.error(e instanceof Error ? e.message : 'Erro ao pré-visualizar factura final');
-                            }
-                          })();
-                        }}
-                      >
-                        Pré-visualizar: Factura final
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
+                <td className="py-3 px-5 text-right">{renderRequisicaoAcoes(r)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={r => r.id}
+          sortBar={{
+            options: [
+              { key: 'num', label: 'Nº' },
+              { key: 'fornecedor', label: 'Fornecedor' },
+              { key: 'valor', label: 'Valor' },
+              { key: 'data', label: 'Data' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={r => ({
+            title: r.num,
+            trailing: <StatusBadge status={r.status} />,
+          })}
+          renderDetails={r => [
+            { label: 'Fornecedor', value: r.fornecedor },
+            { label: 'Descrição', value: r.descricao },
+            { label: 'Centro de custo', value: r.centroCusto },
+            { label: 'Valor', value: formatKz(r.valor) },
+            { label: 'Data', value: formatDate(r.data) },
+            { label: 'Status', value: <StatusBadge status={r.status} /> },
+          ]}
+          renderActions={r => renderRequisicaoAcoes(r)}
+        />
       </div>
 
       {filtered.length === 0 && (

@@ -19,6 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 import { Search, Plus, Check, X, ChevronsUpDown, Calculator } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const MESES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -79,6 +81,18 @@ export default function ProcessamentoSalarialPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastResult, setLastResult] = useState<ResultadoProcessamento[]>([]);
   const warnedIrtFallbackRef = useRef(false);
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('colaboradorNome');
+  const mobileComparators = useMemo(
+    () => ({
+      colaboradorNome: (a: ResultadoProcessamento, b: ResultadoProcessamento) =>
+        a.colaboradorNome.localeCompare(b.colaboradorNome, 'pt', { sensitivity: 'base' }),
+      acao: (a: ResultadoProcessamento, b: ResultadoProcessamento) => a.acao.localeCompare(b.acao),
+      liquido: (a: ResultadoProcessamento, b: ResultadoProcessamento) => a.liquido - b.liquido,
+    }),
+    [],
+  );
+  const sortedMobileLastResult = useSortedMobileSlice(lastResult, mobileSort, mobileComparators);
 
   const colaboradoresActivos = useMemo(() => {
     return [...colaboradores].filter(c => c.status === 'Activo').sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
@@ -476,7 +490,7 @@ export default function ProcessamentoSalarialPage() {
             <Label className="text-base">Resultado do último processamento</Label>
             <Button variant="outline" size="sm" onClick={() => setLastResult([])} disabled={processing}>Limpar</Button>
           </div>
-          <div className="table-container overflow-x-auto">
+          <div className="hidden md:block table-container overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/80">
@@ -505,6 +519,36 @@ export default function ProcessamentoSalarialPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="md:hidden">
+            <MobileExpandableList
+              items={sortedMobileLastResult}
+              rowId={r => r.colaboradorId}
+              sortBar={{
+                options: [
+                  { key: 'colaboradorNome', label: 'Colaborador' },
+                  { key: 'acao', label: 'Acção' },
+                  { key: 'liquido', label: 'Líquido' },
+                ],
+                state: mobileSort,
+                onToggle: toggleMobileSort,
+              }}
+              renderSummary={r => ({
+                title: r.colaboradorNome,
+                trailing: <span className="text-xs font-mono text-muted-foreground">{formatKz(r.liquido)}</span>,
+              })}
+              renderDetails={r => [
+                {
+                  label: 'Acção',
+                  value: r.acao === 'skip_existe' ? 'Skip (já existe)' : r.acao === 'criado' ? 'Criado' : 'Atualizado',
+                },
+                { label: 'Dias falta', value: String(r.diasFaltaDesconto) },
+                { label: 'Desc. faltas', value: formatKz(r.descontoFaltas) },
+                { label: 'INSS', value: formatKz(r.inss) },
+                { label: 'IRT', value: formatKz(r.irt) },
+                { label: 'Líquido', value: formatKz(r.liquido) },
+              ]}
+            />
           </div>
         </div>
       )}

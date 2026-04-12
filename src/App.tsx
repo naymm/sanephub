@@ -1,3 +1,4 @@
+import { lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,6 +12,8 @@ import { ChatProvider } from "@/context/ChatContext";
 import { Layout } from "@/components/layout/Layout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import MobileMoreMenuPage from "@/pages/MobileMoreMenuPage";
+import MobileProfileMenuPage from "@/pages/MobileProfileMenuPage";
 import NotFound from "./pages/NotFound";
 import ColaboradoresPage from "@/modules/capital-humano/ColaboradoresPage";
 import FeriasPage from "@/modules/capital-humano/FeriasPage";
@@ -18,7 +21,7 @@ import FaltasPage from "@/modules/capital-humano/FaltasPage";
 import RecibosPage from "@/modules/capital-humano/RecibosPage";
 import DeclaracoesPage from "@/modules/capital-humano/DeclaracoesPage";
 import ProcessamentoSalarialPage from "@/modules/capital-humano/ProcessamentoSalarialPage";
-import TimePunchesPage from "@/modules/capital-humano/TimePunchesPage";
+const TimePunchesPage = lazy(() => import("@/modules/capital-humano/TimePunchesPage"));
 import GeofencesPage from "@/modules/capital-humano/GeofencesPage";
 import RequisicoesPage from "@/modules/financas/RequisicoesPage";
 import TesourariaPage from "@/modules/financas/TesourariaPage";
@@ -86,6 +89,8 @@ const App = () => (
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route element={<Layout />}>
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/mais" element={<MobileMoreMenuPage />} />
+                  <Route path="/perfil" element={<MobileProfileMenuPage />} />
                   <Route path="/chat" element={<ChatPage />} />
                   <Route path="/notificacoes" element={<GenericModulePage title="Centro de Notificações" module="notificacoes" />} />
                   {/* Conselho de Administração (PCA) */}

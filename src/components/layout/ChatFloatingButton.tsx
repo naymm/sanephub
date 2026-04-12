@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * Botão flutuante (canto inferior direito) para abrir o chat em qualquer página.
+ * Em mobile não é mostrado — o chat fica na navegação; o canto fica para ponto / documentos.
  */
 export function ChatFloatingButton() {
   const { user } = useAuth();

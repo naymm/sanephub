@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
@@ -31,7 +31,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, Eye, FileText, Receipt, FileCheck } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const METODO_OPTIONS: Pagamento['metodoPagamento'][] = ['Transferência', 'Cheque', 'Numerário', 'Outro'];
 
@@ -78,10 +80,53 @@ export default function PagamentosPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('dataPagamento');
+  const mobileComparators = useMemo(
+    () => ({
+      dataPagamento: (a: Pagamento, b: Pagamento) => a.dataPagamento.localeCompare(b.dataPagamento),
+      beneficiario: (a: Pagamento, b: Pagamento) =>
+        a.beneficiario.localeCompare(b.beneficiario, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
   const totalRecebido = filtered.reduce((s, p) => s + p.valor, 0);
 
   const getRequisicao = (reqId: number) => requisicoes.find(r => r.id === reqId);
   const getRequisicaoNum = (reqId: number) => getRequisicao(reqId)?.num ?? `#${reqId}`;
+
+  const openAnexoPreview = (p: Pagamento, kind: 'proforma' | 'comprovativo' | 'facturaFinal') => {
+    const req = getRequisicao(p.requisicaoId);
+    if (kind === 'proforma') {
+      const url = (req?.proformaAnexos ?? []).find(u => u.startsWith('http'));
+      if (!url) {
+        toast.error('Nenhuma factura proforma em PDF anexada para pré-visualizar.');
+        return;
+      }
+      setPdfPreviewUrl(url);
+      setPdfPreviewOpen(true);
+      return;
+    }
+    if (kind === 'comprovativo') {
+      const url = (req?.comprovativoAnexos ?? []).find(u => u.startsWith('http'));
+      if (!url) {
+        toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
+        return;
+      }
+      setPdfPreviewUrl(url);
+      setPdfPreviewOpen(true);
+      return;
+    }
+    const urls = (req?.facturaFinalAnexos ?? []).filter(u => u.startsWith('http'));
+    const url = urls[urls.length - 1];
+    if (!url) {
+      toast.error('Nenhuma factura final em PDF anexada para pré-visualizar.');
+      return;
+    }
+    setPdfPreviewUrl(url);
+    setPdfPreviewOpen(true);
+  };
 
   const openNew = () => {
     const req = requisicoesPagaveis[0];
@@ -138,7 +183,7 @@ export default function PagamentosPage() {
         <p className="text-xl font-semibold text-foreground">{formatKz(totalRecebido)}</p>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -180,47 +225,19 @@ export default function PagamentosPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.proformaAnexos?.length ?? 0) === 0}
-                        onSelect={() => {
-                          const req = getRequisicao(p.requisicaoId);
-                          const url = (req?.proformaAnexos ?? []).find(u => u.startsWith('http'));
-                          if (!url) {
-                            toast.error('Nenhuma factura proforma em PDF anexada para pré-visualizar.');
-                            return;
-                          }
-                          setPdfPreviewUrl(url);
-                          setPdfPreviewOpen(true);
-                        }}
+                        onSelect={() => openAnexoPreview(p, 'proforma')}
                       >
                         Proforma
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.comprovativoAnexos?.length ?? 0) === 0}
-                        onSelect={() => {
-                          const req = getRequisicao(p.requisicaoId);
-                          const url = (req?.comprovativoAnexos ?? []).find(u => u.startsWith('http'));
-                          if (!url) {
-                            toast.error('Nenhum comprovativo em PDF anexado para pré-visualizar.');
-                            return;
-                          }
-                          setPdfPreviewUrl(url);
-                          setPdfPreviewOpen(true);
-                        }}
+                        onSelect={() => openAnexoPreview(p, 'comprovativo')}
                       >
                         Comprovativo
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={!getRequisicao(p.requisicaoId) || (getRequisicao(p.requisicaoId)?.facturaFinalAnexos?.length ?? 0) === 0}
-                        onSelect={() => {
-                          const req = getRequisicao(p.requisicaoId);
-                          const urls = (req?.facturaFinalAnexos ?? []).filter(u => u.startsWith('http'));
-                          const url = urls[urls.length - 1];
-                          if (!url) {
-                            toast.error('Nenhuma factura final em PDF anexada para pré-visualizar.');
-                            return;
-                          }
-                          setPdfPreviewUrl(url);
-                          setPdfPreviewOpen(true);
-                        }}
+                        onSelect={() => openAnexoPreview(p, 'facturaFinal')}
                       >
                         Factura Final
                       </DropdownMenuItem>
@@ -231,6 +248,91 @@ export default function PagamentosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={p => p.id}
+          sortBar={{
+            options: [
+              { key: 'dataPagamento', label: 'Data' },
+              { key: 'beneficiario', label: 'Beneficiário' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={p => ({ title: p.referencia, trailing: <span className="text-xs font-medium">{formatKz(p.valor)}</span> })}
+          renderDetails={p => [
+            { label: 'Referência', value: p.referencia },
+            { label: 'Requisição', value: getRequisicaoNum(p.requisicaoId) },
+            { label: 'Beneficiário', value: p.beneficiario },
+            { label: 'Valor', value: formatKz(p.valor) },
+            { label: 'Data Pagamento', value: formatDate(p.dataPagamento) },
+            { label: 'Método', value: p.metodoPagamento },
+            { label: 'Status', value: <StatusBadge status={p.status} /> },
+          ]}
+          renderActions={p => {
+            const req = getRequisicao(p.requisicaoId);
+            const proformaDisabled = !req || (req.proformaAnexos?.length ?? 0) === 0;
+            const comprovativoDisabled = !req || (req.comprovativoAnexos?.length ?? 0) === 0;
+            const facturaDisabled = !req || (req.facturaFinalAnexos?.length ?? 0) === 0;
+            return (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  onClick={() => {
+                    setViewItem(p);
+                    setViewOpen(true);
+                  }}
+                  aria-label="Ver"
+                  title="Ver"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  disabled={proformaDisabled}
+                  onClick={() => openAnexoPreview(p, 'proforma')}
+                  aria-label="Proforma"
+                  title="Proforma"
+                >
+                  <FileText className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  disabled={comprovativoDisabled}
+                  onClick={() => openAnexoPreview(p, 'comprovativo')}
+                  aria-label="Comprovativo"
+                  title="Comprovativo"
+                >
+                  <Receipt className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  disabled={facturaDisabled}
+                  onClick={() => openAnexoPreview(p, 'facturaFinal')}
+                  aria-label="Factura final"
+                  title="Factura Final"
+                >
+                  <FileCheck className="h-4 w-4" />
+                </Button>
+              </>
+            );
+          }}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum pagamento encontrado.</p>}

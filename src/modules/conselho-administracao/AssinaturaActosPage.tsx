@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { formatDate } from '@/utils/formatters';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
@@ -64,6 +66,31 @@ export default function AssinaturaActosPage() {
 
   const paginationPendentes = useClientSidePagination({ items: filteredPendentes, pageSize: 25 });
   const paginationAssinados = useClientSidePagination({ items: filteredAssinados, pageSize: 25 });
+
+  type ActoPendRow = (typeof actosPendentes)[number];
+  type ActoAssRow = (typeof actesAssinados)[number];
+
+  const { sortState: mobileSortPend, toggleSort: toggleMobileSortPend } = useMobileListSort('designacao');
+  const mobileCompPend = useMemo(
+    () => ({
+      designacao: (a: ActoPendRow, b: ActoPendRow) => a.designacao.localeCompare(b.designacao, 'pt', { sensitivity: 'base' }),
+      dataSubmissao: (a: ActoPendRow, b: ActoPendRow) => a.dataSubmissao.localeCompare(b.dataSubmissao),
+      tipo: (a: ActoPendRow, b: ActoPendRow) => String(a.tipo).localeCompare(String(b.tipo), 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobilePendentes = useSortedMobileSlice(paginationPendentes.slice, mobileSortPend, mobileCompPend);
+
+  const { sortState: mobileSortAss, toggleSort: toggleMobileSortAss } = useMobileListSort('designacao');
+  const mobileCompAss = useMemo(
+    () => ({
+      designacao: (a: ActoAssRow, b: ActoAssRow) => a.designacao.localeCompare(b.designacao, 'pt', { sensitivity: 'base' }),
+      dataAssinatura: (a: ActoAssRow, b: ActoAssRow) => String(a.dataAssinatura).localeCompare(String(b.dataAssinatura)),
+      tipo: (a: ActoAssRow, b: ActoAssRow) => String(a.tipo).localeCompare(String(b.tipo), 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileAssinados = useSortedMobileSlice(paginationAssinados.slice, mobileSortAss, mobileCompAss);
 
   const abrirPreviewAssinado = async (id: number) => {
     if (!user) {
@@ -178,7 +205,7 @@ export default function AssinaturaActosPage() {
         <Input placeholder="Pesquisar acto..." value={search} onChange={e => setSearch(e.target.value)} className="h-9" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -206,6 +233,33 @@ export default function AssinaturaActosPage() {
         </table>
       </div>
 
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobilePendentes}
+          rowId={a => a.id}
+          sortBar={{
+            options: [
+              { key: 'designacao', label: 'Designação' },
+              { key: 'dataSubmissao', label: 'Data' },
+              { key: 'tipo', label: 'Tipo' },
+            ],
+            state: mobileSortPend,
+            onToggle: toggleMobileSortPend,
+          }}
+          renderSummary={a => ({ title: a.designacao })}
+          renderDetails={a => [
+            { label: 'Data submissão', value: formatDate(a.dataSubmissao) },
+            { label: 'Tipo', value: a.tipo },
+          ]}
+          renderActions={a => (
+            <Button type="button" size="sm" className="min-h-11 gap-1" onClick={() => abrirPreview(a.id)}>
+              <PenLine className="h-3.5 w-3.5" />
+              Ver PDF e assinar
+            </Button>
+          )}
+        />
+      </div>
+
       {filteredPendentes.length === 0 && (
         <p className="text-center py-8 text-muted-foreground text-sm">Nenhum acto pendente de assinatura.</p>
       )}
@@ -213,7 +267,7 @@ export default function AssinaturaActosPage() {
 
       <div className="space-y-2 mt-10">
         <h2 className="text-sm font-semibold text-muted-foreground">Actos já assinados</h2>
-        <div className="table-container overflow-x-auto">
+        <div className="hidden md:block table-container overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/80">
@@ -238,6 +292,31 @@ export default function AssinaturaActosPage() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="md:hidden">
+          <MobileExpandableList
+            items={sortedMobileAssinados}
+            rowId={a => a.id}
+            sortBar={{
+              options: [
+                { key: 'designacao', label: 'Designação' },
+                { key: 'dataAssinatura', label: 'Assinatura' },
+                { key: 'tipo', label: 'Tipo' },
+              ],
+              state: mobileSortAss,
+              onToggle: toggleMobileSortAss,
+            }}
+            renderSummary={a => ({ title: a.designacao })}
+            renderDetails={a => [
+              { label: 'Data assinatura', value: formatDate(a.dataAssinatura) },
+              { label: 'Tipo', value: a.tipo },
+            ]}
+            renderActions={a => (
+              <Button type="button" size="sm" variant="outline" className="min-h-11 gap-1" onClick={() => abrirPreviewAssinado(a.id)}>
+                Ver PDF
+              </Button>
+            )}
+          />
         </div>
         {filteredAssinados.length === 0 && (
           <p className="text-center py-6 text-muted-foreground text-xs">Nenhum acto assinado encontrado.</p>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -28,6 +28,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Eye, Scale } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const STATUS_OPCOES: ProcessoJudicial['status'][] = ['Em curso', 'Suspenso', 'Encerrado', 'Ganho', 'Perdido', 'Acordo'];
 
@@ -71,6 +73,20 @@ export default function ProcessosJudiciaisPage() {
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const empresaNome = (id: number | undefined) => (id != null ? empresas.find(e => e.id === id)?.nome ?? String(id) : '—');
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('numero');
+  const mobileComparators = useMemo(
+    () => ({
+      numero: (a: ProcessoJudicial, b: ProcessoJudicial) => a.numero.localeCompare(b.numero, 'pt', { sensitivity: 'base' }),
+      tribunal: (a: ProcessoJudicial, b: ProcessoJudicial) => a.tribunal.localeCompare(b.tribunal, 'pt', { sensitivity: 'base' }),
+      dataEntrada: (a: ProcessoJudicial, b: ProcessoJudicial) => a.dataEntrada.localeCompare(b.dataEntrada),
+      valor: (a: ProcessoJudicial, b: ProcessoJudicial) => a.valorEmCausa - b.valorEmCausa,
+      empresa: (a: ProcessoJudicial, b: ProcessoJudicial) =>
+        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+    }),
+    [empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -180,7 +196,7 @@ export default function ProcessosJudiciaisPage() {
         )}
       </div>
 
-      <div className="table-container overflow-x-auto rounded-lg border border-border/80">
+      <div className="hidden md:block table-container overflow-x-auto rounded-lg border border-border/80">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
@@ -225,6 +241,63 @@ export default function ProcessosJudiciaisPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={p => p.id}
+          sortBar={{
+            options: [
+              ...(currentEmpresaId === 'consolidado' ? [{ key: 'empresa', label: 'Empresa' } as const] : []),
+              { key: 'numero', label: 'Nº' },
+              { key: 'tribunal', label: 'Tribunal' },
+              { key: 'valor', label: 'Valor' },
+              { key: 'dataEntrada', label: 'Entrada' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={p => ({
+            title: p.numero,
+            trailing: <StatusBadge status={p.status} />,
+          })}
+          renderDetails={p => [
+            ...(currentEmpresaId === 'consolidado' ? [{ label: 'Empresa', value: empresaNome(p.empresaId) }] : []),
+            { label: 'Tribunal', value: p.tribunal },
+            { label: 'Tipo', value: p.tipoAccao },
+            { label: 'Autor', value: p.autor },
+            { label: 'Réu', value: p.reu },
+            { label: 'Valor em causa', value: formatKz(p.valorEmCausa) },
+            { label: 'Entrada', value: formatDate(p.dataEntrada) },
+            { label: 'Próx. audiência', value: p.proximaAudiencia ? formatDate(p.proximaAudiencia) : '—' },
+            { label: 'Status', value: <StatusBadge status={p.status} /> },
+          ]}
+          renderActions={p => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openDetail(p)} aria-label="Ver">
+                <Eye className="h-4 w-4" />
+              </Button>
+              {canEdit && (
+                <>
+                  <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(p)} aria-label="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => remove(p)}
+                    aria-label="Remover"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (

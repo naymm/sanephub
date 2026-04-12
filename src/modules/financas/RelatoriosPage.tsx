@@ -16,6 +16,10 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import { Download, FileText, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Requisicao } from '@/types';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import { exportRelatorioFinanceiroPdf } from '@/utils/financasRelatorioPdf';
 
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
@@ -55,6 +59,17 @@ export default function RelatoriosPage() {
     });
   }, [requisicoes, anoNum, mesINum, mesFNum, centroRef]);
   const pagination = useClientSidePagination({ items: filteredReqs, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('data');
+  const mobileComparators = useMemo(
+    () => ({
+      data: (a: Requisicao, b: Requisicao) => a.data.localeCompare(b.data),
+      fornecedor: (a: Requisicao, b: Requisicao) =>
+        a.fornecedor.localeCompare(b.fornecedor, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const totalGasto = useMemo(() => filteredReqs.reduce((s, r) => s + r.valor, 0), [filteredReqs]);
   const porStatus = useMemo(() => {
@@ -246,7 +261,7 @@ export default function RelatoriosPage() {
             </Button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/80">
@@ -271,6 +286,37 @@ export default function RelatoriosPage() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="md:hidden border-t border-border/60">
+          <MobileExpandableList
+            items={sortedMobileRows}
+            rowId={r => r.id}
+            sortBar={{
+              options: [
+                { key: 'data', label: 'Data' },
+                { key: 'fornecedor', label: 'Fornecedor' },
+              ],
+              state: mobileSort,
+              onToggle: toggleMobileSort,
+            }}
+            renderSummary={r => ({
+              title: (
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="truncate font-mono text-xs text-muted-foreground">{r.num}</span>
+                  <span className="truncate">{r.fornecedor}</span>
+                </span>
+              ),
+              trailing: <StatusBadge status={r.status} />,
+            })}
+            renderDetails={r => [
+              { label: 'Nº', value: <span className="font-mono text-xs">{r.num}</span> },
+              { label: 'Fornecedor', value: r.fornecedor },
+              { label: 'Descrição', value: r.descricao || '—' },
+              { label: 'Centro de custo', value: r.centroCusto },
+              { label: 'Valor', value: formatKz(r.valor) },
+              { label: 'Data', value: formatDate(r.data) },
+            ]}
+          />
         </div>
         <DataTablePagination {...pagination.paginationProps} />
       </div>

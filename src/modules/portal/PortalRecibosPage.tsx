@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/select';
 import { Eye, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const MESES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -70,6 +72,17 @@ export default function PortalRecibosPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('mesAno');
+  const mobileComparators = useMemo(
+    () => ({
+      mesAno: (a: ReciboSalario, b: ReciboSalario) => a.mesAno.localeCompare(b.mesAno),
+      liquido: (a: ReciboSalario, b: ReciboSalario) => a.liquido - b.liquido,
+      vencimentoBase: (a: ReciboSalario, b: ReciboSalario) => a.vencimentoBase - b.vencimentoBase,
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
   if (colaboradorId == null) {
     return (
       <div className="space-y-6">
@@ -105,7 +118,7 @@ export default function PortalRecibosPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -137,6 +150,43 @@ export default function PortalRecibosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={r => r.id}
+          sortBar={{
+            options: [
+              { key: 'mesAno', label: 'Mês/Ano' },
+              { key: 'liquido', label: 'Líquido' },
+              { key: 'vencimentoBase', label: 'Vencimento' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={r => ({
+            title: r.mesAno,
+            trailing: <StatusBadge status={r.status} />,
+          })}
+          renderDetails={r => [
+            { label: 'Vencimento base', value: formatKz(r.vencimentoBase) },
+            { label: 'Subsídios', value: formatKz(r.subsidioAlimentacao + r.subsidioTransporte + r.outrosSubsidios) },
+            { label: 'Deduções', value: formatKz(r.inss + r.irt + r.outrasDeducoes) },
+            { label: 'Líquido', value: formatKz(r.liquido) },
+            { label: 'Status', value: <StatusBadge status={r.status} /> },
+          ]}
+          renderActions={r => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => { setViewItem(r); setViewOpen(true); }} aria-label="Ver detalhe">
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => handleGerarPdf(r)} aria-label="Gerar PDF">
+                <FileDown className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum recibo encontrado.</p>}

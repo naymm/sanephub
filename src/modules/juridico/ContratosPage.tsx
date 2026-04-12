@@ -52,6 +52,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Plus, Pencil, Trash2, Eye, FileText, ChevronsUpDown, Upload, Search, Loader2 } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_PRESTACAO = 'Prestação de Serviços';
 
@@ -402,6 +404,59 @@ export default function ContratosPage() {
     }
   };
 
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('numero');
+  const mobileComparators = useMemo(
+    () => ({
+      numero: (a: Contrato, b: Contrato) => a.numero.localeCompare(b.numero, 'pt', { sensitivity: 'base' }),
+      parteB: (a: Contrato, b: Contrato) => a.parteB.localeCompare(b.parteB, 'pt', { sensitivity: 'base' }),
+      dataFim: (a: Contrato, b: Contrato) => a.dataFim.localeCompare(b.dataFim),
+      valor: (a: Contrato, b: Contrato) => a.valor - b.valor,
+      empresa: (a: Contrato, b: Contrato) =>
+        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+    }),
+    [empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
+  const renderContratoAcoes = (c: Contrato) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          Ações
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[240px]">
+        <DropdownMenuItem onSelect={() => openPreview(c)}>
+          <Eye className="h-4 w-4 mr-2" />
+          Ver
+        </DropdownMenuItem>
+        {canEdit && (
+          <DropdownMenuItem onSelect={() => openEdit(c)}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Editar
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={!c.ficheiroPdf?.trim() || !isSupabaseConfigured()}
+          onSelect={() => void openContractPdfPreview(c)}
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          Pré-visualizar documento
+        </DropdownMenuItem>
+        {canEdit && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => remove(c)}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remover
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -465,7 +520,7 @@ export default function ContratosPage() {
         )}
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -505,52 +560,52 @@ export default function ContratosPage() {
                   <td className="py-3 px-5">
                     <StatusBadge status={c.status} />
                   </td>
-                  <td className="py-3 px-5 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          Ações
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="min-w-[240px]">
-                        <DropdownMenuItem onSelect={() => openPreview(c)}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Ver
-                        </DropdownMenuItem>
-                        {canEdit && (
-                          <DropdownMenuItem onSelect={() => openEdit(c)}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          disabled={!c.ficheiroPdf?.trim() || !isSupabaseConfigured()}
-                          onSelect={() => void openContractPdfPreview(c)}
-                        >
-                          <FileText className="h-4 w-4 mr-2" />
-                          Pré-visualizar documento
-                        </DropdownMenuItem>
-                        {canEdit && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onSelect={() => remove(c)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Remover
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
+                  <td className="py-3 px-5 text-right">{renderContratoAcoes(c)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={c => c.id}
+          sortBar={{
+            options: [
+              ...(currentEmpresaId === 'consolidado' ? [{ key: 'empresa', label: 'Empresa' } as const] : []),
+              { key: 'numero', label: 'Nº' },
+              { key: 'parteB', label: 'Contraparte' },
+              { key: 'valor', label: 'Valor' },
+              { key: 'dataFim', label: 'Fim' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={c => ({
+            title: c.numero,
+            trailing: <StatusBadge status={c.status} />,
+          })}
+          renderDetails={c => {
+            const d = diasRestantes(c.dataFim);
+            return [
+              ...(currentEmpresaId === 'consolidado' ? [{ label: 'Empresa', value: empresaNome(c.empresaId) }] : []),
+              { label: 'Tipo', value: c.tipo },
+              { label: 'Contraparte', value: c.parteB },
+              { label: 'Objecto', value: c.objecto },
+              { label: 'Valor', value: formatKz(c.valor) },
+              { label: 'Início', value: formatDate(c.dataInicio) },
+              { label: 'Fim', value: formatDate(c.dataFim) },
+              {
+                label: 'Dias',
+                value: <span className={cn(getDiasClass(c.dataFim))}>{d < 0 ? 'Vencido' : `${d} dias`}</span>,
+              },
+              { label: 'Status', value: <StatusBadge status={c.status} /> },
+            ];
+          }}
+          renderActions={c => renderContratoAcoes(c)}
+        />
       </div>
 
       {filtered.length === 0 && (

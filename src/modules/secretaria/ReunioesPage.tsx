@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, Pencil, Eye, Trash2, ChevronsUpDown, Check, X } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
@@ -84,6 +86,16 @@ export default function ReunioesPage() {
     return matchSearch && matchTipo && matchStatus && matchDate;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('titulo');
+  const mobileComparators = useMemo(
+    () => ({
+      titulo: (a: Reuniao, b: Reuniao) => a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+      data: (a: Reuniao, b: Reuniao) => a.data.localeCompare(b.data),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -172,7 +184,7 @@ export default function ReunioesPage() {
         <Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="w-[140px] h-9" placeholder="Data até" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -203,6 +215,63 @@ export default function ReunioesPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={r => r.id}
+          sortBar={{
+            options: [
+              { key: 'titulo', label: 'Título' },
+              { key: 'data', label: 'Data' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={r => ({
+            title: r.titulo,
+            trailing: <StatusBadge status={r.status} />,
+          })}
+          renderDetails={r => [
+            { label: 'Título', value: r.titulo },
+            { label: 'Data / Hora', value: `${formatDate(r.data)} ${r.hora}` },
+            { label: 'Local', value: r.local },
+            { label: 'Tipo', value: r.tipo },
+            { label: 'Participantes', value: `${r.participantes.length} — ${getParticipantesNomes(r.participantes)}` },
+            { label: 'Status', value: <StatusBadge status={r.status} /> },
+          ]}
+          renderActions={r => (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => {
+                  setViewItem(r);
+                  setViewOpen(true);
+                }}
+                aria-label="Ver"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(r)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(r)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma reunião encontrada.</p>}

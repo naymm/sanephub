@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -38,6 +38,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Search, Pencil, Eye, ArrowDownCircle, ArrowUpCircle, Paperclip, Trash2, AlertCircle, FileText } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const METODOS: MetodoPagamentoTesouraria[] = ['Transferência', 'Cheque', 'Numerário', 'MB', 'Outro'];
 
@@ -324,6 +326,75 @@ export default function TesourariaPage() {
     }
   };
 
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('referencia');
+  const mobileComparators = useMemo(
+    () => ({
+      referencia: (a: MovimentoTesouraria, b: MovimentoTesouraria) => a.referencia.localeCompare(b.referencia, 'pt', { sensitivity: 'base' }),
+      data: (a: MovimentoTesouraria, b: MovimentoTesouraria) => a.data.localeCompare(b.data),
+      valor: (a: MovimentoTesouraria, b: MovimentoTesouraria) => a.valor - b.valor,
+      empresa: (a: MovimentoTesouraria, b: MovimentoTesouraria) =>
+        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+    }),
+    [empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
+  const renderMovimentoAcoes = (m: MovimentoTesouraria) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          Ações
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[220px]">
+        <DropdownMenuItem onSelect={() => openView(m)}>
+          <Eye className="h-4 w-4 mr-2" />
+          Ver detalhe
+        </DropdownMenuItem>
+        {podeEditarMovimento && (
+          <DropdownMenuItem onSelect={() => openEdit(m)}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Editar
+          </DropdownMenuItem>
+        )}
+        {m.tipo === 'saida' && movimentoSaidaPrecisaFacturaFinal(m) && podeEditarMovimento && (
+          <DropdownMenuItem onSelect={() => setMovAnexarFacturaFinal(m)}>
+            <FileText className="h-4 w-4 mr-2" />
+            Anexar factura final
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={getFirstDocUrl(m.proformaAnexos) == null}
+          onSelect={() => {
+            const u = getFirstDocUrl(m.proformaAnexos);
+            if (u) openPdfPreview(u, true);
+          }}
+        >
+          Pré-visualizar: Proforma
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={getLastDocUrl(m.facturaFinalAnexos) == null}
+          onSelect={() => {
+            const u = getLastDocUrl(m.facturaFinalAnexos);
+            if (u) openPdfPreview(u, true);
+          }}
+        >
+          Pré-visualizar: Factura final
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={getFirstDocUrl(m.comprovativoAnexos) == null}
+          onSelect={() => {
+            const u = getFirstDocUrl(m.comprovativoAnexos);
+            if (u) openPdfPreview(u, true);
+          }}
+        >
+          Pré-visualizar: Comprovativo
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -374,7 +445,7 @@ export default function TesourariaPage() {
         <Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="w-[140px] h-9" placeholder="Data até" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -419,65 +490,61 @@ export default function TesourariaPage() {
                 <td className="py-3 px-5 text-muted-foreground text-xs max-w-[200px] truncate" title={contaLabel(m.contaBancariaId)}>
                   {contaLabel(m.contaBancariaId)}
                 </td>
-                <td className="py-3 px-5 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        Ações
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-[220px]">
-                      <DropdownMenuItem onSelect={() => openView(m)}>
-                        <Eye className="h-4 w-4 mr-2" />
-                        Ver detalhe
-                      </DropdownMenuItem>
-                      {podeEditarMovimento && (
-                        <DropdownMenuItem onSelect={() => openEdit(m)}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                      )}
-                      {m.tipo === 'saida' && movimentoSaidaPrecisaFacturaFinal(m) && podeEditarMovimento && (
-                        <DropdownMenuItem onSelect={() => setMovAnexarFacturaFinal(m)}>
-                          <FileText className="h-4 w-4 mr-2" />
-                          Anexar factura final
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={getFirstDocUrl(m.proformaAnexos) == null}
-                        onSelect={() => {
-                          const u = getFirstDocUrl(m.proformaAnexos);
-                          if (u) openPdfPreview(u, true);
-                        }}
-                      >
-                        Pré-visualizar: Proforma
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={getLastDocUrl(m.facturaFinalAnexos) == null}
-                        onSelect={() => {
-                          const u = getLastDocUrl(m.facturaFinalAnexos);
-                          if (u) openPdfPreview(u, true);
-                        }}
-                      >
-                        Pré-visualizar: Factura final
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={getFirstDocUrl(m.comprovativoAnexos) == null}
-                        onSelect={() => {
-                          const u = getFirstDocUrl(m.comprovativoAnexos);
-                          if (u) openPdfPreview(u, true);
-                        }}
-                      >
-                        Pré-visualizar: Comprovativo
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
+                <td className="py-3 px-5 text-right">{renderMovimentoAcoes(m)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={m => m.id}
+          sortBar={{
+            options: [
+              { key: 'referencia', label: 'Ref.' },
+              { key: 'empresa', label: 'Empresa' },
+              { key: 'valor', label: 'Valor' },
+              { key: 'data', label: 'Data' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={m => ({
+            title: m.referencia,
+            trailing: (
+              <span className={m.tipo === 'entrada' ? 'text-xs font-mono text-green-600' : 'text-xs font-mono text-red-600'}>
+                {m.tipo === 'entrada' ? '+' : '-'}
+                {formatKz(m.valor)}
+              </span>
+            ),
+          })}
+          renderDetails={m => [
+            {
+              label: 'Tipo',
+              value: <span className={m.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}>{m.tipo === 'entrada' ? 'Entrada' : 'Saída'}</span>,
+            },
+            { label: 'Empresa', value: empresaNome(m.empresaId) },
+            {
+              label: 'Origem / Beneficiário',
+              value: m.tipo === 'entrada' ? (m.origem ?? '—') : (m.beneficiario ?? categoriaLabel(m.categoriaSaida)),
+            },
+            {
+              label: 'Valor',
+              value: (
+                <span className={m.tipo === 'entrada' ? 'text-green-600 font-mono' : 'text-red-600 font-mono'}>
+                  {m.tipo === 'entrada' ? '+' : '-'}
+                  {formatKz(m.valor)}
+                </span>
+              ),
+            },
+            { label: 'Data', value: formatDate(m.data) },
+            { label: 'Método', value: m.metodoPagamento },
+            { label: 'Conta', value: contaLabel(m.contaBancariaId) },
+          ]}
+          renderActions={m => renderMovimentoAcoes(m)}
+        />
       </div>
 
       {filtered.length === 0 && (

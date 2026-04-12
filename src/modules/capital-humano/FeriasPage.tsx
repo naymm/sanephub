@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, Pencil, Eye, Check, X, Trash2 } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 
@@ -67,6 +69,18 @@ export default function FeriasPage() {
     return matchSearch && matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('colab');
+  const mobileComparators = useMemo(
+    () => ({
+      colab: (a: Ferias, b: Ferias) =>
+        getColabName(a.colaboradorId).localeCompare(getColabName(b.colaboradorId), 'pt', { sensitivity: 'base' }),
+      status: (a: Ferias, b: Ferias) =>
+        String(a.status).localeCompare(String(b.status), 'pt', { sensitivity: 'base' }),
+    }),
+    [colaboradores],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const updateDias = (inicio: string, fim: string) => {
     const d = diasEntre(inicio, fim);
@@ -179,7 +193,7 @@ export default function FeriasPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -225,6 +239,72 @@ export default function FeriasPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={f => f.id}
+          sortBar={{
+            options: [
+              { key: 'colab', label: 'Colaborador' },
+              { key: 'status', label: 'Estado' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={f => ({
+            title: getColabName(f.colaboradorId),
+            trailing: <StatusBadge status={f.status} />,
+          })}
+          renderDetails={f => [
+            { label: 'Departamento', value: getColabDept(f.colaboradorId) || '—' },
+            { label: 'Início', value: formatDate(f.dataInicio) },
+            { label: 'Fim', value: formatDate(f.dataFim) },
+            { label: 'Dias', value: String(f.dias) },
+            { label: 'Solicitado em', value: formatDate(f.solicitadoEm) },
+          ]}
+          renderActions={f => (
+            <div className="flex w-full flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" className="min-h-11 flex-1 gap-2" onClick={() => { setViewItem(f); setViewOpen(true); }}>
+                  <Eye className="h-4 w-4 shrink-0" />
+                  Ver
+                </Button>
+                {(f.status === 'Pendente' || f.status === 'Aprovado') && (
+                  <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(f)} aria-label="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => remove(f)}
+                  aria-label="Remover"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              {f.status === 'Pendente' && (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" className="min-h-10 flex-1 gap-1 text-success" onClick={() => handleApprove(f)}>
+                    <Check className="h-4 w-4" />
+                    Aprovar
+                  </Button>
+                  <Button type="button" variant="secondary" className="min-h-10 flex-1 gap-1 text-destructive" onClick={() => { setRejectItem(f); setRejectOpen(true); }}>
+                    <X className="h-4 w-4" />
+                    Rejeitar
+                  </Button>
+                  <Button type="button" variant="outline" className="min-h-10 flex-1" onClick={() => handleCancel(f)}>
+                    Cancelar pedido
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum pedido de férias encontrado.</p>}

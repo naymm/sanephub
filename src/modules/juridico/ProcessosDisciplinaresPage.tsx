@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
@@ -28,6 +28,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, ArrowLeft, ChevronRight, ChevronLeft, Scale, FileText } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const STATUS_OPCOES: StatusProcessoDisciplinar[] = [
   'Em análise jurídica', 'Suspensão preventiva', 'Em audiência', 'Relatório elaborado',
@@ -76,6 +78,23 @@ export default function ProcessosDisciplinaresPage() {
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? 1 : (typeof currentEmpresaId === 'number' ? currentEmpresaId : 1);
   const pagination = useClientSidePagination({ items: processosDisciplinares, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('numero');
+  const mobileComparators = useMemo(
+    () => ({
+      numero: (a: ProcessoDisciplinar, b: ProcessoDisciplinar) => a.numero.localeCompare(b.numero, 'pt', { sensitivity: 'base' }),
+      colaborador: (a: ProcessoDisciplinar, b: ProcessoDisciplinar) => {
+        const na = colaboradores.find(c => c.id === a.colaboradorId)?.nome ?? '';
+        const nb = colaboradores.find(c => c.id === b.colaboradorId)?.nome ?? '';
+        return na.localeCompare(nb, 'pt', { sensitivity: 'base' });
+      },
+      empresa: (a: ProcessoDisciplinar, b: ProcessoDisciplinar) =>
+        getEmpresaNome(a.empresaId).localeCompare(getEmpresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+      criadoEm: (a: ProcessoDisciplinar, b: ProcessoDisciplinar) => a.criadoEm.localeCompare(b.criadoEm),
+    }),
+    [colaboradores, empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   if (processoId != null && processo) {
     return (
@@ -251,7 +270,7 @@ export default function ProcessosDisciplinaresPage() {
         )}
       </div>
 
-      <div className="table-container overflow-x-auto rounded-lg border border-border/80">
+      <div className="hidden md:block table-container overflow-x-auto rounded-lg border border-border/80">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
@@ -302,6 +321,56 @@ export default function ProcessosDisciplinaresPage() {
           </tbody>
         </table>
       </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={p => p.id}
+          sortBar={{
+            options: [
+              { key: 'numero', label: 'Nº' },
+              { key: 'colaborador', label: 'Colaborador' },
+              { key: 'empresa', label: 'Empresa' },
+              { key: 'criadoEm', label: 'Início' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={p => {
+            return {
+              title: p.numero,
+              trailing: (
+                <span className="inline-flex items-center rounded-full bg-[#d4a926]/10 text-[#a57e26] dark:text-[#d4a926] px-2 py-0.5 text-xs font-medium">
+                  {p.status}
+                </span>
+              ),
+            };
+          }}
+          renderDetails={p => {
+            const colab = colaboradores.find(c => c.id === p.colaboradorId);
+            const lastStep = p.historico[p.historico.length - 1];
+            return [
+              { label: 'Empresa', value: getEmpresaNome(p.empresaId) },
+              { label: 'Colaborador', value: colab ? colab.nome : `Colaborador #${p.colaboradorId}` },
+              { label: 'Início', value: formatDate(p.criadoEm.slice(0, 10)) },
+              {
+                label: 'Último passo',
+                value: lastStep ? `${formatDate(lastStep.data.slice(0, 10))} — ${lastStep.passo}` : '—',
+              },
+            ];
+          }}
+          renderActions={
+            canEdit
+              ? p => (
+                  <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => navigate(`/juridico/processos-disciplinares/${p.id}`)}>
+                    Ver detalhe
+                  </Button>
+                )
+              : undefined
+          }
+        />
+      </div>
+
       <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>

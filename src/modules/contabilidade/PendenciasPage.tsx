@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, Pencil, Eye, Check } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_OPTIONS: TipoPendencia[] = ['Factura em falta', 'Comprovante em falta', 'Proforma em falta', 'Documento fiscal', 'Assinatura', 'Outro'];
 const PRIORIDADE_OPTIONS: PrioridadePendencia[] = ['Baixa', 'Média', 'Alta', 'Urgente'];
@@ -60,6 +62,18 @@ export default function PendenciasPage() {
     return matchSearch && matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('titulo');
+  const mobileComparators = useMemo(
+    () => ({
+      titulo: (a: PendenciaDocumental, b: PendenciaDocumental) =>
+        a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+      dataLimite: (a: PendenciaDocumental, b: PendenciaDocumental) =>
+        (a.dataLimite ?? '').localeCompare(b.dataLimite ?? ''),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -140,7 +154,7 @@ export default function PendenciasPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -175,6 +189,64 @@ export default function PendenciasPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={p => p.id}
+          sortBar={{
+            options: [
+              { key: 'titulo', label: 'Título' },
+              { key: 'dataLimite', label: 'Data limite' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={p => ({ title: p.titulo, trailing: <StatusBadge status={p.status} /> })}
+          renderDetails={p => [
+            { label: 'Título', value: p.titulo },
+            { label: 'Tipo', value: p.tipo },
+            { label: 'Referência', value: p.entidadeRef },
+            { label: 'Data limite', value: p.dataLimite ? formatDate(p.dataLimite) : '—' },
+            { label: 'Prioridade', value: p.prioridade },
+            { label: 'Responsável', value: p.responsavel },
+            { label: 'Status', value: <StatusBadge status={p.status} /> },
+          ]}
+          renderActions={p => (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => {
+                  setViewItem(p);
+                  setViewOpen(true);
+                }}
+                aria-label="Ver"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(p)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              {p.status !== 'Regularizado' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 text-success"
+                  onClick={() => marcarRegularizado(p)}
+                  aria-label="Marcar como regularizado"
+                  title="Marcar como regularizado"
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma pendência encontrada.</p>}

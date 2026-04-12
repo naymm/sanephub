@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -37,6 +37,8 @@ import { cn } from '@/lib/utils';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Check, ChevronsUpDown } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const PERFIS: Perfil[] = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'];
 
@@ -99,6 +101,21 @@ export default function UtilizadoresPage() {
       u.perfil.toLowerCase().includes(search.toLowerCase())
   );
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('nome');
+  const mobileComparators = useMemo(
+    () => ({
+      nome: (a: Usuario, b: Usuario) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }),
+      login: (a: Usuario, b: Usuario) =>
+        (a.username ?? a.email.split('@')[0] ?? '').localeCompare(b.username ?? b.email.split('@')[0] ?? '', 'pt', {
+          sensitivity: 'base',
+        }),
+      email: (a: Usuario, b: Usuario) => a.email.localeCompare(b.email, 'pt', { sensitivity: 'base' }),
+      perfil: (a: Usuario, b: Usuario) => a.perfil.localeCompare(b.perfil, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -315,7 +332,7 @@ export default function UtilizadoresPage() {
         />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -371,6 +388,65 @@ export default function UtilizadoresPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={u => u.id}
+          sortBar={{
+            options: [
+              { key: 'nome', label: 'Nome' },
+              { key: 'login', label: 'Login' },
+              { key: 'email', label: 'Email' },
+              { key: 'perfil', label: 'Perfil' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={u => ({
+            avatar: (
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                {u.avatar || avatarFromNome(u.nome)}
+              </span>
+            ),
+            title: u.nome,
+            trailing: <span className="text-xs text-muted-foreground">{u.perfil}</span>,
+          })}
+          renderDetails={u => [
+            { label: 'Login', value: <span className="font-mono text-xs">{u.username ?? u.email.split('@')[0] ?? '—'}</span> },
+            { label: 'Email', value: u.email },
+            { label: 'Perfil', value: u.perfil },
+            { label: 'Cargo / Dept.', value: `${u.cargo} — ${u.departamento}` },
+            {
+              label: 'Acesso módulos',
+              value:
+                u.perfil === 'Admin'
+                  ? 'Todos'
+                  : Array.isArray(u.modulos) && u.modulos.length > 0
+                    ? `${u.modulos.length} módulo(s)`
+                    : 'Por perfil',
+            },
+          ]}
+          renderActions={u => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(u)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(u)}
+                disabled={isOnlyAdmin(u)}
+                aria-label={isOnlyAdmin(u) ? 'Não pode remover o único Admin' : 'Remover'}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (

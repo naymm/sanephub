@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -26,6 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 export default function ContasBancariasPage() {
   const { user } = useAuth();
@@ -62,6 +64,20 @@ export default function ContasBancariasPage() {
 
   const bancoNome = (id: number) => bancos.find(b => b.id === id)?.nome ?? `#${id}`;
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('empresa');
+  const mobileComparators = useMemo(
+    () => ({
+      empresa: (a: ContaBancaria, b: ContaBancaria) =>
+        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+      banco: (a: ContaBancaria, b: ContaBancaria) =>
+        bancoNome(a.bancoId).localeCompare(bancoNome(b.bancoId), 'pt', { sensitivity: 'base' }),
+      conta: (a: ContaBancaria, b: ContaBancaria) => a.numeroConta.localeCompare(b.numeroConta, 'pt', { sensitivity: 'base' }),
+      saldo: (a: ContaBancaria, b: ContaBancaria) => a.saldoActual - b.saldoActual,
+    }),
+    [bancos, empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -157,7 +173,7 @@ export default function ContasBancariasPage() {
         <Input placeholder="Pesquisar conta, banco..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -192,6 +208,34 @@ export default function ContasBancariasPage() {
           </tbody>
         </table>
       </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={c => c.id}
+          sortBar={{
+            options: [
+              { key: 'empresa', label: 'Empresa' },
+              { key: 'banco', label: 'Banco' },
+              { key: 'conta', label: 'N.º conta' },
+              { key: 'saldo', label: 'Saldo' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={c => ({
+            title: `${bancoNome(c.bancoId)} · ${c.numeroConta}`,
+            trailing: <span className="text-xs font-mono text-muted-foreground">{formatKz(c.saldoActual)}</span>,
+          })}
+          renderDetails={c => [
+            { label: 'Empresa', value: empresaNome(c.empresaId) },
+            { label: 'Banco', value: bancoNome(c.bancoId) },
+            { label: 'N.º conta', value: <span className="font-mono text-xs">{c.numeroConta}</span> },
+            { label: 'Saldo actual', value: formatKz(c.saldoActual) },
+          ]}
+        />
+      </div>
+
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma conta neste contexto.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 

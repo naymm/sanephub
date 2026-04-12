@@ -1,12 +1,15 @@
+import { Suspense } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { getModulosAtivosForContext } from '@/utils/empresaModulos';
 import { rotaBloqueadaPorRecursosDesactivados, tenantPodeUsarModulo } from '@/utils/orgFeatureAccess';
+import { cn } from '@/lib/utils';
 import { IntranetTopbar } from './IntranetTopbar';
 import { HorizontalMenu } from './HorizontalMenu';
 import { FloatingCornerActions } from './FloatingCornerActions';
+import { MobileBottomNav } from './MobileBottomNav';
 
 const PATH_TO_MODULE: Record<string, string> = {
   '/portal': 'portal-colaborador',
@@ -70,15 +73,31 @@ export function Layout() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-background flex flex-col">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-background flex flex-col">
       <IntranetTopbar />
       <HorizontalMenu />
-      <main className="flex-1 p-5 lg:p-8 overflow-x-hidden bg-background">
-        <Outlet />
+      <main
+        className={cn(
+          'flex-1 overflow-x-hidden w-full min-w-0 pt-4 pb-28 max-md:bg-muted/45 md:bg-background md:pt-5 md:pb-5 lg:pt-8 lg:pb-8',
+          pathname === '/mais' || pathname === '/perfil'
+            ? 'max-md:px-3 md:px-5 lg:px-8'
+            : 'px-4 md:px-5 lg:px-8',
+        )}
+      >
+        <Suspense
+          fallback={
+            <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+              A carregar…
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </main>
-      <footer className="border-t border-border/80 px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-muted-foreground">
+      <footer className="hidden md:block border-t border-border/80 px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-muted-foreground">
         © {new Date().getFullYear()} GRUPO SANEP. Todos os direitos reservados.
       </footer>
+      <MobileBottomNav />
       <FloatingCornerActions />
     </div>
   );

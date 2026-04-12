@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Acta, Colaborador, Reuniao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -31,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { isActaAudioFile, uploadActaAudioTranscricao } from '@/lib/actaAudioTranscricao';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 
 const STATUS_OPTIONS: Acta['status'][] = ['Rascunho', 'Em Revisão', 'Aprovada', 'Publicada', 'Arquivada'];
 
@@ -136,6 +138,19 @@ export default function ActasPage() {
     return matchSearch && matchStatus && matchReuniao;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('numero');
+  const mobileComparators = useMemo(
+    () => ({
+      numero: (a: Acta, b: Acta) => a.numero.localeCompare(b.numero, 'pt', { sensitivity: 'base' }),
+      titulo: (a: Acta, b: Acta) => a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+      data: (a: Acta, b: Acta) => a.data.localeCompare(b.data),
+      reuniao: (a: Acta, b: Acta) =>
+        getReuniaoTitulo(a.reuniaoId).localeCompare(getReuniaoTitulo(b.reuniaoId), 'pt', { sensitivity: 'base' }),
+    }),
+    [reunioes],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -279,7 +294,7 @@ export default function ActasPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -308,6 +323,53 @@ export default function ActasPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={a => a.id}
+          sortBar={{
+            options: [
+              { key: 'numero', label: 'Número' },
+              { key: 'titulo', label: 'Título' },
+              { key: 'reuniao', label: 'Reunião' },
+              { key: 'data', label: 'Data' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={a => ({
+            title: a.titulo,
+            trailing: <StatusBadge status={a.status} />,
+          })}
+          renderDetails={a => [
+            { label: 'Número', value: <span className="font-mono text-xs">{a.numero}</span> },
+            { label: 'Reunião', value: getReuniaoTitulo(a.reuniaoId) },
+            { label: 'Data', value: formatDate(a.data) },
+            { label: 'Status', value: <StatusBadge status={a.status} /> },
+          ]}
+          renderActions={a => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => { setViewItem(a); setViewOpen(true); }} aria-label="Ver">
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(a)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(a)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma acta encontrada.</p>}

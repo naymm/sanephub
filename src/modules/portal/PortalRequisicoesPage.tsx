@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -36,6 +36,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Paperclip, Trash2 } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const STATUS_OPTIONS: { value: StatusRequisicao | 'todos'; label: string }[] = [
   { value: 'todos', label: 'Todos' },
@@ -87,6 +89,18 @@ export default function PortalRequisicoesPage() {
     return matchStatus;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('num');
+  const mobileComparators = useMemo(
+    () => ({
+      num: (a: Requisicao, b: Requisicao) => a.num.localeCompare(b.num, 'pt', { sensitivity: 'base' }),
+      fornecedor: (a: Requisicao, b: Requisicao) => a.fornecedor.localeCompare(b.fornecedor, 'pt', { sensitivity: 'base' }),
+      data: (a: Requisicao, b: Requisicao) => a.data.localeCompare(b.data),
+      valor: (a: Requisicao, b: Requisicao) => a.valor - b.valor,
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const resolvePublicUrlFromAny = async (value?: string | null): Promise<string | null> => {
     if (!value) return null;
@@ -235,7 +249,7 @@ export default function PortalRequisicoesPage() {
         </SelectContent>
       </Select>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -314,6 +328,87 @@ export default function PortalRequisicoesPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={r => r.id}
+          sortBar={{
+            options: [
+              { key: 'num', label: 'Nº' },
+              { key: 'fornecedor', label: 'Fornecedor' },
+              { key: 'valor', label: 'Valor' },
+              { key: 'data', label: 'Data' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={r => ({
+            title: r.num,
+            trailing: <StatusBadge status={r.status} />,
+          })}
+          renderDetails={r => [
+            { label: 'Fornecedor', value: r.fornecedor },
+            { label: 'Descrição', value: r.descricao },
+            { label: 'Valor', value: formatKz(r.valor) },
+            { label: 'Data', value: formatDate(r.data) },
+            { label: 'Status', value: <StatusBadge status={r.status} /> },
+          ]}
+          renderActions={r => (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="min-h-11">
+                  Ações
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => { setViewReq(r); setViewOpen(true); }}>
+                  Ver
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={(r.proformaAnexos?.length ?? 0) === 0}
+                  onSelect={() => {
+                    const url = getFirstUrlValue(r.proformaAnexos);
+                    if (!url) return;
+                    openPdfPreview(url);
+                  }}
+                >
+                  Proforma
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={(r.comprovativoAnexos?.length ?? 0) === 0}
+                  onSelect={() => {
+                    const url = getFirstUrlValue(r.comprovativoAnexos);
+                    if (!url) return;
+                    openPdfPreview(url);
+                  }}
+                >
+                  Comprovativo
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={(r.facturaFinalAnexos?.length ?? 0) === 0}
+                  onSelect={() => {
+                    const url = getLastUrlValue(r.facturaFinalAnexos);
+                    if (!url) return;
+                    openPdfPreview(url);
+                  }}
+                >
+                  Factura Final
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!podeAnexarFacturaFinal(r)}
+                  onSelect={() => {
+                    setViewReq(r);
+                    setViewOpen(true);
+                  }}
+                >
+                  Anexar Factura Final
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma requisição encontrada.</p>}

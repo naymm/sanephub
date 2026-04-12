@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -17,6 +17,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 export default function DepartamentosPage() {
   const { user: currentUser } = useAuth();
@@ -30,6 +32,13 @@ export default function DepartamentosPage() {
     d.nome.toLowerCase().includes(search.toLowerCase())
   );
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('nome');
+  const mobileComparators = useMemo(
+    () => ({ nome: (a: Departamento, b: Departamento) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }) }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -96,7 +105,7 @@ export default function DepartamentosPage() {
         />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -120,6 +129,37 @@ export default function DepartamentosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={d => d.id}
+          sortBar={{
+            options: [{ key: 'nome', label: 'Nome' }],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={d => ({ title: d.nome })}
+          renderDetails={d => [{ label: 'Nome', value: d.nome }]}
+          renderActions={d => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(d)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(d)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (

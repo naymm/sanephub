@@ -12,6 +12,7 @@ import {
 } from '@/lib/biometricoRegistro';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import { ResponsiveDataView } from '@/components/shared/ResponsiveDataView';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -207,167 +208,233 @@ export default function TimePunchesPage() {
     return r.faceConfidence != null ? `${base} (${r.faceConfidence})` : base;
   };
 
+  const rowKey = (p: NormalizedBiometricoRegistro) =>
+    typeof p.id === 'string' && String(p.id).startsWith('dia:') ? p.id : String(p.id);
+
+  const buildRowDisplay = (p: NormalizedBiometricoRegistro) => {
+    const colab = colaboradorPorNumeroMec(p.numeroMec, colabByNumeroMec);
+    const nomeEmp = nomeEmpresa(p, colab);
+    const empCol = p.empresaColunaTexto?.trim() ?? '';
+    const textoLocal = empCol || (nomeEmp !== '—' ? nomeEmp : '');
+    const temMapa = p.locationLat != null && p.locationLng != null;
+    const mapaLink = temMapa ? (
+      <a
+        href={`https://www.openstreetmap.org/?mlat=${p.locationLat}&mlon=${p.locationLng}#map=16/${p.locationLat}/${p.locationLng}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-h-11 md:min-h-0 items-center gap-1 text-primary hover:underline shrink-0 py-1"
+      >
+        <MapPin className="h-3.5 w-3.5" />
+        Mapa
+      </a>
+    ) : null;
+    const localCell =
+      textoLocal && mapaLink ? (
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="truncate min-w-0">{textoLocal}</span>
+          {mapaLink}
+        </span>
+      ) : textoLocal ? (
+        textoLocal
+      ) : mapaLink ? (
+        mapaLink
+      ) : (
+        '—'
+      );
+    return { colab, nomeEmp, localCell, nome: nomeColaborador(p) };
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
+    <div className="space-y-6 w-full min-w-0 max-w-full">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
           <h1 className="page-header">Marcações de ponto</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Últimos {FETCH_LIMIT} registos em <code className="text-xs">biometrico_registros</code>, agrupados por dia e{' '}
-            <code className="text-xs">numero_mec</code> (uma linha por colaborador e dia). Colunas: Data,             Colaborador, Empresa,
-            Entrada, Saída, Local (coluna <code className="text-xs">empresa</code> no registo, ou o mesmo nome que «Empresa» se vier vazio), Via. Entrada/saída podem vir de colunas dedicadas ou do timestamp + tipo de marcação.
+            Últimos {FETCH_LIMIT} registos em <code className="text-xs break-all">biometrico_registros</code>, agrupados por dia e{' '}
+            <code className="text-xs break-all">numero_mec</code> (uma linha por colaborador e dia). Colunas: Data,             Colaborador, Empresa,
+            Entrada, Saída, Local (coluna <code className="text-xs break-all">empresa</code> no registo, ou o mesmo nome que «Empresa» se vier vazio), Via. Entrada/saída podem vir de colunas dedicadas ou do timestamp + tipo de marcação.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void fetchRegistos()} disabled={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="min-h-11 w-full shrink-0 md:min-h-9 md:w-auto"
+          onClick={() => void fetchRegistos()}
+          disabled={loading}
+        >
           <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
           Actualizar
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="relative max-w-xs flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end">
+        <div className="relative w-full md:max-w-xs md:flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Pesquisar colaborador, empresa, data, horas, local, via…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-9 h-9"
+            className="pl-9 min-h-11 md:min-h-9"
           />
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Tipo</Label>
-          <Select value={kindFilter} onValueChange={setKindFilter}>
-            <SelectTrigger className="w-[180px] h-9">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              {kinds.map(k => (
-                <SelectItem key={k} value={k}>
-                  {k}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Estado</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              {statuses.map(s => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Desde</Label>
-          <Input type="date" className="h-9 w-[150px]" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Até</Label>
-          <Input type="date" className="h-9 w-[150px]" value={dataFim} onChange={e => setDataFim(e.target.value)} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:flex md:flex-wrap md:items-end md:gap-3">
+          <div className="space-y-1 w-full md:w-auto">
+            <Label className="text-xs text-muted-foreground">Tipo</Label>
+            <Select value={kindFilter} onValueChange={setKindFilter}>
+              <SelectTrigger className="w-full md:w-[180px] min-h-11 md:min-h-9">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                {kinds.map(k => (
+                  <SelectItem key={k} value={k}>
+                    {k}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 w-full md:w-auto">
+            <Label className="text-xs text-muted-foreground">Estado</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-[160px] min-h-11 md:min-h-9">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                {statuses.map(s => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 w-full sm:col-span-2 md:w-auto">
+            <Label className="text-xs text-muted-foreground">Desde</Label>
+            <Input type="date" className="min-h-11 md:min-h-9 w-full md:w-[150px]" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
+          </div>
+          <div className="space-y-1 w-full sm:col-span-2 md:w-auto">
+            <Label className="text-xs text-muted-foreground">Até</Label>
+            <Input type="date" className="min-h-11 md:min-h-9 w-full md:w-[150px]" value={dataFim} onChange={e => setDataFim(e.target.value)} />
+          </div>
         </div>
       </div>
 
-      <div className="table-container overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/80">
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Data
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Colaborador
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Empresa
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                Entrada
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                Saída
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Local
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Via
-              </th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Acções
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+      <ResponsiveDataView
+        tableView={
+          <div className="rounded-md border border-border/80 overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
+              <thead>
+                <tr className="border-b border-border/80">
+                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Data
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Colaborador
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Empresa
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Entrada
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Saída
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Local
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Via
+                  </th>
+                  <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Acções
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagination.slice.map(p => {
+                  const { nomeEmp, localCell, nome } = buildRowDisplay(p);
+                  return (
+                    <tr key={rowKey(p)} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4 whitespace-nowrap tabular-nums text-muted-foreground">{p.dataTexto}</td>
+                      <td className="py-3 px-4 font-medium">{nome}</td>
+                      <td className="py-3 px-4 text-muted-foreground max-w-[160px] truncate" title={nomeEmp}>
+                        {nomeEmp}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap tabular-nums font-mono text-xs">{p.entradaTexto}</td>
+                      <td className="py-3 px-4 whitespace-nowrap tabular-nums font-mono text-xs">{p.saidaTexto}</td>
+                      <td className="py-3 px-4 text-muted-foreground max-w-[200px]">
+                        <div className="truncate" title={typeof localCell === 'string' ? localCell : undefined}>
+                          {localCell}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground max-w-[180px] truncate" title={p.viaTexto}>
+                        {p.viaTexto}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Detalhe" onClick={() => openView(p)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        }
+        cardView={
+          <ul className="flex flex-col gap-3 list-none p-0 m-0">
             {pagination.slice.map(p => {
-              const colab = colaboradorPorNumeroMec(p.numeroMec, colabByNumeroMec);
-              const nomeEmp = nomeEmpresa(p, colab);
-              const empCol = p.empresaColunaTexto?.trim() ?? '';
-              const textoLocal = empCol || (nomeEmp !== '—' ? nomeEmp : '');
-              const temMapa = p.locationLat != null && p.locationLng != null;
-              const mapaLink = temMapa ? (
-                <a
-                  href={`https://www.openstreetmap.org/?mlat=${p.locationLat}&mlon=${p.locationLng}#map=16/${p.locationLat}/${p.locationLng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline shrink-0"
-                >
-                  <MapPin className="h-3.5 w-3.5" />
-                  Mapa
-                </a>
-              ) : null;
-              const localCell =
-                textoLocal && mapaLink ? (
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="truncate min-w-0">{textoLocal}</span>
-                    {mapaLink}
-                  </span>
-                ) : textoLocal ? (
-                  textoLocal
-                ) : mapaLink ? (
-                  mapaLink
-                ) : (
-                  '—'
-                );
+              const { nomeEmp, localCell, nome } = buildRowDisplay(p);
               return (
-                <tr
-                  key={typeof p.id === 'string' && String(p.id).startsWith('dia:') ? p.id : String(p.id)}
-                  className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
+                <li
+                  key={rowKey(p)}
+                  className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3"
                 >
-                  <td className="py-3 px-4 whitespace-nowrap tabular-nums text-muted-foreground">{p.dataTexto}</td>
-                  <td className="py-3 px-4 font-medium">{nomeColaborador(p)}</td>
-                  <td className="py-3 px-4 text-muted-foreground max-w-[160px] truncate" title={nomeEmp}>
-                    {nomeEmp}
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap tabular-nums font-mono text-xs">{p.entradaTexto}</td>
-                  <td className="py-3 px-4 whitespace-nowrap tabular-nums font-mono text-xs">{p.saidaTexto}</td>
-                  <td className="py-3 px-4 text-muted-foreground max-w-[200px]">
-                    <div className="truncate" title={typeof localCell === 'string' ? localCell : undefined}>
-                      {localCell}
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="font-medium leading-snug break-words">{nome}</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">{p.dataTexto}</p>
                     </div>
-                  </td>
-                  <td className="py-3 px-4 text-muted-foreground max-w-[180px] truncate" title={p.viaTexto}>
-                    {p.viaTexto}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Detalhe" onClick={() => openView(p)}>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="min-h-11 min-w-11 shrink-0"
+                      title="Detalhe"
+                      onClick={() => openView(p)}
+                    >
                       <Eye className="h-4 w-4" />
                     </Button>
-                  </td>
-                </tr>
+                  </div>
+                  <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Empresa</dt>
+                      <dd className="break-words">{nomeEmp}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Entrada / Saída</dt>
+                      <dd className="font-mono text-xs tabular-nums">
+                        {p.entradaTexto} · {p.saidaTexto}
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs text-muted-foreground">Local</dt>
+                      <dd className="break-words text-muted-foreground">{localCell}</dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs text-muted-foreground">Via</dt>
+                      <dd className="break-words text-muted-foreground">{p.viaTexto}</dd>
+                    </div>
+                  </dl>
+                </li>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+        }
+      />
 
       {filtered.length === 0 && !loading && (
         <p className="text-center py-8 text-muted-foreground text-sm">

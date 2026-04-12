@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
@@ -25,6 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_OPTIONS: Correspondencia['tipo'][] = ['Entrada', 'Saída'];
 const PRIORIDADE_OPTIONS: Correspondencia['prioridade'][] = ['Normal', 'Urgente', 'Confidencial'];
@@ -63,6 +65,16 @@ export default function CorrespondenciasPage() {
     return matchSearch && matchTipo && matchPrioridade && matchEstado;
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('data');
+  const mobileComparators = useMemo(
+    () => ({
+      data: (a: Correspondencia, b: Correspondencia) => a.data.localeCompare(b.data),
+      assunto: (a: Correspondencia, b: Correspondencia) => a.assunto.localeCompare(b.assunto, 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -158,7 +170,7 @@ export default function CorrespondenciasPage() {
         </Select>
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -193,6 +205,62 @@ export default function CorrespondenciasPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={c => c.id}
+          sortBar={{
+            options: [
+              { key: 'data', label: 'Data' },
+              { key: 'assunto', label: 'Assunto' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={c => ({ title: c.assunto, trailing: <span className="text-xs font-mono text-muted-foreground">{c.referencia}</span> })}
+          renderDetails={c => [
+            { label: 'Ref.', value: c.referencia },
+            { label: 'Tipo', value: c.tipo },
+            { label: 'Remetente', value: c.remetente },
+            { label: 'Destinatário', value: c.destinatario },
+            { label: 'Assunto', value: c.assunto },
+            { label: 'Data', value: formatDate(c.data) },
+            { label: 'Prioridade', value: c.prioridade },
+            { label: 'Estado', value: <StatusBadge status={c.estadoResposta} /> },
+          ]}
+          renderActions={c => (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={() => {
+                  setViewItem(c);
+                  setViewOpen(true);
+                }}
+                aria-label="Ver"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(c)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(c)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma correspondência encontrada.</p>}

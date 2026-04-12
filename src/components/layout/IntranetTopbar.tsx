@@ -4,7 +4,7 @@ import { PORTAL_PATH_ICONS } from '@/navigation/portalMenuIcons';
 import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell,
   Cake,
@@ -45,6 +45,9 @@ import type { NotificationAudienceOptions } from '@/context/NotificationContext'
 import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { useMemo, useState } from 'react';
+
+const iconBtnClass =
+  'flex min-h-11 min-w-11 md:min-h-9 md:min-w-9 items-center justify-center rounded-xl transition-colors shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/80 max-md:text-white/90 max-md:hover:bg-white/12 max-md:hover:text-white';
 
 export function IntranetTopbar() {
   const { user, logout } = useAuth();
@@ -176,13 +179,10 @@ export function IntranetTopbar() {
   }, [principalModules, selectedPrincipalModuleId]);
 
   return (
-    <header
-      className="sticky top-0 z-30 w-full border-b border-border/80 backdrop-blur-sm"
-      style={{ backgroundColor: '#1C1C1C' }}
-    >
-      <div className="mx-auto flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-        {/* Left: Logo + company */}
-        <div className="flex items-center gap-3 min-w-0">
+    <header className="sticky top-0 z-30 w-full border-b border-border/80 bg-[#1C1C1C] backdrop-blur-sm max-md:border-border/40 max-md:bg-gradient-to-br max-md:from-[hsl(var(--navy))] max-md:to-[hsl(var(--navy-lighter))]">
+      <div className="mx-auto flex h-16 items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 lg:px-8 min-w-0 max-w-full">
+        {/* Left: apps + logo (menu completo na barra inferior «Mais» em mobile) */}
+        <div className="flex items-center gap-1 sm:gap-3 min-w-0 flex-1 md:flex-initial">
           {/* Apps launcher icon */}
           <Popover
             open={appsOpen}
@@ -193,7 +193,7 @@ export function IntranetTopbar() {
           >
             <PopoverTrigger asChild>
               <button
-                className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-muted/80 transition-colors text-muted-foreground hover:text-foreground"
+                className={iconBtnClass}
                 aria-label="Abrir módulos"
                 title="Módulos"
                 onClick={() => setSelectedPrincipalModuleId(null)}
@@ -203,7 +203,7 @@ export function IntranetTopbar() {
             </PopoverTrigger>
             <PopoverContent
               align="start"
-              className="w-[440px] p-4 bg-[#1C1C1C] text-white border border-border/80"
+              className="w-[min(100vw-1.5rem,440px)] max-w-[calc(100vw-1.5rem)] p-4 bg-[#1C1C1C] text-white border border-border/80"
             >
               {selectedPrincipalModuleId == null ? (
                 <>
@@ -284,14 +284,14 @@ export function IntranetTopbar() {
               setSelectedPrincipalModuleId(null);
               navigate('/dashboard');
             }}
-            className="flex h-12 w-36 items-center justify-center rounded-xl bg-transparent shrink-0 overflow-hidden transition-colors"
+            className="flex h-11 min-h-11 md:h-12 w-[7.5rem] sm:w-36 items-center justify-center rounded-xl bg-transparent shrink-0 min-w-0 overflow-hidden transition-colors"
             aria-label="Ir para Dashboard"
             title="Dashboard"
           >
             <img
               src="/logo-white.png"
               alt="GRUPO SANEP"
-              className="h-[40px] w-[160px] object-contain"
+              className="h-8 sm:h-[40px] w-full max-w-[140px] sm:max-w-[160px] object-contain object-left"
             />
           </button>
         </div>
@@ -308,12 +308,12 @@ export function IntranetTopbar() {
         </div>
 
         {/* Right: Notifications + Settings + Avatar */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Notifications */}
           <Popover>
             <PopoverTrigger asChild>
               <button
-                className="relative flex h-9 w-9 items-center justify-center rounded-xl hover:bg-muted/80 transition-colors text-muted-foreground hover:text-foreground"
+                className={`${iconBtnClass} relative`}
                 aria-label="Notificações"
               >
                 <Bell className="h-4 w-4" />
@@ -381,7 +381,7 @@ export function IntranetTopbar() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-muted/80 transition-colors text-muted-foreground hover:text-foreground"
+                  className={iconBtnClass}
                   aria-label="Opções"
                   title="Opções"
                 >
@@ -426,14 +426,22 @@ export function IntranetTopbar() {
             </DropdownMenu>
           )}
 
-          {/* User dropdown */}
+          {/* Mobile: ecrã Conta; desktop: menu dropdown */}
+          <Link
+            to="/perfil"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-xl px-1.5 py-1.5 transition-colors hover:bg-white/12 md:hidden"
+            aria-label="Abrir conta e perfil"
+          >
+            <Avatar className="h-9 w-9 ring-1 ring-white/25">
+              <AvatarFallback className="bg-white/15 text-xs font-medium text-white">{user.avatar}</AvatarFallback>
+            </Avatar>
+          </Link>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-muted/80 transition-colors">
+              <button className="hidden min-h-9 min-w-min items-center justify-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted/80 md:flex">
                 <Avatar className="h-9 w-9 ring-1 ring-border/50">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                    {user.avatar}
-                  </AvatarFallback>
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">{user.avatar}</AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>

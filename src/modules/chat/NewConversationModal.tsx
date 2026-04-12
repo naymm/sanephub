@@ -74,7 +74,7 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[min(90dvh,calc(100dvh-2rem))] w-[calc(100vw-1rem)] max-w-md overflow-y-auto sm:w-full">
         <DialogHeader>
           <DialogTitle>Nova conversa</DialogTitle>
           <DialogDescription>
@@ -116,7 +116,7 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
                   key={u.id}
                   type="button"
                   onClick={() => setSelectedUserId(u.id)}
-                  className={`w-full flex items-center gap-3 rounded-md p-2 text-left transition-colors ${
+                  className={`flex min-h-11 w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors md:min-h-0 ${
                     selectedUserId === u.id ? 'bg-primary/15 text-primary' : 'hover:bg-muted'
                   }`}
                 >
@@ -160,7 +160,7 @@ export function NewConversationModal({ open, onOpenChange, onCreated }: NewConve
                 filteredOthers.map(u => (
                   <label
                     key={u.id}
-                    className="flex items-center gap-3 rounded-md p-2 hover:bg-muted cursor-pointer"
+                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted md:min-h-0"
                   >
                     <input
                       type="checkbox"

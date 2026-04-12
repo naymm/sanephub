@@ -28,12 +28,12 @@ export function ConversationList({ selectedId, onSelect, onNewConversation }: Co
   );
 
   return (
-    <div className="flex flex-col h-full border-r border-border bg-muted/20">
-      <div className="p-3 border-b border-border shrink-0">
+    <div className="flex h-full flex-col border-border bg-muted/20 md:border-r">
+      <div className="shrink-0 border-b border-border p-3">
         <button
           type="button"
           onClick={onNewConversation}
-          className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <MessageCircle className="h-4 w-4" />
           Nova conversa

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 export default function BancosPage() {
   const { user } = useAuth();
@@ -35,6 +37,16 @@ export default function BancosPage() {
       (b.codigo ?? '').toLowerCase().includes(search.toLowerCase()),
   );
   const pagination = useClientSidePagination({ items: filtered, pageSize: 20 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('nome');
+  const mobileComparators = useMemo(
+    () => ({
+      nome: (a: Banco, b: Banco) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }),
+      codigo: (a: Banco, b: Banco) => (a.codigo ?? '').localeCompare(b.codigo ?? '', 'pt', { sensitivity: 'base' }),
+    }),
+    [],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -105,7 +117,7 @@ export default function BancosPage() {
         <Input placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -133,6 +145,54 @@ export default function BancosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={b => b.id}
+          sortBar={{
+            options: [
+              { key: 'nome', label: 'Nome' },
+              { key: 'codigo', label: 'Código' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={b => ({
+            title: b.nome,
+            trailing: b.activo ? (
+              <span className="text-xs font-medium text-green-600">Activo</span>
+            ) : (
+              <span className="text-xs text-muted-foreground">Inactivo</span>
+            ),
+          })}
+          renderDetails={b => [
+            { label: 'Nome', value: b.nome },
+            { label: 'Código', value: b.codigo ?? '—' },
+            {
+              label: 'Estado',
+              value: b.activo ? <span className="text-green-600">Activo</span> : <span className="text-muted-foreground">Inactivo</span>,
+            },
+          ]}
+          renderActions={b => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(b)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(b)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhum banco encontrado.</p>}
       <DataTablePagination {...pagination.paginationProps} />

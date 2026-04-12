@@ -26,7 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_OPTIONS: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Médico', 'Licença', 'Por atrasos'];
 /** «Por atrasos» é criada pelo sistema; não entra no select de registo manual. */
@@ -144,6 +146,17 @@ export default function FaltasPage() {
   });
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('colab');
+  const mobileComparators = useMemo(
+    () => ({
+      colab: (a: Falta, b: Falta) =>
+        getColabName(a.colaboradorId).localeCompare(getColabName(b.colaboradorId), 'pt', { sensitivity: 'base' }),
+      data: (a: Falta, b: Falta) => a.data.localeCompare(b.data),
+    }),
+    [colaboradores],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+
   const viewAtrasoTotalSeg =
     viewItem?.tipo === 'Por atrasos' && viewItem.referenciaMesAtrasos
       ? totaisAtrasoMes.get(
@@ -230,7 +243,7 @@ export default function FaltasPage() {
         <Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="w-[140px] h-9" placeholder="Até" />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -265,6 +278,53 @@ export default function FaltasPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={f => f.id}
+          sortBar={{
+            options: [
+              { key: 'colab', label: 'Colaborador' },
+              { key: 'data', label: 'Data' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={f => ({
+            title: getColabName(f.colaboradorId),
+            trailing: <span className="max-w-[40%] truncate text-xs text-muted-foreground">{f.tipo}</span>,
+          })}
+          renderDetails={f => [
+            { label: 'Data', value: formatDate(f.data) },
+            { label: 'Tipo', value: f.tipo },
+            { label: 'Atraso', value: textoAtrasoFaltaCelula(f, totaisAtrasoMes) },
+            { label: 'Motivo', value: f.motivo?.trim() ? f.motivo : '—' },
+            { label: 'Registado por', value: f.registadoPor },
+          ]}
+          renderActions={f => (
+            <>
+              <Button type="button" className="min-h-11 flex-1 gap-2" onClick={() => { setViewItem(f); setViewOpen(true); }}>
+                <Eye className="h-4 w-4 shrink-0" />
+                Ver
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(f)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => remove(f)}
+                aria-label="Remover"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma falta encontrada.</p>}

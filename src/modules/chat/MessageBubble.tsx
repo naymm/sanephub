@@ -38,7 +38,7 @@ export function MessageBubble({ message, senderName, onPin }: MessageBubbleProps
     <div className={cn('flex gap-2', isOwn && 'flex-row-reverse')}>
       <div
         className={cn(
-          'max-w-[75%] rounded-2xl px-4 py-2 shadow-sm',
+          'max-w-[85%] rounded-2xl px-4 py-2 shadow-sm md:max-w-[75%]',
           isOwn
             ? 'bg-primary text-primary-foreground rounded-br-md'
             : 'bg-muted rounded-bl-md'
@@ -75,8 +75,12 @@ export function MessageBubble({ message, senderName, onPin }: MessageBubbleProps
       <button
         type="button"
         onClick={() => onPin(message.id)}
-        className="shrink-0 self-center p-1 rounded opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+        className={cn(
+          'shrink-0 self-center rounded-md text-muted-foreground transition-opacity hover:text-foreground',
+          'min-h-10 min-w-10 flex items-center justify-center opacity-70 active:opacity-100 md:min-h-0 md:min-w-0 md:p-1 md:opacity-0 md:hover:opacity-100 md:focus:opacity-100',
+        )}
         title={message.pinned ? 'Desfixar' : 'Fixar mensagem'}
+        aria-label={message.pinned ? 'Desfixar mensagem' : 'Fixar mensagem'}
       >
         <Pin className={cn('h-4 w-4', message.pinned && 'fill-current')} />
       </button>

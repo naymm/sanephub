@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
@@ -28,6 +28,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Eye, ShieldAlert } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const PROBABILIDADE: RiscoJuridico['probabilidade'][] = ['Baixa', 'Média', 'Alta'];
 const IMPACTO: RiscoJuridico['impacto'][] = ['Baixo', 'Médio', 'Alto'];
@@ -62,6 +64,20 @@ export default function RiscosJuridicosPage() {
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
   const empresaNome = (id: number | undefined) => (id != null ? empresas.find(e => e.id === id)?.nome ?? String(id) : '—');
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('codigo');
+  const mobileComparators = useMemo(
+    () => ({
+      codigo: (a: RiscoJuridico, b: RiscoJuridico) => a.codigo.localeCompare(b.codigo, 'pt', { sensitivity: 'base' }),
+      titulo: (a: RiscoJuridico, b: RiscoJuridico) => a.titulo.localeCompare(b.titulo, 'pt', { sensitivity: 'base' }),
+      categoria: (a: RiscoJuridico, b: RiscoJuridico) => a.categoria.localeCompare(b.categoria, 'pt', { sensitivity: 'base' }),
+      dataIdentificacao: (a: RiscoJuridico, b: RiscoJuridico) => (a.dataIdentificacao ?? '').localeCompare(b.dataIdentificacao ?? ''),
+      empresa: (a: RiscoJuridico, b: RiscoJuridico) =>
+        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
+    }),
+    [empresas],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -172,7 +188,7 @@ export default function RiscosJuridicosPage() {
         )}
       </div>
 
-      <div className="table-container overflow-x-auto rounded-lg border border-border/80">
+      <div className="hidden md:block table-container overflow-x-auto rounded-lg border border-border/80">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
@@ -217,6 +233,63 @@ export default function RiscosJuridicosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={r => r.id}
+          sortBar={{
+            options: [
+              ...(currentEmpresaId === 'consolidado' ? [{ key: 'empresa', label: 'Empresa' } as const] : []),
+              { key: 'codigo', label: 'Código' },
+              { key: 'titulo', label: 'Título' },
+              { key: 'categoria', label: 'Categoria' },
+              { key: 'dataIdentificacao', label: 'Data ident.' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={r => ({
+            title: r.titulo,
+            trailing: <StatusBadge status={r.status} />,
+          })}
+          renderDetails={r => [
+            ...(currentEmpresaId === 'consolidado' ? [{ label: 'Empresa', value: empresaNome(r.empresaId) }] : []),
+            { label: 'Código', value: <span className="font-mono text-xs">{r.codigo}</span> },
+            { label: 'Categoria', value: r.categoria },
+            { label: 'Probabilidade', value: r.probabilidade },
+            { label: 'Impacto', value: r.impacto },
+            { label: 'Nível', value: <StatusBadge status={r.nivelRisco} /> },
+            { label: 'Responsável', value: r.responsavel },
+            { label: 'Data ident.', value: r.dataIdentificacao ? formatDate(r.dataIdentificacao) : '—' },
+            { label: 'Status', value: <StatusBadge status={r.status} /> },
+          ]}
+          renderActions={r => (
+            <>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openDetail(r)} aria-label="Ver">
+                <Eye className="h-4 w-4" />
+              </Button>
+              {canEdit && (
+                <>
+                  <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(r)} aria-label="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => remove(r)}
+                    aria-label="Remover"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (

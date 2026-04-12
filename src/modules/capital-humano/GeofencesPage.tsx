@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, Pencil, Trash2, MapPin, ExternalLink } from 'lucide-react';
+import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const emptyForm: Omit<Geofence, 'id' | 'createdAt' | 'updatedAt'> = {
   empresaId: 1,
@@ -60,6 +62,17 @@ export default function GeofencesPage() {
   }, [geofences, search, empresas]);
 
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
+
+  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('nome');
+  const empresaNome = useCallback((g: Geofence) => empresas.find(e => e.id === g.empresaId)?.nome ?? `Empresa #${g.empresaId}`, [empresas]);
+  const mobileComparators = useMemo(
+    () => ({
+      nome: (a: Geofence, b: Geofence) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }),
+      empresa: (a: Geofence, b: Geofence) => empresaNome(a).localeCompare(empresaNome(b), 'pt', { sensitivity: 'base' }),
+    }),
+    [empresaNome],
+  );
+  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
 
   const openCreate = () => {
     setEditing(null);
@@ -150,7 +163,7 @@ export default function GeofencesPage() {
         />
       </div>
 
-      <div className="table-container overflow-x-auto">
+      <div className="hidden md:block table-container overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/80">
@@ -205,6 +218,56 @@ export default function GeofencesPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden">
+        <MobileExpandableList
+          items={sortedMobileRows}
+          rowId={g => g.id}
+          sortBar={{
+            options: [
+              { key: 'nome', label: 'Zona' },
+              { key: 'empresa', label: 'Empresa' },
+            ],
+            state: mobileSort,
+            onToggle: toggleMobileSort,
+          }}
+          renderSummary={g => ({
+            title: g.nome,
+            trailing: <span className="text-xs text-muted-foreground">{g.activo ? 'Activa' : 'Inactiva'}</span>,
+          })}
+          renderDetails={g => [
+            { label: 'Empresa', value: empresaNome(g) },
+            { label: 'Centro (lat, lng)', value: `${g.centerLat.toFixed(5)}, ${g.centerLng.toFixed(5)}` },
+            { label: 'Raio (m)', value: String(Math.round(g.radiusMeters)) },
+            { label: 'Activa', value: g.activo ? 'Sim' : 'Não' },
+          ]}
+          renderActions={g => (
+            <>
+              <Button type="button" variant="outline" className="min-h-11 flex-1 gap-2" asChild>
+                <a href={mapPreviewUrl(g.centerLat, g.centerLng)} target="_blank" rel="noopener noreferrer">
+                  <MapPin className="h-4 w-4 shrink-0" />
+                  Mapa
+                </a>
+              </Button>
+              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(g)} aria-label="Editar">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              {canEliminar && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => remove(g)}
+                  aria-label="Remover"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {filtered.length === 0 && (
