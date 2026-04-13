@@ -9,7 +9,7 @@ interface TenantContextType {
   /** Empresa em contexto: número = uma empresa; 'consolidado' = visão Grupo. */
   currentEmpresaId: TenantValue;
   setCurrentEmpresaId: (id: TenantValue) => void;
-  /** true se o utilizador é Admin/PCA (nível Grupo) e pode alternar entre empresas e consolidado. */
+  /** true se pode alternar entre visão consolidada (Grupo) e cada empresa: sempre Admin; PCA só sem `empresaId` fixo na conta. */
   isGroupLevel: boolean;
 }
 
@@ -24,11 +24,24 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     return Number.isFinite(n) ? n : 'consolidado';
   });
 
-  const isGroupLevel = !!(user && (user.perfil === 'Admin' || user.perfil === 'PCA') && (user.empresaId == null));
+  const isGroupLevel = !!(
+    user &&
+    (user.perfil === 'Admin' || (user.perfil === 'PCA' && user.empresaId == null))
+  );
 
   useEffect(() => {
     if (!user) {
       setCurrentEmpresaIdState('consolidado');
+      return;
+    }
+    /** Admin: contexto vem do `localStorage` (select Grupo / empresa), nunca preso a `user.empresaId`. */
+    if (user.perfil === 'Admin') {
+      const saved = localStorage.getItem(STORAGE_TENANT);
+      if (saved === 'consolidado') setCurrentEmpresaIdState('consolidado');
+      else {
+        const n = parseInt(saved ?? '', 10);
+        setCurrentEmpresaIdState(Number.isFinite(n) ? n : 'consolidado');
+      }
       return;
     }
     if (user.empresaId != null) {
@@ -41,7 +54,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const n = parseInt(saved ?? '', 10);
       setCurrentEmpresaIdState(Number.isFinite(n) ? n : 'consolidado');
     }
-  }, [user?.id, user?.empresaId]);
+  }, [user?.id, user?.empresaId, user?.perfil]);
 
   const setCurrentEmpresaId = (id: TenantValue) => {
     if (!isGroupLevel) return;

@@ -37,6 +37,8 @@ export function getModulosAtivosForContext(
 export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleId: string): boolean {
   /** Comunicação interna é transversal; o desligue global fica em `organizacaoSettings.modulosDesactivados`. */
   if (moduleId === 'comunicacao-interna') return true;
+  /** Configurações são Admin-only e não entram em `modulosAtivos` por empresa na BD. */
+  if (moduleId === 'configuracoes') return true;
   if (modulosAtivos == null) return true;
   if (modulosAtivos.includes(moduleId)) return true;
   if (moduleId === 'gestao-documentos' && modulosAtivos.includes('secretaria')) return true;

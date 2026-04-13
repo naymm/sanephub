@@ -6,10 +6,17 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { marcarPontoPeloErp } from '@/lib/marcarPontoErp';
-import { obterPosicaoDispositivoPrecisa, obterPosicaoDispositivoSimples } from '@/lib/geolocationDevice';
+import {
+  obterPosicaoDispositivoPrecisa,
+  obterPosicaoDispositivoSimples,
+  type PosicaoDispositivo,
+} from '@/lib/geolocationDevice';
 import { rpcPerfilTemPontoPin, rpcVerificarMeuPontoPin } from '@/lib/pontoPinRpc';
 import { geofencesParaMarcacaoPonto, validarMarcacaoComGeofences } from '@/lib/pontoGeofence';
 import { PontoPinOtpFields } from '@/components/ponto/PontoPinOtpFields';
+import { PontoMobileMarcacaoPanel } from '@/components/ponto/PontoMobileMarcacaoPanel';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
+import { PREVIEW_DIALOG_MOBILE } from '@/lib/documentPreviewMobileClasses';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   chaveSessionEntradaHoje,
@@ -35,6 +42,7 @@ type ProximaAccaoPonto = 'entrada' | 'saida' | 'completo';
  * Marcação de entrada/saída pelo ERP (intranet), no canto inferior direito.
  */
 export function PontoFloatingButton() {
+  const isMobile = useIsMobileViewport();
   const { user } = useAuth();
   const { colaboradoresTodos, empresas, geofences, colaboradorGeofenceLinks } = useData();
   const [open, setOpen] = useState(false);
@@ -202,11 +210,45 @@ export function PontoFloatingButton() {
     if (!open) setPinValue('');
   }, [open]);
 
+  const [marcacaoErroMobile, setMarcacaoErroMobile] = useState<{
+    title: string;
+    description: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open) setMarcacaoErroMobile(null);
+  }, [open]);
+
+  const erroMarcacao = useCallback(
+    (title: string, description?: string, durationMs?: number) => {
+      if (isMobile) {
+        setMarcacaoErroMobile({ title, description: description ?? '' });
+        return;
+      }
+      if (description !== undefined && description.length > 0) {
+        toast.error(title, { description, duration: durationMs ?? 14_000 });
+        return;
+      }
+      if (durationMs != null) {
+        toast.error(title, { duration: durationMs });
+        return;
+      }
+      toast.error(title);
+    },
+    [isMobile],
+  );
+
+  const handleMobilePinChange = useCallback((v: string) => {
+    setMarcacaoErroMobile(null);
+    setPinValue(v);
+  }, []);
+
   const confirmar = useCallback(async () => {
     if (!supabase || !user || !numeroMecRegisto || empresaIdRegisto == null) return;
+    if (isMobile) setMarcacaoErroMobile(null);
     const nomeEmp = empresaNome?.trim();
     if (!nomeEmp) {
-      toast.error('Não foi possível resolver o nome da empresa para o registo.');
+      erroMarcacao('Não foi possível resolver o nome da empresa para o registo.');
       return;
     }
 
@@ -217,23 +259,23 @@ export function PontoFloatingButton() {
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     const authUserId = authData.user?.id;
     if (authErr || !authUserId) {
-      toast.error('Sessão inválida. Inicie sessão novamente.');
+      erroMarcacao('Sessão inválida. Inicie sessão novamente.');
       return;
     }
 
     setLoading(true);
     try {
       if (temPontoPin !== true) {
-        toast.error('Configure um PIN de 4 dígitos em Os Meus Dados (portal) antes de marcar o ponto.');
+        erroMarcacao('Configure um PIN de 4 dígitos em Os Meus Dados (portal) antes de marcar o ponto.');
         return;
       }
       if (pinValue.length !== 4) {
-        toast.error('Introduza o PIN de 4 dígitos.');
+        erroMarcacao('Introduza o PIN de 4 dígitos.');
         return;
       }
       const pinOk = await rpcVerificarMeuPontoPin(supabase, pinValue);
       if (!pinOk) {
-        toast.error('PIN incorreto.');
+        erroMarcacao('PIN incorreto.');
         return;
       }
 
@@ -255,25 +297,19 @@ export function PontoFloatingButton() {
       });
       if (geo.ok === false) {
         if (geo.codigo === 'fora_da_zona') {
-          toast.error('Fora de zona permitida', {
-            description: geo.mensagem,
-            duration: 16_000,
-          });
+          erroMarcacao('Fora de zona permitida', geo.mensagem, 16_000);
         } else {
-          toast.error('Localização necessária', {
-            description: geo.mensagem,
-            duration: 14_000,
-          });
+          erroMarcacao('Localização necessária', geo.mensagem, 14_000);
         }
         return;
       }
 
       if (zonasValidacaoPonto.length > 0 && (!coords || geo.exigeZona !== true)) {
-        toast.error('Fora de zona permitida', {
-          description:
-            'Não foi possível confirmar que está dentro do raio de uma zona cadastrada. O ponto não foi registado.',
-          duration: 14_000,
-        });
+        erroMarcacao(
+          'Fora de zona permitida',
+          'Não foi possível confirmar que está dentro do raio de uma zona cadastrada. O ponto não foi registado.',
+          14_000,
+        );
         return;
       }
 
@@ -290,7 +326,7 @@ export function PontoFloatingButton() {
         tipoMarcacao,
       });
       if (error) {
-        toast.error(error);
+        erroMarcacao(error);
         return;
       }
       const { dateKey } = localDiaCivilBounds();
@@ -328,6 +364,8 @@ export function PontoFloatingButton() {
     colaboradorGeofenceLinks,
     temPontoPin,
     pinValue,
+    isMobile,
+    erroMarcacao,
   ]);
 
   if (!mostrarFab) return null;
@@ -375,114 +413,134 @@ export function PontoFloatingButton() {
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold tracking-tight">
-              {!podeMarcar
-                ? 'Marcação de ponto'
-                : proximaAccao === 'saida'
-                  ? 'Marcar saída'
-                  : 'Marcar entrada'}
-            </DialogTitle>
-            <DialogDescription>
-              {!podeMarcar
-                ? 'Complete os dados abaixo para poder registar entrada e saída.'
-                : proximaAccao === 'saida'
-                  ? 'Confirme o PIN e a localização para registar a saída.'
-                  : 'Confirme o PIN e a localização para registar a entrada.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 text-sm">
-            {!podeMarcar && (
-              <Alert>
-                <AlertTitle>Falta configuração</AlertTitle>
-                <AlertDescription className="space-y-3 pt-1">
-                  <p className="text-muted-foreground">Antes de marcar o ponto, é necessário:</p>
-                  <ul className="list-disc space-y-1 pl-4 text-foreground">
-                    {motivosNaoPodeMarcar.map((m, i) => (
-                      <li key={i}>{m}</li>
-                    ))}
-                  </ul>
-                  <Button type="button" variant="secondary" size="sm" asChild>
-                    <Link to="/portal/dados">Abrir Os Meus Dados</Link>
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-            {/* <p className="text-muted-foreground">
-              {proximaAccao === 'saida' ? (
-                <>
-                  Será criado um registo de <strong className="text-foreground">saída</strong> em{' '}
-                  <code className="text-xs">biometrico_registros</code> com o seu nº mecanográfico (
-                  <span className="font-mono text-xs">{numeroMecRegisto}</span>
-                  ), hora actual e origem ERP.
-                </>
-              ) : (
-                <>
-                  Será criado um registo em <code className="text-xs">biometrico_registros</code> com o seu nº
-                  mecanográfico (<span className="font-mono text-xs">{numeroMecRegisto}</span>
-                  ), hora actual e origem ERP.
-                </>
-              )}
-            </p> */}
-            {podeMarcar &&
-              (temPontoPin === null ? (
-                <p className="text-muted-foreground">A verificar configuração do PIN…</p>
-              ) : temPontoPin === false ? (
-                <Alert variant="destructive">
-                  <AlertTitle>PIN não configurado</AlertTitle>
-                  <AlertDescription className="space-y-3">
-                    <p>Defina um PIN de 4 dígitos em «Os Meus Dados» no portal do colaborador para poder marcar o ponto.</p>
-                    <Button type="button" variant="secondary" size="sm" asChild>
-                      <Link to="/portal/dados">Abrir Os Meus Dados</Link>
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <div className="space-y-2">
-                  <PontoPinOtpFields value={pinValue} onChange={setPinValue} disabled={loading} />
-                </div>
-              ))}
-            {/* <p className="text-muted-foreground">
-              {precisaLocalizacao ? (
-                <>
-                  A empresa tem <strong className="text-foreground">{zonasValidacaoPonto.length}</strong> zona(s) de ponto
-                  cadastrada(s). O dispositivo vai pedir localização com{' '}
-                  <strong className="text-foreground">alta precisão</strong> (GPS); é obrigatório estar dentro do{' '}
-                  <strong className="text-foreground">raio</strong> de pelo menos uma delas (com margem de erro do GPS).
-                </>
-              ) : (
-                <>
-                  
-                </>
-              )}
-            </p> */}
-          </div>
-          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={() => setOpen(false)}
-              disabled={loading}
-            >
-              {!podeMarcar ? 'Fechar' : 'Cancelar'}
-            </Button>
-            {podeMarcar && (
-              <Button
-                type="button"
-                className="w-full sm:w-auto"
-                onClick={() => void confirmar()}
-                disabled={loading || temPontoPin !== true || pinValue.length !== 4}
-              >
-                {loading
-                  ? 'A registar…'
+        <DialogContent
+          className={cn(
+            'sm:max-w-md',
+            isMobile &&
+              cn(
+                'flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 max-md:max-h-[100dvh]',
+                PREVIEW_DIALOG_MOBILE,
+                '[&>button.absolute]:max-md:hidden',
+              ),
+          )}
+        >
+          {isMobile ? (
+            <>
+              <DialogTitle className="sr-only">
+                {!podeMarcar
+                  ? 'Marcação de ponto'
                   : proximaAccao === 'saida'
-                    ? 'Confirmar saída'
-                    : 'Confirmar entrada'}
-              </Button>
-            )}
-          </DialogFooter>
+                    ? 'Marcar saída'
+                    : 'Marcar entrada'}
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                {!podeMarcar
+                  ? 'Configuração do perfil para marcação de ponto.'
+                  : proximaAccao === 'saida'
+                    ? 'Confirme o PIN e a localização para registar a saída.'
+                    : 'Confirme o PIN e a localização para registar a entrada.'}
+              </DialogDescription>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <PontoMobileMarcacaoPanel
+                podeMarcar={podeMarcar}
+                proximaAccao={proximaAccao}
+                motivosNaoPodeMarcar={motivosNaoPodeMarcar}
+                temPontoPin={temPontoPin}
+                pinValue={pinValue}
+                onPinChange={handleMobilePinChange}
+                loading={loading}
+                precisaLocalizacao={precisaLocalizacao}
+                onClose={() => setOpen(false)}
+                onConfirm={confirmar}
+                marcacaoErro={marcacaoErroMobile}
+                onDismissMarcacaoErro={() => setMarcacaoErroMobile(null)}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold tracking-tight">
+                  {!podeMarcar
+                    ? 'Marcação de ponto'
+                    : proximaAccao === 'saida'
+                      ? 'Marcar saída'
+                      : 'Marcar entrada'}
+                </DialogTitle>
+                <DialogDescription>
+                  {!podeMarcar
+                    ? 'Complete os dados abaixo para poder registar entrada e saída.'
+                    : proximaAccao === 'saida'
+                      ? 'Confirme o PIN e a localização para registar a saída.'
+                      : 'Confirme o PIN e a localização para registar a entrada.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 text-sm">
+                {!podeMarcar && (
+                  <Alert>
+                    <AlertTitle>Falta configuração</AlertTitle>
+                    <AlertDescription className="space-y-3 pt-1">
+                      <p className="text-muted-foreground">Antes de marcar o ponto, é necessário:</p>
+                      <ul className="list-disc space-y-1 pl-4 text-foreground">
+                        {motivosNaoPodeMarcar.map((m, i) => (
+                          <li key={i}>{m}</li>
+                        ))}
+                      </ul>
+                      <Button type="button" variant="secondary" size="sm" asChild>
+                        <Link to="/portal/dados">Abrir Os Meus Dados</Link>
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {podeMarcar &&
+                  (temPontoPin === null ? (
+                    <p className="text-muted-foreground">A verificar configuração do PIN…</p>
+                  ) : temPontoPin === false ? (
+                    <Alert variant="destructive">
+                      <AlertTitle>PIN não configurado</AlertTitle>
+                      <AlertDescription className="space-y-3">
+                        <p>
+                          Defina um PIN de 4 dígitos em «Os Meus Dados» no portal do colaborador para poder marcar o
+                          ponto.
+                        </p>
+                        <Button type="button" variant="secondary" size="sm" asChild>
+                          <Link to="/portal/dados">Abrir Os Meus Dados</Link>
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="space-y-2">
+                      <PontoPinOtpFields value={pinValue} onChange={setPinValue} disabled={loading} />
+                    </div>
+                  ))}
+              </div>
+              <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => setOpen(false)}
+                  disabled={loading}
+                >
+                  {!podeMarcar ? 'Fechar' : 'Cancelar'}
+                </Button>
+                {podeMarcar && (
+                  <Button
+                    type="button"
+                    className="w-full sm:w-auto"
+                    onClick={() => void confirmar()}
+                    disabled={loading || temPontoPin !== true || pinValue.length !== 4}
+                  >
+                    {loading
+                      ? 'A registar…'
+                      : proximaAccao === 'saida'
+                        ? 'Confirmar saída'
+                        : 'Confirmar entrada'}
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>

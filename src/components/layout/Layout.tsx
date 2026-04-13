@@ -4,7 +4,11 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { getModulosAtivosForContext } from '@/utils/empresaModulos';
-import { rotaBloqueadaPorRecursosDesactivados, tenantPodeUsarModulo } from '@/utils/orgFeatureAccess';
+import {
+  orgModuloEstaActivado,
+  rotaBloqueadaPorRecursosDesactivados,
+  tenantPodeUsarModulo,
+} from '@/utils/orgFeatureAccess';
 import { cn } from '@/lib/utils';
 import { IntranetTopbar } from './IntranetTopbar';
 import { HorizontalMenu } from './HorizontalMenu';
@@ -12,6 +16,7 @@ import { FloatingCornerActions } from './FloatingCornerActions';
 import { MobileBottomNav } from './MobileBottomNav';
 import { ColaboradorPrimeiroAcessoWizard } from '@/components/onboarding/ColaboradorPrimeiroAcessoWizard';
 import { MobileWebPushBanner } from '@/components/mobile/MobileWebPushBanner';
+import { PwaGeolocationBanner } from '@/components/mobile/PwaGeolocationBanner';
 
 const PATH_TO_MODULE: Record<string, string> = {
   '/portal': 'portal-colaborador',
@@ -63,7 +68,14 @@ export function Layout() {
     return <Navigate to="/dashboard" replace />;
   }
   const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
-  if (user && moduleForPath && !tenantPodeUsarModulo(modulosAtivos, organizacaoSettings, moduleForPath)) {
+  /** Admin ignora a whitelist `modulosAtivos` da empresa (ex.: «Configurações» não entra nessa lista na BD). Continua sujeito a `modulosDesactivados` ao nível da organização. */
+  const moduleAllowedForTenant =
+    !moduleForPath
+      ? true
+      : user?.perfil === 'Admin'
+        ? orgModuloEstaActivado(organizacaoSettings, moduleForPath)
+        : tenantPodeUsarModulo(modulosAtivos, organizacaoSettings, moduleForPath);
+  if (user && moduleForPath && !moduleAllowedForTenant) {
     return <Navigate to="/dashboard" replace />;
   }
   if (
@@ -103,7 +115,12 @@ export function Layout() {
             'max-md:flex max-md:h-[min(100dvh,100svh)] max-md:max-h-[min(100dvh,100svh)] max-md:min-h-0 max-md:flex-1 max-md:flex-col max-md:overflow-hidden max-md:bg-[#F0F0F2] max-md:px-0 max-md:pb-0 max-md:pt-0',
         )}
         >
-        {!isChatFullscreenMobile ? <MobileWebPushBanner /> : null}
+        {!isChatFullscreenMobile ? (
+          <>
+            <PwaGeolocationBanner />
+            <MobileWebPushBanner />
+          </>
+        ) : null}
         <div
           className={cn(
             isChatFullscreenMobile && 'flex min-h-0 flex-1 flex-col',

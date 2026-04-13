@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isStandalonePwa } from '@/lib/pwaDisplayMode';
 
 /**
  * Teclado software em iPhone reduz o visual viewport tipicamente ~250–340px.
@@ -24,9 +25,7 @@ export function useVisualViewportBottomInset(): number {
       const ih = window.innerHeight;
       const ch = document.documentElement?.clientHeight ?? ih;
       const shrink = ih - vv.height;
-      const standalone =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+      const standalone = isStandalonePwa();
       const minShrink = standalone ? MIN_KEYBOARD_SHRINK_STANDALONE : MIN_KEYBOARD_SHRINK_SAFARI_TAB;
       const isKeyboardOpen = shrink >= minShrink;
 

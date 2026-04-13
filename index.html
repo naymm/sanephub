@@ -10,7 +10,9 @@
     <meta name="description" content="ERP Intranet Corporativa do Grupo SANEP" />
     <meta name="author" content="Grupo SANEP" />
     <meta name="theme-color" content="#101828" />
-    <!-- Web manifest: gerado em /manifest.webmanifest e ligado no &lt;head&gt; pelo vite-plugin-pwa no build -->
+    <!-- Garante que a origem pode usar Geolocation API (marcação de ponto / PWA). -->
+    <meta http-equiv="Permissions-Policy" content="geolocation=(self)" />
+    <!-- Web manifest: gerado em /manifest.webmanifest e ligado no <head> pelo vite-plugin-pwa no build -->
     <!-- Web App / iOS (Safari “Adicionar ao Ecrã Inicial”) -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

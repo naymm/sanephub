@@ -15,6 +15,13 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
+import {
+  PREVIEW_BODY_FLEX_CHAIN,
+  PREVIEW_DIALOG_MOBILE,
+  PREVIEW_FOOTER_SAFE_BOTTOM,
+  PREVIEW_HEADER_SAFE_TOP,
+} from '@/lib/documentPreviewMobileClasses';
 
 const OFFICE_EMBED_BASE = 'https://view.officeapps.live.com/op/embed.aspx';
 
@@ -112,14 +119,16 @@ export function ExcelPreviewDialog({
   const [downloading, setDownloading] = useState(false);
   const [sheets, setSheets] = useState<SheetPreview[]>([]);
 
+  const isMobile = useIsMobileViewport();
   const canUseOfficeEmbed = Boolean(fileUrl && /^https:\/\//i.test(fileUrl));
   const [previewMode, setPreviewMode] = useState<PreviewMode>('office');
 
   useEffect(() => {
     if (!open) return;
-    setPreviewMode(canUseOfficeEmbed ? 'office' : 'table');
+    /** No telemóvel preferir tabelas locais (iframe Office é frágil em Safari / PWA). */
+    setPreviewMode(canUseOfficeEmbed && !isMobile ? 'office' : 'table');
     setError(null);
-  }, [open, canUseOfficeEmbed]);
+  }, [open, canUseOfficeEmbed, isMobile]);
 
   useEffect(() => {
     if (!open || previewMode !== 'table') {
@@ -173,18 +182,23 @@ export function ExcelPreviewDialog({
       <DialogContent
         className={cn(
           'flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0',
-          showOffice ? 'h-[95vh] max-w-[90vw] w-full sm:max-w-[90vw]' : 'max-w-[90vw] w-full sm:max-w-[90vw]',
+          PREVIEW_DIALOG_MOBILE,
+          showOffice
+            ? 'h-[95vh] max-w-[90vw] w-full sm:max-w-[90vw] max-md:h-[100dvh]'
+            : 'max-w-[90vw] w-full sm:max-w-[90vw]',
         )}
       >
-        <DialogHeader className="shrink-0 space-y-1 px-6 pt-6 pb-2">
-          <DialogTitle className="line-clamp-2 pr-8">{titulo || 'Folha de cálculo'}</DialogTitle>
+        <DialogHeader
+          className={cn('shrink-0 space-y-1 px-6 pt-6 pb-2 max-md:text-left', PREVIEW_HEADER_SAFE_TOP)}
+        >
+          <DialogTitle className="line-clamp-2 pr-8 text-base md:text-lg">{titulo || 'Folha de cálculo'}</DialogTitle>
           {showOffice ? (
-            <DialogDescription className="text-xs leading-relaxed">
+            <DialogDescription className="text-xs leading-relaxed max-md:line-clamp-3">
               Pré-visualização com <strong>Microsoft Office Online</strong> (próximo do Excel). O ficheiro é carregado a
               partir de um URL público HTTPS. Pode alternar para a vista em tabela se preferir.
             </DialogDescription>
           ) : (
-            <DialogDescription className="text-xs leading-relaxed">
+            <DialogDescription className="text-xs leading-relaxed max-md:line-clamp-3">
               Pré-visualização em <strong>tabela</strong> (folhas e células). Útil sem URL público ou offline; ficheiros
               muito grandes são truncados ({MAX_ROWS_PER_SHEET} linhas por folha).
             </DialogDescription>
@@ -192,7 +206,7 @@ export function ExcelPreviewDialog({
         </DialogHeader>
 
         {canUseOfficeEmbed ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-6 py-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-6 py-2 max-md:px-4">
             <Button
               type="button"
               size="sm"
@@ -213,45 +227,55 @@ export function ExcelPreviewDialog({
         ) : null}
 
         {showOffice && fileUrl ? (
-          <div className="flex min-h-0 flex-1 flex-col px-0 pb-0">
+          <div className={cn('px-0 pb-0', PREVIEW_BODY_FLEX_CHAIN)}>
             <iframe
               key={fileUrl}
               title="Pré-visualização Excel (Office Online)"
               src={officeEmbedUrl(fileUrl)}
-              className="h-[min(78vh,800px)] w-full flex-1 border-0 bg-muted/20"
+              className="h-[min(78vh,800px)] w-full min-h-0 min-w-0 flex-1 border-0 bg-muted/20 max-md:h-full"
               allow="fullscreen"
             />
           </div>
         ) : (
-          <div className="relative flex min-h-[min(60vh,520px)] flex-1 flex-col px-6 pb-2">
+          <div
+            className={cn('relative px-6 pb-2 max-md:px-4', PREVIEW_BODY_FLEX_CHAIN)}
+          >
             {loading ? (
-              <div className="absolute inset-x-6 inset-y-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border border-border/60 bg-background/90">
+              <div className="absolute inset-x-6 inset-y-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border border-border/60 bg-background/90 max-md:inset-x-4">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">A ler folha de cálculo…</span>
               </div>
             ) : null}
             {error ? (
-              <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <div className="mb-2 shrink-0 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                 {error}
               </div>
             ) : null}
             {!loading && !error && sheets.length > 0 ? (
               sheets.length === 1 ? (
-                <ScrollArea className="h-[min(60vh,560px)] w-full rounded-md border border-border/60">
+                <ScrollArea className="h-[min(60vh,560px)] w-full min-h-0 min-w-0 flex-1 rounded-md border border-border/60 max-md:h-full max-md:max-h-full">
                   <SheetTable sheet={sheets[0]} />
                 </ScrollArea>
               ) : (
-                <Tabs defaultValue="0" className="flex min-h-0 flex-1 flex-col gap-2">
-                  <TabsList className="h-auto max-h-24 w-full flex-wrap justify-start gap-1 overflow-y-auto">
+                <Tabs defaultValue="0" className={cn('min-h-0 min-w-0 flex-1', PREVIEW_BODY_FLEX_CHAIN)}>
+                  <TabsList className="h-auto max-h-24 w-full min-w-0 shrink-0 flex-wrap justify-start gap-1 overflow-y-auto overflow-x-hidden max-md:max-h-28">
                     {sheets.map((s, i) => (
-                      <TabsTrigger key={i} value={String(i)} className="max-w-[200px] shrink-0 truncate text-xs">
+                      <TabsTrigger
+                        key={i}
+                        value={String(i)}
+                        className="max-w-[min(200px,calc(100vw-3rem))] shrink-0 truncate text-xs"
+                      >
                         {s.name || `Folha ${i + 1}`}
                       </TabsTrigger>
                     ))}
                   </TabsList>
                   {sheets.map((s, i) => (
-                    <TabsContent key={i} value={String(i)} className="mt-0 min-h-0 flex-1 overflow-hidden">
-                      <ScrollArea className="h-[min(56vh,520px)] w-full rounded-md border border-border/60">
+                    <TabsContent
+                      key={i}
+                      value={String(i)}
+                      className="mt-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                    >
+                      <ScrollArea className="h-[min(56vh,520px)] w-full min-h-0 min-w-0 flex-1 rounded-md border border-border/60 max-md:h-full max-md:max-h-full">
                         <SheetTable sheet={s} />
                       </ScrollArea>
                     </TabsContent>
@@ -262,7 +286,12 @@ export function ExcelPreviewDialog({
           </div>
         )}
 
-        <DialogFooter className="shrink-0 border-t border-border/60 px-6 py-4 sm:justify-between">
+        <DialogFooter
+          className={cn(
+            'shrink-0 border-t border-border/60 px-6 py-4 sm:justify-between',
+            PREVIEW_FOOTER_SAFE_BOTTOM,
+          )}
+        >
           <Button
             type="button"
             variant="outline"
@@ -330,15 +359,15 @@ function SheetTable({ sheet }: { sheet: SheetPreview }) {
           A mostrar apenas as primeiras {MAX_ROWS_PER_SHEET} linhas desta folha.
         </p>
       ) : null}
-      <div className="overflow-x-auto">
-        <table className="w-max min-w-full border-collapse border border-border text-left text-xs">
+      <div className="overflow-x-auto overscroll-x-contain touch-pan-x">
+        <table className="w-max min-w-full border-collapse border border-border text-left text-xs max-md:text-[13px]">
           <tbody>
             {rows.map((row, ri) => (
               <tr key={ri} className="border-b border-border/60 hover:bg-muted/30">
                 {Array.from({ length: colCount }, (_, ci) => (
                   <td
                     key={ci}
-                    className="max-w-[min(280px,40vw)] border-r border-border/40 px-2 py-1 align-top whitespace-pre-wrap break-words"
+                    className="max-w-[min(280px,40vw)] border-r border-border/40 px-2 py-1 align-top whitespace-pre-wrap break-words max-md:min-w-[88px] max-md:max-w-[min(260px,82vw)]"
                   >
                     {row[ci] ?? ''}
                   </td>

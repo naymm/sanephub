@@ -54,10 +54,17 @@ import {
   Pencil,
   Move,
   UploadCloud,
+  ExternalLink,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { pt } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import {
+  PREVIEW_BODY_FLEX_CHAIN,
+  PREVIEW_DIALOG_MOBILE,
+  PREVIEW_FOOTER_SAFE_BOTTOM,
+  PREVIEW_HEADER_SAFE_TOP,
+} from '@/lib/documentPreviewMobileClasses';
 import { nomeFicheiroParaDownload } from '@/utils/nomeFicheiroDownload';
 
 const BUCKET = 'gestao-documentos';
@@ -2349,17 +2356,60 @@ export default function GestaoDocumentosPage() {
           }
         }}
       >
-        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0 gap-0">
-          <DialogTitle className="sr-only">{pdfPreviewTitulo || 'Pré-visualização PDF'}</DialogTitle>
-          {pdfPreviewUrl ? (
-            <iframe
-              src={pdfPreviewUrl}
-              title="Pré-visualização do documento"
-              className="w-full h-full min-h-[80vh] border-0 rounded-md"
-            />
-          ) : (
-            <DialogDescription className="p-4">A carregar pré-visualização…</DialogDescription>
+        <DialogContent
+          className={cn(
+            'flex h-[95vh] w-full max-w-[90vw] flex-col gap-0 overflow-hidden p-0',
+            PREVIEW_DIALOG_MOBILE,
+            'max-md:h-[100dvh]',
           )}
+        >
+          <div
+            className={cn(
+              'flex shrink-0 items-start justify-between gap-2 border-b border-border/60 px-4 py-3 md:px-6',
+              PREVIEW_HEADER_SAFE_TOP,
+            )}
+          >
+            <DialogTitle className="line-clamp-2 flex-1 pr-2 text-left text-base font-semibold leading-snug">
+              {pdfPreviewTitulo || 'Pré-visualização PDF'}
+            </DialogTitle>
+            {pdfPreviewUrl ? (
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5" asChild>
+                <a href={pdfPreviewUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                  <span className="max-md:sr-only">Abrir noutro separador</span>
+                  <span className="md:hidden">Abrir</span>
+                </a>
+              </Button>
+            ) : null}
+          </div>
+          <div className={PREVIEW_BODY_FLEX_CHAIN}>
+            {pdfPreviewUrl ? (
+              <iframe
+                src={
+                  pdfPreviewUrl.startsWith('http') && !pdfPreviewUrl.includes('#')
+                    ? `${pdfPreviewUrl}#view=FitH`
+                    : pdfPreviewUrl
+                }
+                title={pdfPreviewTitulo || 'Pré-visualização PDF'}
+                className="h-full min-h-0 min-w-0 w-full flex-1 border-0 bg-muted/20"
+                allow="fullscreen"
+              />
+            ) : (
+              <DialogDescription className="p-4 text-center text-sm">
+                A carregar pré-visualização…
+              </DialogDescription>
+            )}
+          </div>
+          <div
+            className={cn(
+              'hidden max-md:flex shrink-0 justify-end border-t border-border/60 px-4 py-3',
+              PREVIEW_FOOTER_SAFE_BOTTOM,
+            )}
+          >
+            <Button type="button" variant="secondary" className="min-h-11" onClick={() => setPdfPreviewOpen(false)}>
+              Fechar
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>

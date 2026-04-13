@@ -1004,7 +1004,7 @@ export default function ColaboradoresPage() {
   const stepInfo = mobileWizardStepMeta[mobileWizardStep - 1] ?? mobileWizardStepMeta[0];
 
   const colaboradorFormGridEl = () => (
-    <div className="grid gap-4 py-2">
+    <div className="grid min-w-0 gap-4 py-2 *:min-w-0">
       {showWizardStep(1) && (
       <>
       <div className="space-y-2">
@@ -1013,7 +1013,7 @@ export default function ColaboradoresPage() {
           value={form.empresaId != null && form.empresaId > 0 ? String(form.empresaId) : ''}
           onValueChange={v => setForm(f => ({ ...f, empresaId: Number(v) }))}
         >
-          <SelectTrigger>
+          <SelectTrigger className="min-w-0">
             <SelectValue placeholder="Seleccionar empresa" />
           </SelectTrigger>
           <SelectContent>
@@ -1024,7 +1024,7 @@ export default function ColaboradoresPage() {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
+        <p className="break-words text-xs text-muted-foreground">
           O colaborador fica associado à empresa seleccionada (transferência entre empresas). As zonas de ponto permitidas devem
           pertencer à mesma empresa; ao mudar de empresa, as zonas incompatíveis são removidas automaticamente.
         </p>
@@ -1073,21 +1073,21 @@ export default function ColaboradoresPage() {
           <p className="text-xs text-muted-foreground">JPEG, PNG, GIF ou WebP · máximo 3 MB</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Nome completo</Label>
-          <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+          <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Data nascimento</Label>
-          <Input type="date" value={form.dataNascimento} onChange={e => setForm(f => ({ ...f, dataNascimento: e.target.value }))} />
+          <Input type="date" value={form.dataNascimento} onChange={e => setForm(f => ({ ...f, dataNascimento: e.target.value }))} className="min-w-0" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Género</Label>
           <Select value={form.genero} onValueChange={v => setForm(f => ({ ...f, genero: v as Genero }))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className="min-w-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               {GENERO_OPTIONS.map(g => (
                 <SelectItem key={g} value={g}>{g === 'M' ? 'Masculino' : g === 'F' ? 'Feminino' : 'Outro'}</SelectItem>
@@ -1095,13 +1095,13 @@ export default function ColaboradoresPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Estado civil</Label>
           <Select
             value={form.estadoCivil}
             onValueChange={v => setForm(f => ({ ...f, estadoCivil: v }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-w-0">
               <SelectValue placeholder="Seleccionar estado civil" />
             </SelectTrigger>
             <SelectContent>
@@ -1114,37 +1114,37 @@ export default function ColaboradoresPage() {
           </Select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="min-w-0 space-y-2">
           <Label>BI</Label>
-          <Input value={form.bi} onChange={e => setForm(f => ({ ...f, bi: e.target.value }))} />
+          <Input value={form.bi} onChange={e => setForm(f => ({ ...f, bi: e.target.value }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>NIF</Label>
-          <Input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} />
+          <Input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>INSS</Label>
-          <Input value={form.niss} onChange={e => setForm(f => ({ ...f, niss: e.target.value }))} />
+          <Input value={form.niss} onChange={e => setForm(f => ({ ...f, niss: e.target.value }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Número mecanográfico</Label>
           <Input
             value={form.numeroMec ?? ''}
             onChange={e => setForm(f => ({ ...f, numeroMec: e.target.value }))}
             placeholder="Nº mec."
-            className="font-mono"
+            className="min-w-0 font-mono"
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Nacionalidade</Label>
           <Select
             value={form.nacionalidade}
             onValueChange={(v) => setForm((f) => ({ ...f, nacionalidade: v }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-w-0">
               <SelectValue placeholder="Seleccionar nacionalidade" />
             </SelectTrigger>
             <SelectContent>
@@ -1156,13 +1156,13 @@ export default function ColaboradoresPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Nível académico</Label>
           <Select
             value={form.nivelAcademico ?? 'Ensino Secundário'}
             onValueChange={(v) => setForm((f) => ({ ...f, nivelAcademico: v }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-w-0">
               <SelectValue placeholder="Seleccionar nível académico" />
             </SelectTrigger>
             <SelectContent>
@@ -1175,20 +1175,20 @@ export default function ColaboradoresPage() {
           </Select>
         </div>
       </div>
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <Label>Endereço</Label>
-        <Input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} />
+        <Input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} className="min-w-0" />
       </div>
       </>
       )}
       {showWizardStep(2) && (
       <>
       <hr className="border-border/80" />
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Cargo</Label>
           <Select value={form.cargo} onValueChange={v => setForm(f => ({ ...f, cargo: v }))}>
-            <SelectTrigger>
+            <SelectTrigger className="min-w-0">
               <SelectValue placeholder="Seleccionar cargo" />
             </SelectTrigger>
             <SelectContent>
@@ -1200,10 +1200,10 @@ export default function ColaboradoresPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Departamento</Label>
           {departamentoSelectOptions.length === 0 ? (
-            <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">
+            <p className="break-words text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">
               Não há departamentos no catálogo. Cadastre em Configurações → Departamentos.
             </p>
           ) : null}
@@ -1214,7 +1214,7 @@ export default function ColaboradoresPage() {
             }
             disabled={departamentoSelectOptions.length === 0}
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-w-0">
               <SelectValue placeholder="Seleccionar departamento" />
             </SelectTrigger>
             <SelectContent>
@@ -1229,40 +1229,42 @@ export default function ColaboradoresPage() {
         </div>
       </div>
       <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-3">
-        <div>
+        <div className="min-w-0">
           <Label className="text-base">Horário de trabalho (ponto)</Label>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 break-words text-xs text-muted-foreground">
             Entrada e tolerância de 15 min definem o limite para contagem de atrasos; o fim do horário serve de referência à
             saída. Quem tem isenção de horário não acumula atrasos nem recebe faltas automáticas por atraso.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label>Hora normal de entrada</Label>
             <Input
               type="time"
               step={60}
+              className="min-w-0"
               value={form.horarioEntrada ?? '08:00'}
               onChange={e => setForm(f => ({ ...f, horarioEntrada: e.target.value }))}
             />
           </div>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label>Até (fim do horário)</Label>
             <Input
               type="time"
               step={60}
+              className="min-w-0"
               value={form.horarioSaida ?? '17:00'}
               onChange={e => setForm(f => ({ ...f, horarioSaida: e.target.value }))}
             />
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Isenção de horário</Label>
           <Select
             value={form.isencaoHorario === true ? 'sim' : 'nao'}
             onValueChange={(v) => setForm(f => ({ ...f, isencaoHorario: v === 'sim' }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1272,9 +1274,9 @@ export default function ColaboradoresPage() {
           </Select>
         </div>
       </div>
-      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+      <div className="min-w-0 space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
         <Label>Zonas de ponto permitidas</Label>
-        <p className="text-xs text-muted-foreground">
+        <p className="break-words text-xs text-muted-foreground">
           Cadastre zonas em Capital Humano → Zonas de trabalho. Só aparecem zonas da empresa deste colaborador.
         </p>
         {geofencesForFormEmpresa.length === 0 ? (
@@ -1305,15 +1307,15 @@ export default function ColaboradoresPage() {
           </div>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Data admissão</Label>
-          <Input type="date" value={form.dataAdmissao} onChange={e => setForm(f => ({ ...f, dataAdmissao: e.target.value }))} />
+          <Input type="date" value={form.dataAdmissao} onChange={e => setForm(f => ({ ...f, dataAdmissao: e.target.value }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Tipo contrato</Label>
           <Select value={form.tipoContrato} onValueChange={v => setForm(f => ({ ...f, tipoContrato: v as TipoContrato }))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className="min-w-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               {TIPO_CONTRATO_OPTIONS.map(t => (
                 <SelectItem key={t} value={t}>{t}</SelectItem>
@@ -1323,17 +1325,18 @@ export default function ColaboradoresPage() {
         </div>
       </div>
       {form.tipoContrato !== 'Efectivo' && (
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Data fim contrato</Label>
-          <Input type="date" value={form.dataFimContrato ?? ''} onChange={e => setForm(f => ({ ...f, dataFimContrato: e.target.value || undefined }))} />
+          <Input type="date" value={form.dataFimContrato ?? ''} onChange={e => setForm(f => ({ ...f, dataFimContrato: e.target.value || undefined }))} className="min-w-0" />
         </div>
       )}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Salário base (Kz)</Label>
           <Input
             inputMode="decimal"
             placeholder="Ex: 400.000,00"
+            className="min-w-0"
             value={salarioBaseText}
             onChange={(e) => {
               const v = e.target.value;
@@ -1361,13 +1364,13 @@ export default function ColaboradoresPage() {
             }}
           />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>IBAN</Label>
-          <Input value={form.iban} onChange={e => setForm(f => ({ ...f, iban: e.target.value }))} />
+          <Input value={form.iban} onChange={e => setForm(f => ({ ...f, iban: e.target.value }))} className="min-w-0" />
         </div>
       </div>
       <div className="space-y-3">
-        <div className="flex flex-wrap gap-3">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
           {subsidiosAtivos.length === 0 && (
             <p className="text-xs text-muted-foreground">Nenhum subsídio adicionado.</p>
           )}
@@ -1375,12 +1378,15 @@ export default function ColaboradoresPage() {
             const label = SUBSIDIOS_CONFIG.find(x => x.key === key)?.label ?? key;
             const rawValue = Number((form as any)[key] ?? 0);
             return (
-              <div key={key} className="flex min-w-[320px] items-center gap-3">
-                <div className="flex h-10 flex-1 items-center rounded-lg bg-muted/30 px-4">
+              <div
+                key={key}
+                className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
+              >
+                <div className="flex h-10 min-w-0 flex-1 items-center rounded-lg bg-muted/30 px-4">
                   <p className="min-w-0 truncate text-sm font-medium">{label}</p>
                 </div>
 
-                <div className="flex h-10 w-44 items-center justify-end">
+                <div className="flex h-10 w-full min-w-0 items-center justify-end sm:w-44 sm:shrink-0">
                   {editandoSubsidio === key ? (
                     <Input
                       placeholder="—"
@@ -1459,7 +1465,7 @@ export default function ColaboradoresPage() {
           })}
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex min-w-0 justify-end">
           <Select
             value={subsidioParaAdicionar}
             onValueChange={v => {
@@ -1472,7 +1478,7 @@ export default function ColaboradoresPage() {
               setEditandoSubsidio(k);
             }}
           >
-            <SelectTrigger className="w-auto !border-0 !bg-primary !text-primary-foreground hover:!bg-primary/90 [&>svg]:hidden">
+            <SelectTrigger className="max-w-full w-auto !border-0 !bg-primary !text-primary-foreground hover:!bg-primary/90 [&>svg]:hidden">
               <SelectValue placeholder="Adicionar Subsídios" />
             </SelectTrigger>
             <SelectContent>
@@ -1501,40 +1507,40 @@ export default function ColaboradoresPage() {
       {showWizardStep(3) && (
       <>
       <hr className="border-border/80" />
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Email corporativo</Label>
-          <Input type="email" value={form.emailCorporativo} onChange={e => setForm(f => ({ ...f, emailCorporativo: e.target.value }))} />
+          <Input type="email" value={form.emailCorporativo} onChange={e => setForm(f => ({ ...f, emailCorporativo: e.target.value }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Email pessoal (opcional)</Label>
-          <Input type="email" value={form.emailPessoal ?? ''} onChange={e => setForm(f => ({ ...f, emailPessoal: e.target.value || undefined }))} />
+          <Input type="email" value={form.emailPessoal ?? ''} onChange={e => setForm(f => ({ ...f, emailPessoal: e.target.value || undefined }))} className="min-w-0" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Telefone principal</Label>
-          <Input value={form.telefonePrincipal} onChange={e => setForm(f => ({ ...f, telefonePrincipal: e.target.value }))} />
+          <Input value={form.telefonePrincipal} onChange={e => setForm(f => ({ ...f, telefonePrincipal: e.target.value }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Telefone alternativo (opcional)</Label>
-          <Input value={form.telefoneAlternativo ?? ''} onChange={e => setForm(f => ({ ...f, telefoneAlternativo: e.target.value || undefined }))} />
+          <Input value={form.telefoneAlternativo ?? ''} onChange={e => setForm(f => ({ ...f, telefoneAlternativo: e.target.value || undefined }))} className="min-w-0" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label>Contacto emergência - Nome</Label>
-          <Input value={form.contactoEmergenciaNome ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaNome: e.target.value || undefined }))} />
+          <Input value={form.contactoEmergenciaNome ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaNome: e.target.value || undefined }))} className="min-w-0" />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label>Contacto emergência - Telefone</Label>
-          <Input value={form.contactoEmergenciaTelefone ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaTelefone: e.target.value || undefined }))} />
+          <Input value={form.contactoEmergenciaTelefone ?? ''} onChange={e => setForm(f => ({ ...f, contactoEmergenciaTelefone: e.target.value || undefined }))} className="min-w-0" />
         </div>
       </div>
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <Label>Status</Label>
         <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as StatusColaborador }))}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger className="min-w-0"><SelectValue /></SelectTrigger>
           <SelectContent>
             {STATUS_OPTIONS.map(s => (
               <SelectItem key={s} value={s}>{s}</SelectItem>
@@ -1543,9 +1549,9 @@ export default function ColaboradoresPage() {
         </Select>
       </div>
       {!editing && isSupabaseConfigured() && (
-        <div className="space-y-3 border-t border-border/80 pt-4">
+        <div className="min-w-0 space-y-3 border-t border-border/80 pt-4">
           <Label className="text-base">Pasta e documentos do colaborador</Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="break-words text-xs text-muted-foreground">
             Ao guardar, é criada a subpasta em{' '}
             <strong>… / Colaboradores / {form.nome.trim() ? nomePastaColaboradorMaiusculo(form.nome) : 'PRIMEIRO ÚLTIMO'}</strong>{' '}
             (primeiro e último nome em maiúsculas), mesmo sem ficheiros — fica vazia até carregar documentos abaixo ou na Gestão documental.
@@ -1882,7 +1888,8 @@ export default function ColaboradoresPage() {
         <DialogContent
           className={cn(
             showMobileNovoWizard
-              ? 'fixed inset-0 left-0 top-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none data-[state=closed]:slide-out-to-top-[0%] data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 [&>button.absolute]:hidden'
+              ? // Acima do overlay do Dialog (z-1050000); z-[100] punha o conteúdo por baixo e bloqueava toques.
+                'fixed inset-0 left-0 top-0 z-[1050002] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none data-[state=closed]:slide-out-to-top-[0%] data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 [&>button.absolute]:hidden'
               : 'max-w-2xl max-h-[90vh] overflow-y-auto',
           )}
           onPointerDownOutside={(e) => {
@@ -1911,7 +1918,7 @@ export default function ColaboradoresPage() {
                 </p>
                 <h2 className="text-center text-2xl font-bold leading-tight">Novo colaborador</h2>
               </div>
-              <div className="relative -mt-6 flex min-h-0 flex-1 flex-col rounded-t-3xl bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.07)]">
+              <div className="relative -mt-6 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden rounded-t-3xl bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.07)]">
                 <div className="shrink-0 border-b border-border/60 bg-background px-4 pb-3 pt-4">
                   <div className="flex items-start gap-3">
                     <div
@@ -1926,11 +1933,11 @@ export default function ColaboradoresPage() {
                     </div>
                   </div>
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-1">
+                <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-2 pt-1">
                   {colaboradorFormGridEl()}
                 </div>
                 <div className="shrink-0 border-t border-border/80 bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 gap-2">
                     <Button
                       type="button"
                       variant="outline"

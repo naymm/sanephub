@@ -388,7 +388,7 @@ export function IntranetTopbar() {
             </PopoverContent>
           </Popover>
 
-          {/* Settings / Troca de empresa (Group-level) */}
+          {/* Settings: troca de empresa (Grupo / por empresa) + atalhos Admin quando aplicável */}
           {isGroupLevel && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -401,21 +401,25 @@ export function IntranetTopbar() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuItem disabled>
-                  Selecionar Empresa
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setCurrentEmpresaId('consolidado')}>
-                  Visão consolidada (Grupo)
-                </DropdownMenuItem>
-                {empresas.filter(e => e.activo).map(e => (
-                  <DropdownMenuItem key={e.id} onSelect={() => setCurrentEmpresaId(e.id)}>
-                    {e.codigo} — {e.nome}
-                  </DropdownMenuItem>
-                ))}
+                {isGroupLevel && (
+                  <>
+                    <DropdownMenuItem disabled>
+                      Selecionar Empresa
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setCurrentEmpresaId('consolidado')}>
+                      Visão consolidada (Grupo)
+                    </DropdownMenuItem>
+                    {empresas.filter(e => e.activo).map(e => (
+                      <DropdownMenuItem key={e.id} onSelect={() => setCurrentEmpresaId(e.id)}>
+                        {e.codigo} — {e.nome}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
                 {user.perfil === 'Admin' && (
                   <>
-                    <DropdownMenuSeparator />
+                    {isGroupLevel && <DropdownMenuSeparator />}
                     <DropdownMenuItem onSelect={() => navigate('/conselho-administracao/empresas')}>
                       <Crown className="mr-2 h-4 w-4" />
                       Empresas do Grupo

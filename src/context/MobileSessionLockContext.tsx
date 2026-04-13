@@ -6,9 +6,15 @@ import { MobilePinUnlockOverlay } from '@/components/mobile/MobilePinUnlockOverl
 
 const SESSION_UNLOCK_KEY = 'sanep_msl_unlocked_uid';
 
-/** Inactividade antes de pedir PIN (mobile e desktop; 5 minutos). */
-const IDLE_MS = 5 * 60_000;
+/** Inatividade antes do ecrã de PIN: mobile 5 min; desktop (≥ md / 768px) 10 min. */
+const IDLE_MS_MOBILE = 5 * 60_000;
+const IDLE_MS_DESKTOP = 10 * 60_000;
 const BACKGROUND_LOCK_MS = 5_000;
+
+function idleMsForViewport(): number {
+  if (typeof window === 'undefined') return IDLE_MS_DESKTOP;
+  return window.matchMedia('(min-width: 768px)').matches ? IDLE_MS_DESKTOP : IDLE_MS_MOBILE;
+}
 
 type Ctx = {
   lockNow: () => void;
@@ -115,7 +121,7 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
     if (!user || !pinConfigured || !pinUnlocked) return;
     idleTimerRef.current = setTimeout(() => {
       lock();
-    }, IDLE_MS);
+    }, idleMsForViewport());
   }, [user, pinConfigured, pinUnlocked, lock, clearIdleTimer]);
 
   useEffect(() => {

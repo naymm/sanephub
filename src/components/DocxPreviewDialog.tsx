@@ -13,6 +13,13 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
+import {
+  PREVIEW_BODY_FLEX_CHAIN,
+  PREVIEW_DIALOG_MOBILE,
+  PREVIEW_FOOTER_SAFE_BOTTOM,
+  PREVIEW_HEADER_SAFE_TOP,
+} from '@/lib/documentPreviewMobileClasses';
 
 /** Visualizador Microsoft (requer URL HTTPS pública acessível na internet). */
 const OFFICE_EMBED_BASE = 'https://view.officeapps.live.com/op/embed.aspx';
@@ -92,14 +99,16 @@ export function DocxPreviewDialog({
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
+  const isMobile = useIsMobileViewport();
   const canUseOfficeEmbed = Boolean(fileUrl && /^https:\/\//i.test(fileUrl));
   const [previewMode, setPreviewMode] = useState<PreviewMode>('office');
 
   useEffect(() => {
     if (!open) return;
-    setPreviewMode(canUseOfficeEmbed ? 'office' : 'html');
+    /** No telemóvel o iframe Office Online costuma falhar ou ser pouco usável; HTML local é mais fiável. */
+    setPreviewMode(canUseOfficeEmbed && !isMobile ? 'office' : 'html');
     setError(null);
-  }, [open, canUseOfficeEmbed]);
+  }, [open, canUseOfficeEmbed, isMobile]);
 
   useLayoutEffect(() => {
     if (!open || previewMode !== 'html') {
@@ -165,19 +174,26 @@ export function DocxPreviewDialog({
       <DialogContent
         className={cn(
           'flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0',
-          showOffice ? 'h-[95vh] max-w-[90vw] w-full sm:max-w-[90vw]' : 'max-w-4xl sm:max-w-4xl',
+          PREVIEW_DIALOG_MOBILE,
+          showOffice
+            ? 'h-[95vh] max-w-[90vw] w-full sm:max-w-[90vw] max-md:h-[100dvh]'
+            : 'max-w-4xl sm:max-w-4xl',
         )}
       >
-        <DialogHeader className="shrink-0 space-y-1 px-6 pt-6 pb-2">
-          <DialogTitle className="line-clamp-2 pr-8">{titulo || 'Documento Word'}</DialogTitle>
+        <DialogHeader
+          className={cn('shrink-0 space-y-1 px-6 pt-6 pb-2 max-md:text-left', PREVIEW_HEADER_SAFE_TOP)}
+        >
+          <DialogTitle className="line-clamp-2 pr-8 text-base md:text-lg">
+            {titulo || 'Documento Word'}
+          </DialogTitle>
           {showOffice ? (
-            <DialogDescription className="text-xs leading-relaxed">
+            <DialogDescription className="text-xs leading-relaxed max-md:line-clamp-3">
               Pré-visualização com <strong>Microsoft Office Online</strong> (layout próximo do Word). O ficheiro é
               carregado a partir de um URL público HTTPS. Se preferir não usar este serviço, escolha a pré-visualização
               HTML abaixo.
             </DialogDescription>
           ) : (
-            <DialogDescription className="text-xs leading-relaxed">
+            <DialogDescription className="text-xs leading-relaxed max-md:line-clamp-3">
               Pré-visualização <strong>HTML</strong> (biblioteca docx-preview): útil offline ou sem URL público; o
               aspeto pode diferir do Word.
             </DialogDescription>
@@ -185,7 +201,7 @@ export function DocxPreviewDialog({
         </DialogHeader>
 
         {canUseOfficeEmbed ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-6 py-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-6 py-2 max-md:px-4">
             <Button
               type="button"
               size="sm"
@@ -206,38 +222,50 @@ export function DocxPreviewDialog({
         ) : null}
 
         {showOffice && fileUrl ? (
-          <div className="flex min-h-0 flex-1 flex-col px-0 pb-0">
+          <div className={cn('px-0 pb-0', PREVIEW_BODY_FLEX_CHAIN)}>
             <iframe
               key={fileUrl}
               title="Pré-visualização Word (Office Online)"
               src={officeEmbedUrl(fileUrl)}
-              className="h-[min(78vh,800px)] w-full flex-1 border-0 bg-muted/20"
+              className="h-[min(78vh,800px)] w-full min-h-0 min-w-0 flex-1 border-0 bg-muted/20 max-md:h-full"
               allow="fullscreen"
             />
           </div>
         ) : (
-          <div className="relative min-h-[min(60vh,520px)] flex-1 px-6 pb-2">
+          <div
+            className={cn(
+              'relative px-6 pb-2 max-md:px-4 max-md:pb-2',
+              PREVIEW_BODY_FLEX_CHAIN,
+            )}
+          >
             {loading ? (
-              <div className="absolute inset-x-6 inset-y-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border border-border/60 bg-background/90">
+              <div className="absolute inset-x-6 inset-y-0 z-10 flex flex-col items-center justify-center gap-2 rounded-md border border-border/60 bg-background/90 max-md:inset-x-4">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">A carregar documento…</span>
               </div>
             ) : null}
             {error ? (
-              <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <div className="mb-2 shrink-0 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                 {error}
               </div>
             ) : null}
-            <div className="h-[min(60vh,520px)] w-full overflow-auto rounded-md border border-border/60 bg-card p-4 text-foreground">
-              <div
-                ref={containerRef}
-                className="docx-preview-mount min-h-[min(50vh,480px)] w-full max-w-full [&_.docx-wrapper]:bg-card [&_.docx]:text-foreground"
-              />
+            <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+              <div className="h-[min(60vh,520px)] w-full min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain rounded-md border border-border/60 bg-card p-3 text-foreground touch-pan-y max-md:h-full max-md:max-h-full max-md:p-2">
+                <div
+                  ref={containerRef}
+                  className="docx-preview-mount min-h-[min(50vh,480px)] w-full max-w-full min-w-0 [&_.docx-wrapper]:box-border [&_.docx-wrapper]:max-w-full [&_.docx-wrapper]:bg-card [&_.docx]:box-border [&_.docx]:max-w-full [&_.docx]:text-foreground max-md:min-h-0 max-md:[&_.docx]:text-[15px] max-md:[&_.docx-wrapper]:!p-2"
+                />
+              </div>
             </div>
           </div>
         )}
 
-        <DialogFooter className="shrink-0 border-t border-border/60 px-6 py-4 sm:justify-between">
+        <DialogFooter
+          className={cn(
+            'shrink-0 border-t border-border/60 px-6 py-4 sm:justify-between',
+            PREVIEW_FOOTER_SAFE_BOTTOM,
+          )}
+        >
           <Button
             type="button"
             variant="outline"

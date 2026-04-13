@@ -1,6 +1,9 @@
 /**
  * Geolocalização WGS84 para marcação de ponto — equilíbrio entre rapidez e precisão.
  * Acumula amostras com `watchPosition`, mas termina cedo se a precisão for boa ou após um tempo razoável.
+ *
+ * Em iOS / PWA, o pedido nativo de localização tem de ser disparado no mesmo turno do toque do utilizador.
+ * Estas funções registem `watchPosition` / `getCurrentPosition` de forma síncrona ao serem chamadas (dentro do executor da Promise).
  */
 
 export type PosicaoDispositivo = {
