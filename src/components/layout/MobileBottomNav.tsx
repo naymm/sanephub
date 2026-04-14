@@ -22,6 +22,8 @@ import { cn } from '@/lib/utils';
 
 type TabVariant = 'default' | 'more';
 
+
+
 function TabButton({
   to,
   label,
@@ -157,18 +159,31 @@ export function MobileBottomNav() {
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 md:hidden"
       aria-label="Navegação inferior"
     >
-      <div className="pointer-events-auto mx-auto flex max-w-lg items-stretch gap-0.5 rounded-[1.35rem] border border-border/60 bg-card/95 px-1 py-1.5 shadow-lg shadow-black/10 backdrop-blur-md supports-[backdrop-filter]:bg-card/90">
-        <TabButton to="/dashboard" label="Início" icon={LayoutDashboard} end />
-        <TabButton to="/notificacoes" label="Avisos" icon={Bell} end />
-        <TabButton to="/chat" label="Chat" icon={MessageCircle} end />
-        <TabButton
-          to={shortcut.to}
-          label={shortcut.label}
-          icon={shortcut.icon}
-          modulePath={shortcut.modulePath}
-        />
-        <TabButton to="/mais" label="Mais" icon={MoreHorizontal} variant="more" />
-      </div>
+      <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-1 
+  rounded-full border border-border/60 bg-card/90 px-2 py-2 
+  shadow-lg shadow-black/10 backdrop-blur-md">
+
+  <TabButton to="/dashboard" label="Início" icon={LayoutDashboard} end />
+
+  <TabButton to="/notificacoes" label="Avisos" icon={Bell} end />
+
+  <TabButton to="/chat" label="Chat" icon={MessageCircle} end />
+
+  <TabButton
+    to={shortcut.to}
+    label={shortcut.label}
+    icon={shortcut.icon}
+    modulePath={shortcut.modulePath}
+  />
+
+  <TabButton 
+    to="/mais" 
+    label="Mais" 
+    icon={MoreHorizontal} 
+    variant="more" 
+  />
+
+</div>
     </nav>
   );
 }
