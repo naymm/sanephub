@@ -341,6 +341,8 @@ export default function ColaboradoresPage() {
   const [statusFilter, setStatusFilter] = useState<StatusColaborador | 'todos'>('todos');
   const [deptFilter, setDeptFilter] = useState<string>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
+  /** Fullscreen “wizard” visual no mobile: também para editar, não só /novo. */
+  const showMobileWizard = viewportMaxMd && dialogOpen;
   const [viewOpen, setViewOpen] = useState(false);
   const [editing, setEditing] = useState<Colaborador | null>(null);
   const [viewItem, setViewItem] = useState<Colaborador | null>(null);
@@ -639,6 +641,15 @@ export default function ColaboradoresPage() {
     navigate('/capital-humano/colaboradores');
   }, [navigate, resetModalState]);
 
+  const closeMobileForm = useCallback(() => {
+    if (isNovoRoute) {
+      closeMobileWizard();
+      return;
+    }
+    setDialogOpen(false);
+    resetModalState();
+  }, [closeMobileWizard, isNovoRoute, resetModalState]);
+
   const openCreate = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       navigate('/capital-humano/colaboradores/novo');
@@ -706,6 +717,7 @@ export default function ColaboradoresPage() {
     setSubsidioParaAdicionar('__none__');
     setEditandoSubsidio(null);
     setFormGeofenceIds(geofenceIdsByColaborador.get(c.id) ?? []);
+    setMobileWizardStep(1);
     setDialogOpen(true);
   };
 
@@ -994,7 +1006,7 @@ export default function ColaboradoresPage() {
     }
   };
 
-  const showWizardStep = (n: 1 | 2 | 3) => !showMobileNovoWizard || mobileWizardStep === n;
+  const showWizardStep = (n: 1 | 2 | 3) => !showMobileWizard || mobileWizardStep === n;
 
   const mobileWizardStepMeta = [
     { kicker: 'Passo 1/3', title: 'Dados pessoais' },
@@ -1876,8 +1888,8 @@ export default function ColaboradoresPage() {
         open={dialogOpen}
         onOpenChange={(open) => {
           if (!open) {
-            if (showMobileNovoWizard) {
-              closeMobileWizard();
+            if (showMobileWizard) {
+              closeMobileForm();
               return;
             }
             resetModalState();
@@ -1887,27 +1899,27 @@ export default function ColaboradoresPage() {
       >
         <DialogContent
           className={cn(
-            showMobileNovoWizard
+            showMobileWizard
               ? // Acima do overlay do Dialog (z-1050000); z-[100] punha o conteúdo por baixo e bloqueava toques.
                 'fixed inset-0 left-0 top-0 z-[1050002] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none data-[state=closed]:slide-out-to-top-[0%] data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 [&>button.absolute]:hidden'
               : 'max-w-2xl max-h-[90vh] overflow-y-auto',
           )}
           onPointerDownOutside={(e) => {
-            if (showMobileNovoWizard) e.preventDefault();
+            if (showMobileWizard) e.preventDefault();
           }}
           onEscapeKeyDown={(e) => {
-            if (showMobileNovoWizard) {
+            if (showMobileWizard) {
               e.preventDefault();
-              closeMobileWizard();
+              closeMobileForm();
             }
           }}
         >
-          {showMobileNovoWizard ? (
+          {showMobileWizard ? (
             <>
               <div className="relative shrink-0 border-b border-border/40 bg-gradient-to-br from-[hsl(var(--navy))] to-[hsl(var(--navy-lighter))] px-4 pb-10 pt-[max(0.45rem,env(safe-area-inset-top,0px))] text-white shadow-md backdrop-blur-sm">
                 <button
                   type="button"
-                  onClick={() => closeMobileWizard()}
+                  onClick={() => closeMobileForm()}
                   className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
                   aria-label="Fechar"
                 >
@@ -1916,7 +1928,9 @@ export default function ColaboradoresPage() {
                 <p className="text-center text-xs font-medium uppercase tracking-wider text-white/90">
                   Capital Humano
                 </p>
-                <h2 className="text-center text-2xl font-bold leading-tight">Novo colaborador</h2>
+                <h2 className="text-center text-2xl font-bold leading-tight">
+                  {editing ? 'Editar colaborador' : 'Novo colaborador'}
+                </h2>
               </div>
               <div className="relative -mt-6 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden rounded-t-3xl bg-background shadow-[0_-12px_40px_rgba(0,0,0,0.07)]">
                 <div className="shrink-0 border-b border-border/60 bg-background px-4 pb-3 pt-4">
@@ -1944,12 +1958,17 @@ export default function ColaboradoresPage() {
                       className="min-h-11 flex-1 rounded-xl border-border/80"
                       disabled={saving}
                       onClick={() => {
-                        initCreateForm();
-                        setMobileWizardStep(1);
-                        toast.message('Formulário limpo.');
+                        if (editing) {
+                          openEdit(editing);
+                          toast.message('Alterações revertidas.');
+                        } else {
+                          initCreateForm();
+                          setMobileWizardStep(1);
+                          toast.message('Formulário limpo.');
+                        }
                       }}
                     >
-                      Limpar
+                      {editing ? 'Repor' : 'Limpar'}
                     </Button>
                     {mobileWizardStep > 1 ? (
                       <Button

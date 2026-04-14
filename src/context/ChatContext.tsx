@@ -198,6 +198,47 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const currentUserId = user?.id ?? 0;
 
+  /**
+   * Som ao receber mensagem nova (realtime).
+   * Nota: alguns navegadores bloqueiam áudio sem interação do utilizador — falha silenciosamente.
+   */
+  const lastChatBeepAtRef = useRef(0);
+  const playChatBeep = () => {
+    const nowMs = Date.now();
+    if (nowMs - lastChatBeepAtRef.current < 900) return; // evita spam em bursts
+    lastChatBeepAtRef.current = nowMs;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 932; // Hz (beep curto, distinto)
+      gain.gain.value = 0.0001;
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      const t = ctx.currentTime;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+
+      oscillator.start(t);
+      oscillator.stop(t + 0.15);
+
+      oscillator.onended = () => {
+        try {
+          ctx.close();
+        } catch {}
+      };
+    } catch {
+      // ignore
+    }
+  };
+
   const setActiveConversationId = useCallback((id: string | null) => {
     activeConversationIdRef.current = id;
   }, []);
@@ -458,6 +499,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             return;
           }
           const msg = rowToMessage(row, conv.participantIds, uid);
+
+          // Desktop: som quando chega mensagem de outra pessoa (mesmo na conversa aberta).
+          if (row.sender_profile_id !== uid) {
+            playChatBeep();
+          }
 
           setLastMessageByConv((prev) => {
             const cur = prev[row.conversation_id];

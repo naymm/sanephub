@@ -6,6 +6,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { formatarDuracaoHorasMinutos, SEGUNDOS_ATRASO_POR_FALTA } from '@/lib/pontoHorario';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import {
   MobileCreateFormDialogContent,
@@ -71,6 +72,7 @@ export default function FaltasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { faltas, addFalta, updateFalta, deleteFalta, colaboradores } = useData();
+  const isMobileViewport = useIsMobileViewport();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoFalta | 'todos'>('todos');
   const [dataInicio, setDataInicio] = useState('');
@@ -125,6 +127,7 @@ export default function FaltasPage() {
     prepareCreate,
     resetModal,
   });
+  const showMobileForm = showMobileCreate || (isMobileViewport && dialogOpen);
 
   const paresAtrasoConsulta = useMemo(() => {
     const colIds = new Set<number>();
@@ -367,8 +370,8 @@ export default function FaltasPage() {
 
       <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
         <MobileCreateFormDialogContent
-          showMobileCreate={showMobileCreate}
-          onCloseMobile={closeMobileCreate}
+          showMobileCreate={showMobileForm}
+          onCloseMobile={() => onDialogOpenChange(false)}
           moduleKicker="Capital Humano"
           screenTitle={editing ? 'Editar falta' : 'Registar falta'}
           desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
@@ -429,7 +432,12 @@ export default function FaltasPage() {
           }
           mobileFooter={
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 flex-1 rounded-xl"
+                onClick={() => onDialogOpenChange(false)}
+              >
                 Cancelar
               </Button>
               <Button

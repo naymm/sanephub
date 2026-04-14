@@ -175,12 +175,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthReady(true);
       return;
     }
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) fetchProfileAndSetUser(session.user.id);
+    // IMPORTANTE: `getSession()` pode falhar (rede / bloqueios WebView / Safari).
+    // Não podemos deixar `isAuthReady` preso em false, senão o UI só aparece após refresh.
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (session?.user) void fetchProfileAndSetUser(session.user.id);
+      })
+      .catch(() => {
+        /* ignora: continua como "sem sessão" */
+      })
+      .finally(() => {
+        setAuthReady(true);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Se houver eventos mas `getSession()` ficou preso, desbloqueia o layout.
       setAuthReady(true);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) fetchProfileAndSetUser(session.user.id);
+      if (session?.user) void fetchProfileAndSetUser(session.user.id);
       else setUser(null);
     });
     return () => subscription.unsubscribe();

@@ -5,6 +5,7 @@ import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import {
   MobileCreateFormDialogContent,
@@ -26,6 +27,7 @@ const NOVO_PATH = '/financas/bancos/novo';
 export default function BancosPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isMobileViewport = useIsMobileViewport();
   const { bancos, addBanco, updateBanco, deleteBanco } = useData();
   const isAdmin = user?.perfil === 'Admin';
 
@@ -120,6 +122,7 @@ export default function BancosPage() {
   };
 
   const title = editing ? 'Editar banco' : 'Novo banco';
+  const showMobileForm = showMobileCreate || (isMobileViewport && dialogOpen);
   const formBody = (
     <div className="grid gap-4 py-2">
       <div className="space-y-2">
@@ -247,8 +250,8 @@ export default function BancosPage() {
 
       <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
         <MobileCreateFormDialogContent
-          showMobileCreate={showMobileCreate}
-          onCloseMobile={closeMobileCreate}
+          showMobileCreate={showMobileForm}
+          onCloseMobile={showMobileCreate ? closeMobileCreate : resetModal}
           moduleKicker="Finanças"
           screenTitle={title}
           desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
@@ -264,7 +267,12 @@ export default function BancosPage() {
           }
           mobileFooter={
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 flex-1 rounded-xl"
+                onClick={showMobileCreate ? closeMobileCreate : () => setDialogOpen(false)}
+              >
                 Cancelar
               </Button>
               <Button type="button" className="min-h-11 flex-1 rounded-xl" onClick={() => void save()}>

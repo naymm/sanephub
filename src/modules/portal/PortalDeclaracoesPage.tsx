@@ -3,6 +3,7 @@ import { useData } from '@/context/DataContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -19,6 +20,10 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  MobileCreateFormDialogContent,
+  mobileCreateDesktopHeader,
+} from '@/components/shared/MobileCreateFormDialogContent';
 import {
   Select,
   SelectContent,
@@ -54,6 +59,7 @@ const PAISES_EMBAIXADA = ['ESPANHA', 'PORTUGAL', 'CHINA', 'EUA', 'BRASIL'];
 
 export default function PortalDeclaracoesPage() {
   const colaboradorId = useColaboradorId();
+  const showMobileCreate = useIsMobileViewport();
   const { declaracoes, addDeclaracao, colaboradoresTodos } = useData();
   const { addNotification } = useNotifications();
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
@@ -262,119 +268,157 @@ export default function PortalDeclaracoesPage() {
       <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Pedir declaração</DialogTitle>
-            <DialogDescription>Solicite uma declaração de serviço. O pedido será tratado pelos Recursos Humanos.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={form.tipo} onValueChange={v => setTipo(v as TipoDeclaracao)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TIPO_OPTIONS.map(t => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {form.tipo === 'Para Banco' && (
+        <MobileCreateFormDialogContent
+          showMobileCreate={showMobileCreate}
+          onCloseMobile={() => setDialogOpen(false)}
+          moduleKicker="Portal"
+          screenTitle="Nova declaração"
+          desktopContentClassName="max-w-lg max-h-[90vh] flex flex-col p-6"
+          desktopHeader={mobileCreateDesktopHeader(
+            'Pedir declaração',
+            'Solicite uma declaração de serviço. O pedido será tratado pelos Recursos Humanos.',
+          )}
+          formBody={
+            <div className="grid min-w-0 gap-4 py-2 overflow-y-auto min-h-0">
               <div className="space-y-2">
-                <Label>Banco</Label>
-                <Popover open={bancoOpen} onOpenChange={setBancoOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={bancoOpen}
-                      className="w-full justify-between font-normal"
-                    >
-                      {form.banco ?? 'Seleccionar banco...'}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Pesquisar banco..." />
-                      <CommandList>
-                        <CommandEmpty>Nenhum banco encontrado.</CommandEmpty>
-                        <CommandGroup>
-                          {BANCOS.map((b) => (
-                            <CommandItem
-                              key={b}
-                              value={b}
-                              onSelect={() => {
-                                setForm(f => ({ ...f, banco: b }));
-                                setBancoOpen(false);
-                              }}
-                            >
-                              <Check className={cn('mr-2 h-4 w-4', form.banco === b ? 'opacity-100' : 'opacity-0')} />
-                              {b}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Label>Tipo</Label>
+                <Select value={form.tipo} onValueChange={v => setTipo(v as TipoDeclaracao)}>
+                  <SelectTrigger className="min-w-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TIPO_OPTIONS.map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            )}
-            {form.tipo === 'Embaixada' && (
-              <div className="space-y-2">
-                <Label>País da Embaixada</Label>
-                <Popover open={paisOpen} onOpenChange={setPaisOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={paisOpen}
-                      className="w-full justify-between font-normal"
-                    >
-                      {form.paisEmbaixada ?? 'Seleccionar país...'}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Pesquisar país..." />
-                      <CommandList>
-                        <CommandEmpty>Nenhum país encontrado.</CommandEmpty>
-                        <CommandGroup>
-                          {PAISES_EMBAIXADA.map((p) => (
-                            <CommandItem
-                              key={p}
-                              value={p}
-                              onSelect={() => {
-                                setForm(f => ({ ...f, paisEmbaixada: p }));
-                                setPaisOpen(false);
-                              }}
-                            >
-                              <Check className={cn('mr-2 h-4 w-4', form.paisEmbaixada === p ? 'opacity-100' : 'opacity-0')} />
-                              {p}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+              {form.tipo === 'Para Banco' && (
+                <div className="space-y-2">
+                  <Label>Banco</Label>
+                  <Popover open={bancoOpen} onOpenChange={setBancoOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={bancoOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        {form.banco ?? 'Seleccionar banco...'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Pesquisar banco..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum banco encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {BANCOS.map((b) => (
+                              <CommandItem
+                                key={b}
+                                value={b}
+                                onSelect={() => {
+                                  setForm(f => ({ ...f, banco: b }));
+                                  setBancoOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', form.banco === b ? 'opacity-100' : 'opacity-0')} />
+                                {b}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+              {form.tipo === 'Embaixada' && (
+                <div className="space-y-2">
+                  <Label>País da Embaixada</Label>
+                  <Popover open={paisOpen} onOpenChange={setPaisOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={paisOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        {form.paisEmbaixada ?? 'Seleccionar país...'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Pesquisar país..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum país encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {PAISES_EMBAIXADA.map((p) => (
+                              <CommandItem
+                                key={p}
+                                value={p}
+                                onSelect={() => {
+                                  setForm(f => ({ ...f, paisEmbaixada: p }));
+                                  setPaisOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', form.paisEmbaixada === p ? 'opacity-100' : 'opacity-0')} />
+                                {p}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+              <div className="space-y-2 min-w-0">
+                <Label>Descrição (opcional)</Label>
+                <Input
+                  value={form.descricao ?? ''}
+                  onChange={e => setForm(f => ({ ...f, descricao: e.target.value || undefined }))}
+                  placeholder="ex: Crédito habitação"
+                  className="min-w-0"
+                />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label>Descrição (opcional)</Label>
-              <Input value={form.descricao ?? ''} onChange={e => setForm(f => ({ ...f, descricao: e.target.value || undefined }))} placeholder="ex: Crédito habitação" />
+              <div className="space-y-2 min-w-0">
+                <Label>Data pedido</Label>
+                <Input
+                  type="date"
+                  value={form.dataPedido}
+                  onChange={e => setForm(f => ({ ...f, dataPedido: e.target.value }))}
+                  className="min-w-0"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Data pedido</Label>
-              <Input type="date" value={form.dataPedido} onChange={e => setForm(f => ({ ...f, dataPedido: e.target.value }))} />
+          }
+          desktopFooter={
+            <DialogFooter className="shrink-0 border-t border-border/80 pt-4 mt-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={!form.dataPedido}>
+                Enviar pedido
+              </Button>
+            </DialogFooter>
+          }
+          mobileFooter={
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11 flex-1 rounded-xl"
+                disabled={!form.dataPedido}
+                onClick={() => void save()}
+              >
+                Enviar
+              </Button>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.dataPedido}>Enviar pedido</Button>
-          </DialogFooter>
-        </DialogContent>
+          }
+        />
       </Dialog>
 
       <Dialog

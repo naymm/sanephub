@@ -29,7 +29,8 @@ export type MobileCreateFormDialogContentProps = {
 };
 
 const fullscreenDialogClasses =
-  'fixed inset-0 left-0 top-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none data-[state=closed]:slide-out-to-top-[0%] data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 [&>button.absolute]:hidden';
+  // Precisa ficar acima do `DialogOverlay` (z-[1050000]) para não aparecer “escurecido” por cima do ecrã.
+  'fixed inset-0 left-0 top-0 z-[1050001] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none data-[state=closed]:slide-out-to-top-[0%] data-[state=open]:slide-in-from-top-[0%] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 [&>button.absolute]:hidden';
 
 /**
  * Conteúdo de Dialog duplo: ecrã completo em mobile (`showMobileCreate`) ou cabeçalho/rodapé clássicos no desktop.

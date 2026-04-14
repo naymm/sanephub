@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import type { Geofence } from '@/types';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
@@ -44,6 +45,7 @@ export default function GeofencesPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { empresas, geofences, addGeofence, updateGeofence, deleteGeofence } = useData();
+  const isMobileViewport = useIsMobileViewport();
   const canEliminar = user?.perfil === 'Admin';
   const { currentEmpresaId } = useTenant();
   const [search, setSearch] = useState('');
@@ -170,6 +172,7 @@ export default function GeofencesPage() {
     `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
 
   const title = editing ? 'Editar zona de trabalho' : 'Nova zona de trabalho';
+  const showMobileForm = showMobileCreate || (isMobileViewport && dialogOpen);
   const formBody = (
     <div className="grid gap-4 py-2">
       <div className="space-y-2">
@@ -388,8 +391,8 @@ export default function GeofencesPage() {
 
       <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
         <MobileCreateFormDialogContent
-          showMobileCreate={showMobileCreate}
-          onCloseMobile={closeMobileCreate}
+          showMobileCreate={showMobileForm}
+          onCloseMobile={() => onDialogOpenChange(false)}
           moduleKicker="Capital Humano"
           screenTitle={title}
           desktopContentClassName="max-w-md max-h-[90vh] overflow-y-auto"
@@ -410,7 +413,12 @@ export default function GeofencesPage() {
           }
           mobileFooter={
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 flex-1 rounded-xl"
+                onClick={() => onDialogOpenChange(false)}
+              >
                 Cancelar
               </Button>
               <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={!form.nome.trim()} onClick={() => void save()}>

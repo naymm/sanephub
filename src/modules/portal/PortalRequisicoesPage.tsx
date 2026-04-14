@@ -487,7 +487,8 @@ export default function PortalRequisicoesPage() {
               <Label>Departamento</Label>
               <Select value={form.departamento || undefined} onValueChange={v => setForm(f => ({ ...f, departamento: v }))}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar departamento" /></SelectTrigger>
-                <SelectContent position="popper" className="z-[100]">
+                {/* Não forçar z-index baixo: o `SelectContent` já vem com z acima de Dialog/Overlay. */}
+                <SelectContent position="popper">
                   {departamentos.map(d => (
                     <SelectItem key={d.id} value={d.nome}>{d.nome}</SelectItem>
                   ))}
@@ -498,7 +499,8 @@ export default function PortalRequisicoesPage() {
               <Label>Centro de custo</Label>
               <Select value={form.centroCusto} onValueChange={v => setForm(f => ({ ...f, centroCusto: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent position="popper" className="z-[100]">
+                {/* Não forçar z-index baixo: o `SelectContent` já vem com z acima de Dialog/Overlay. */}
+                <SelectContent position="popper">
                   {centrosCusto.map(cc => (
                     <SelectItem key={cc.id} value={cc.codigo}>{cc.codigo} — {cc.nome}</SelectItem>
                   ))}
@@ -513,7 +515,8 @@ export default function PortalRequisicoesPage() {
               <Label>Tipo de factura</Label>
               <Select value={form.tipoSolicitacao} onValueChange={v => setForm(f => ({ ...f, tipoSolicitacao: v as typeof f.tipoSolicitacao }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent position="popper" className="z-[100]">
+                {/* Não forçar z-index baixo: o `SelectContent` já vem com z acima de Dialog/Overlay. */}
+                <SelectContent position="popper">
                   <SelectItem value="Factura Proforma">Factura Proforma</SelectItem>
                   <SelectItem value="Somente factura depois da compra">Somente factura depois da compra</SelectItem>
                 </SelectContent>

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import {
   MobileCreateFormDialogContent,
@@ -37,6 +38,7 @@ const NOVO_PATH = '/secretaria/correspondencias/novo';
 export default function CorrespondenciasPage() {
   const navigate = useNavigate();
   const { correspondencias, addCorrespondencia, updateCorrespondencia, deleteCorrespondencia } = useData();
+  const isMobileViewport = useIsMobileViewport();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<Correspondencia['tipo'] | 'todos'>('todos');
   const [prioridadeFilter, setPrioridadeFilter] = useState<Correspondencia['prioridade'] | 'todos'>('todos');
@@ -166,6 +168,7 @@ export default function CorrespondenciasPage() {
   };
 
   const title = editing ? 'Editar correspondência' : 'Nova correspondência';
+  const showMobileForm = showMobileCreate || (isMobileViewport && dialogOpen);
   const saveDisabled =
     !form.remetente.trim() || !form.destinatario.trim() || !form.assunto.trim() || !form.data;
 
@@ -372,8 +375,8 @@ export default function CorrespondenciasPage() {
 
       <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
         <MobileCreateFormDialogContent
-          showMobileCreate={showMobileCreate}
-          onCloseMobile={closeMobileCreate}
+          showMobileCreate={showMobileForm}
+          onCloseMobile={() => onDialogOpenChange(false)}
           moduleKicker="Secretaria Geral"
           screenTitle={title}
           desktopContentClassName="max-w-lg"
@@ -391,7 +394,12 @@ export default function CorrespondenciasPage() {
           }
           mobileFooter={
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 flex-1 rounded-xl"
+                onClick={() => onDialogOpenChange(false)}
+              >
                 Cancelar
               </Button>
               <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>

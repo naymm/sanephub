@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import {
   MobileCreateFormDialogContent,
@@ -42,6 +43,7 @@ const NOVO_PATH = '/capital-humano/ferias/novo';
 export default function FeriasPage() {
   const navigate = useNavigate();
   const { ferias, addFerias, updateFerias, deleteFerias, colaboradores } = useData();
+  const isMobileViewport = useIsMobileViewport();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFerias | 'todos'>('todos');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -101,6 +103,7 @@ export default function FeriasPage() {
     prepareCreate,
     resetModal,
   });
+  const showMobileForm = showMobileCreate || (isMobileViewport && dialogOpen);
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
   const getColabDept = (id: number) => colaboradores.find(c => c.id === id)?.departamento ?? '';
@@ -347,8 +350,8 @@ export default function FeriasPage() {
 
       <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
         <MobileCreateFormDialogContent
-          showMobileCreate={showMobileCreate}
-          onCloseMobile={closeMobileCreate}
+          showMobileCreate={showMobileForm}
+          onCloseMobile={() => onDialogOpenChange(false)}
           moduleKicker="Capital Humano"
           screenTitle={editing ? 'Editar pedido de férias' : 'Novo pedido de férias'}
           desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
@@ -409,7 +412,12 @@ export default function FeriasPage() {
           }
           mobileFooter={
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 flex-1 rounded-xl"
+                onClick={() => onDialogOpenChange(false)}
+              >
                 Cancelar
               </Button>
               <Button

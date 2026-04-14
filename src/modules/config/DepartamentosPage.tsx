@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import {
   MobileCreateFormDialogContent,
@@ -26,6 +27,7 @@ export default function DepartamentosPage() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { departamentos, addDepartamento, updateDepartamento, deleteDepartamento } = useData();
+  const isMobileViewport = useIsMobileViewport();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Departamento | null>(null);
@@ -116,6 +118,7 @@ export default function DepartamentosPage() {
   );
 
   const title = editing ? 'Editar departamento' : 'Novo departamento';
+  const showMobileForm = showMobileCreate || (isMobileViewport && dialogOpen);
 
   if (currentUser?.perfil !== 'Admin') {
     return (
@@ -212,8 +215,8 @@ export default function DepartamentosPage() {
 
       <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
         <MobileCreateFormDialogContent
-          showMobileCreate={showMobileCreate}
-          onCloseMobile={closeMobileCreate}
+          showMobileCreate={showMobileForm}
+          onCloseMobile={() => onDialogOpenChange(false)}
           moduleKicker="Configurações"
           screenTitle={title}
           desktopContentClassName="max-w-sm max-h-[90vh] overflow-y-auto"
@@ -231,7 +234,12 @@ export default function DepartamentosPage() {
           }
           mobileFooter={
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="min-h-11 flex-1 rounded-xl" onClick={closeMobileCreate}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 flex-1 rounded-xl"
+                onClick={() => onDialogOpenChange(false)}
+              >
                 Cancelar
               </Button>
               <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={!form.nome.trim()} onClick={() => void save()}>
