@@ -41,20 +41,32 @@ export function ConversationList({ selectedId, onSelect, onNewConversation }: Co
       c.participantIds.includes(user?.id ?? 0) && conversaSoEntreColaboradores(c.participantIds, usuarios),
   );
 
+  const sortedConversations = useMemo(() => {
+    const copy = [...myConversations];
+    copy.sort((a, b) => {
+      const la = getLastMessage(a.id);
+      const lb = getLastMessage(b.id);
+      const ta = la?.createdAt ? new Date(la.createdAt).getTime() : new Date(a.createdAt).getTime();
+      const tb = lb?.createdAt ? new Date(lb.createdAt).getTime() : new Date(b.createdAt).getTime();
+      return tb - ta;
+    });
+    return copy;
+  }, [myConversations, getLastMessage]);
+
   const filteredConversations = useMemo(() => {
     const q = listQuery.trim().toLowerCase();
-    if (!q) return myConversations;
-    return myConversations.filter(c => {
+    if (!q) return sortedConversations;
+    return sortedConversations.filter(c => {
       const title = getConversationDisplayName(c).toLowerCase();
       const last = getLastMessage(c.id);
       const lastText = (last?.content ?? '').toLowerCase();
       return title.includes(q) || lastText.includes(q);
     });
-  }, [myConversations, listQuery, getConversationDisplayName, getLastMessage]);
+  }, [sortedConversations, listQuery, getConversationDisplayName, getLastMessage]);
 
   const storyChips: StoryChip[] = useMemo(() => {
     const out: StoryChip[] = [];
-    for (const c of myConversations.slice(0, 14)) {
+    for (const c of sortedConversations.slice(0, 14)) {
       if (c.type === 'group') {
         out.push({
           conversationId: c.id,
@@ -76,7 +88,7 @@ export function ConversationList({ selectedId, onSelect, onNewConversation }: Co
       }
     }
     return out;
-  }, [myConversations, user?.id, usuarios, getConversationDisplayName]);
+  }, [sortedConversations, user?.id, usuarios, getConversationDisplayName]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#FAFAFA] md:border-border md:bg-muted/20 md:border-r">

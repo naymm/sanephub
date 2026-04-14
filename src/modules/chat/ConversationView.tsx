@@ -9,6 +9,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 import {
   Popover,
   PopoverContent,
@@ -23,6 +25,7 @@ import {
 import {
   Paperclip,
   Send,
+  Check,
   Pin,
   X,
   Users,
@@ -102,6 +105,8 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     hasMoreOlderMessages,
     loadingOlderMessages,
     sendMessage,
+    editMessage,
+    deleteMessage,
     markConversationAsRead,
     getConversationDisplayName,
     getPinnedMessages,
@@ -122,6 +127,13 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   const loadingOlderScrollRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
   const [localHistoryExtra, setLocalHistoryExtra] = useState(0);
   const [input, setInput] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingOriginal, setEditingOriginal] = useState('');
+  const [replyToMsgId, setReplyToMsgId] = useState<string | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionsMsgId, setActionsMsgId] = useState<string | null>(null);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardQuery, setForwardQuery] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionAnchor, setMentionAnchor] = useState<number>(0);
@@ -174,6 +186,29 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     if (allConvMessagesSorted.length <= take) return allConvMessagesSorted;
     return allConvMessagesSorted.slice(-take);
   }, [usesMessagePagination, allConvMessagesSorted, localHistoryExtra]);
+
+  const actionsMsg = useMemo(
+    () => (actionsMsgId ? messages.find((m) => m.id === actionsMsgId) ?? null : null),
+    [actionsMsgId, messages],
+  );
+
+  const forwardCandidates = useMemo(() => {
+    const q = forwardQuery.trim().toLowerCase();
+    const items = conversations
+      .filter((c) => (c.participantIds ?? []).includes(user?.id ?? 0))
+      .map((c) => {
+        const last =
+          messages
+            .filter((m) => m.conversationId === c.id)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ??
+          null;
+        const ts = last ? new Date(last.createdAt).getTime() : new Date(c.createdAt).getTime();
+        return { c, ts, name: getConversationDisplayName(c) };
+      })
+      .sort((a, b) => b.ts - a.ts);
+    if (!q) return items;
+    return items.filter((x) => x.name.toLowerCase().includes(q));
+  }, [conversations, messages, forwardQuery, getConversationDisplayName, user?.id]);
 
   const hasMoreLocalOlder =
     !usesMessagePagination && allConvMessagesSorted.length > CHAT_PAGE_SIZE + localHistoryExtra;
@@ -342,13 +377,57 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     if (now - lastSendAtRef.current < 280) return;
     lastSendAtRef.current = now;
     nearBottomRef.current = true;
-    sendMessage(conversationId, text || '(ficheiro anexado)', attachments);
+
+    if (editingMessageId) {
+      void editMessage(editingMessageId, text).then((ok) => {
+        if (!ok) return;
+        setEditingMessageId(null);
+        setEditingOriginal('');
+        setReplyToMsgId(null);
+        mobileInputDraftRef.current = '';
+        setInput('');
+        setAttachments([]);
+      });
+      return;
+    }
+
+    sendMessage(conversationId, text || '(ficheiro anexado)', attachments, {
+      replyToMessageId: replyToMsgId ?? undefined,
+    });
     mobileInputDraftRef.current = '';
     setInput('');
     setAttachments([]);
+    setReplyToMsgId(null);
   };
 
   handleSendRef.current = handleSend;
+
+  const replyMsg = useMemo(
+    () => (replyToMsgId ? convMessages.find((m) => m.id === replyToMsgId) ?? null : null),
+    [replyToMsgId, convMessages],
+  );
+
+  const beginEdit = useCallback(
+    (msg: (typeof convMessages)[number]) => {
+      if (msg.senderId !== (user?.id ?? 0)) return;
+      const readByOthers = (msg.readBy ?? []).some((id) => id !== (user?.id ?? 0));
+      if (readByOthers || msg.status === 'read') return;
+      setEditingMessageId(msg.id);
+      setEditingOriginal(msg.content);
+      setAttachments([]);
+      setInput(msg.content);
+      mobileInputDraftRef.current = msg.content;
+      requestAnimationFrame(() => {
+        const ta =
+          mobileComposerTextareaRef.current ??
+          (typeof document !== 'undefined'
+            ? (document.getElementById(MOBILE_CHAT_MSG_INPUT_ID) as HTMLTextAreaElement | null)
+            : null);
+        ta?.focus();
+      });
+    },
+    [user?.id],
+  );
 
   /**
    * PWA iOS: `touchend` nativo com `{ passive: false }` (React pode registar touch como passivo).
@@ -796,6 +875,13 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                   message={m}
                   senderName={getSenderName(m.senderId)}
                   onPin={togglePinMessage}
+                  onOpenActions={(msg) => {
+                    setActionsMsgId(msg.id);
+                    setActionsOpen(true);
+                  }}
+                  onEdit={(msg) => {
+                    beginEdit(msg);
+                  }}
                 />
               </div>
             );
@@ -803,9 +889,237 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
         </div>
       </div>
 
+      {/* Mobile: action sheet (hold na mensagem) */}
+      <Dialog
+        open={actionsOpen}
+        onOpenChange={(o) => {
+          setActionsOpen(o);
+          if (!o) setActionsMsgId(null);
+        }}
+      >
+        <DialogContent
+          className={cn(
+            'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:top-auto max-md:left-0 max-md:right-0',
+            'max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0',
+            'max-md:rounded-t-3xl max-md:border max-md:border-white/15 max-md:bg-background/85 max-md:p-0 max-md:backdrop-blur-2xl',
+            'max-md:data-[state=open]:slide-in-from-bottom-[100%] max-md:data-[state=closed]:slide-out-to-bottom-[100%]',
+            'max-md:data-[state=open]:zoom-in-95 max-md:data-[state=closed]:zoom-out-95',
+            '[&>button.absolute]:hidden',
+          )}
+        >
+          <div className="px-4 pb-[max(0.9rem,env(safe-area-inset-bottom,0px))] pt-3">
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-foreground/10" />
+            <div className="rounded-2xl bg-muted/30 p-3 text-sm">
+              <div className="line-clamp-3 whitespace-pre-wrap break-words text-foreground/90">
+                {actionsMsg?.content ?? ''}
+              </div>
+            </div>
+
+            <div className="mt-3 overflow-hidden rounded-2xl border border-border/60 bg-background/70">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-[15px] hover:bg-muted/40"
+                onClick={() => {
+                  setActionsOpen(false);
+                  if (actionsMsg) {
+                    setReplyToMsgId(actionsMsg.id);
+                    requestAnimationFrame(() => {
+                      const ta =
+                        mobileComposerTextareaRef.current ??
+                        (typeof document !== 'undefined'
+                          ? (document.getElementById(MOBILE_CHAT_MSG_INPUT_ID) as HTMLTextAreaElement | null)
+                          : null);
+                      ta?.focus();
+                    });
+                  }
+                }}
+              >
+                <span>Responder</span>
+              </button>
+              <div className="h-px bg-border/60" />
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-[15px] hover:bg-muted/40"
+                onClick={() => {
+                  setActionsOpen(false);
+                  if (!actionsMsg) return;
+                  setForwardQuery('');
+                  setForwardOpen(true);
+                }}
+              >
+                <span>Reencaminhar</span>
+              </button>
+              <div className="h-px bg-border/60" />
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-[15px] hover:bg-muted/40"
+                onClick={() => {
+                  if (!actionsMsg?.content) return;
+                  void navigator.clipboard?.writeText(actionsMsg.content);
+                  setActionsOpen(false);
+                  toast.success('Copiado.');
+                }}
+              >
+                <span>Copiar</span>
+              </button>
+              {actionsMsg &&
+              actionsMsg.senderId === (user?.id ?? 0) &&
+              !((actionsMsg.readBy ?? []).some((id) => id !== (user?.id ?? 0)) || actionsMsg.status === 'read') ? (
+                <>
+                  <div className="h-px bg-border/60" />
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-4 py-3 text-left text-[15px] hover:bg-muted/40"
+                    onClick={() => {
+                      beginEdit(actionsMsg);
+                      setActionsOpen(false);
+                    }}
+                  >
+                    <span>Editar</span>
+                  </button>
+                </>
+              ) : null}
+              <div className="h-px bg-border/60" />
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-[15px] text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  const msg = actionsMsg;
+                  if (!msg) return;
+                  if (msg.senderId !== (user?.id ?? 0)) {
+                    toast.message('Só pode eliminar as suas mensagens.');
+                    setActionsOpen(false);
+                    return;
+                  }
+                  void deleteMessage(msg.id);
+                  setActionsOpen(false);
+                }}
+              >
+                <span>Eliminar</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="mt-3 w-full rounded-2xl border border-border/60 bg-background/70 px-4 py-3 text-[15px] font-semibold hover:bg-muted/40"
+              onClick={() => setActionsOpen(false)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mobile/Desktop: reencaminhar -> escolher conversa destino */}
+      <Dialog
+        open={forwardOpen}
+        onOpenChange={(o) => {
+          setForwardOpen(o);
+        }}
+      >
+        <DialogContent className="max-w-lg w-[calc(100vw-2rem)] p-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">Reencaminhar</div>
+              <div className="text-xs text-muted-foreground">Escolha a conversa</div>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setForwardOpen(false)}
+            >
+              Fechar
+            </Button>
+          </div>
+
+          <div className="p-4">
+            <Input
+              value={forwardQuery}
+              onChange={(e) => setForwardQuery(e.target.value)}
+              placeholder="Pesquisar conversa…"
+              className="h-10"
+            />
+          </div>
+
+          <div className="max-h-[60vh] overflow-auto px-2 pb-3">
+            {forwardCandidates.length === 0 ? (
+              <div className="px-3 pb-3 text-sm text-muted-foreground">Sem resultados.</div>
+            ) : (
+              <div className="space-y-1">
+                {forwardCandidates.map(({ c, name }) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left hover:bg-muted/40"
+                    onClick={() => {
+                      if (!actionsMsg) return;
+                      const forwardedAttachments = (actionsMsg.attachments ?? []).map((a) => ({
+                        ...a,
+                        id: '',
+                      }));
+                      sendMessage(c.id, actionsMsg.content ?? '', forwardedAttachments, {
+                        forward: {
+                          messageId: actionsMsg.id,
+                          senderId: actionsMsg.senderId,
+                          senderName: getSenderName(actionsMsg.senderId),
+                          contentSnippet: (actionsMsg.content ?? '').slice(0, 160),
+                        },
+                      });
+                      setForwardOpen(false);
+                      toast.success('Mensagem reencaminhada.');
+                    }}
+                  >
+                    <span className="min-w-0 truncate text-sm font-medium">{name}</span>
+                    <span className="text-xs text-muted-foreground">Enviar</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Um compositor montado de cada vez (evita dois Textarea controlados no DOM — problemas em mobile). */}
       {!isMobileComposer ? (
       <div className="shrink-0 border-t border-border bg-muted/20 p-3 pb-3">
+        {replyMsg && !editingMessageId && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs">
+            <div className="min-w-0">
+              <div className="font-semibold">A responder</div>
+              <div className="truncate text-muted-foreground">{replyMsg.content}</div>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setReplyToMsgId(null)}
+            >
+              Cancelar
+            </Button>
+          </div>
+        )}
+        {editingMessageId && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs">
+            <div className="min-w-0">
+              <div className="font-semibold">A editar mensagem</div>
+              <div className="truncate text-muted-foreground">{editingOriginal}</div>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                setEditingMessageId(null);
+                setEditingOriginal('');
+              }}
+            >
+              Cancelar
+            </Button>
+          </div>
+        )}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {attachments.map(a => (
@@ -877,13 +1191,50 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
             onClick={handleSend}
             disabled={composerSendDisabled}
           >
-            <Send className="h-4 w-4" />
+            {editingMessageId ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
       </div>
       ) : (
       <ChatMobileComposerPortal bottomInset={keyboardBottomInset}>
         <div className="select-none border-t border-zinc-200/80 bg-[#ECECEF] px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]">
+          {replyMsg && !editingMessageId && (
+            <div className="mb-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-semibold text-zinc-900">A responder</div>
+                  <div className="truncate text-zinc-500">{replyMsg.content}</div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-full px-2 py-1 text-zinc-600 hover:bg-zinc-100"
+                  onClick={() => setReplyToMsgId(null)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+          {editingMessageId && (
+            <div className="mb-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-semibold text-zinc-900">A editar mensagem</div>
+                  <div className="truncate text-zinc-500">{editingOriginal}</div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-full px-2 py-1 text-zinc-600 hover:bg-zinc-100"
+                  onClick={() => {
+                    setEditingMessageId(null);
+                    setEditingOriginal('');
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map(a => (
@@ -1048,7 +1399,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                   'h-12 w-12 min-h-[52px] min-w-[52px] shrink-0 cursor-pointer touch-manipulation rounded-full border-0 bg-[hsl(var(--primary))] p-0 text-primary-foreground opacity-100 shadow-md [-webkit-tap-highlight-color:transparent] hover:bg-[hsl(var(--primary)/0.92)] active:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:h-5 [&_svg]:w-5',
                 )}
               >
-                <Send className="h-5 w-5" aria-hidden />
+                {editingMessageId ? <Check className="h-5 w-5" aria-hidden /> : <Send className="h-5 w-5" aria-hidden />}
               </button>
             </span>
           </form>

@@ -1,5 +1,5 @@
 /** Estado da mensagem: enviada, entregue, lida */
-export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
 export type ConversationType = 'private' | 'group';
 
@@ -18,6 +18,21 @@ export interface ChatMessage {
   senderId: number;
   content: string;
   createdAt: string;
+  /** Marcador local de edição (não persistido no DB atualmente). */
+  editedAt?: string;
+  /** Reply metadata (persistido via campo `attachments` no Supabase). */
+  replyTo?: {
+    messageId: string;
+    senderId: number;
+    senderName?: string;
+    contentSnippet: string;
+  };
+  forwardedFrom?: {
+    messageId: string;
+    senderId: number;
+    senderName?: string;
+    contentSnippet: string;
+  };
   status: MessageStatus;
   /** IDs dos utilizadores que já leram (para status read) */
   readBy: number[];

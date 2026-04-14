@@ -474,7 +474,7 @@ export default function Dashboard() {
         <div className="absolute inset-0 opacity-[0.15] bg-[radial-gradient(circle_at_top,_transparent_0,_rgba(255,255,255,0.9)_45%,_transparent_60%)]" />
         <div className="relative p-6 sm:p-8">
           <h1 className="text-white text-xl lg:text-2xl font-semibold tracking-tight">
-            Olá, {user.nome.split(' ')[0]}! Bem vindo(a) à intranet
+            Olá, {user.nome.split(' ')[0]}
           </h1>
           <p className="text-white/90 text-sm mt-1">
             Resumo e atalhos dos módulos a que tem acesso
@@ -603,7 +603,6 @@ export default function Dashboard() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-foreground">Notícias & Atualizações</h2>
-              <p className="text-sm text-muted-foreground mt-1">Resumo do que está a acontecer no sistema.</p>
             </div>
             <Button variant="outline" onClick={() => navigate('/comunicacao-interna/noticias')}>
               Ver mais

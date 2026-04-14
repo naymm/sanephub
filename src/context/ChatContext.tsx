@@ -110,14 +110,28 @@ function deriveMessageStatus(
   }
   const others = participantIds.filter((id) => id !== row.sender_profile_id);
   if (others.length === 0) return 'sent';
-  return others.every((id) => readBy.includes(id)) ? 'read' : 'sent';
+  // Estilo WhatsApp:
+  // - sent: ninguém além do autor confirmou (read_by só tem o autor)
+  // - delivered: pelo menos 1 destinatário confirmou
+  // - read: todos os destinatários confirmaram
+  const anyOther = others.some((id) => readBy.includes(id));
+  const allOthers = others.every((id) => readBy.includes(id));
+  if (allOthers) return 'read';
+  if (anyOther) return 'delivered';
+  return 'sent';
 }
 
 function rowToMessage(row: MsgRow, participantIds: number[], currentUserId: number): ChatMessage {
   const raw = row.attachments;
+  const parsed =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as any)
+      : null;
   const attachments: ChatAttachment[] = Array.isArray(raw)
     ? (raw as unknown as ChatAttachment[])
-    : [];
+    : Array.isArray(parsed?.attachments)
+      ? (parsed.attachments as ChatAttachment[])
+      : [];
   return {
     id: row.id,
     conversationId: row.conversation_id,
@@ -127,6 +141,24 @@ function rowToMessage(row: MsgRow, participantIds: number[], currentUserId: numb
     status: deriveMessageStatus(row, participantIds, currentUserId),
     readBy: [...(row.read_by_profile_ids ?? [])],
     attachments,
+    replyTo:
+      parsed?.reply && typeof parsed.reply === 'object'
+        ? {
+            messageId: String(parsed.reply.messageId ?? ''),
+            senderId: Number(parsed.reply.senderId ?? 0),
+            senderName: parsed.reply.senderName ? String(parsed.reply.senderName) : undefined,
+            contentSnippet: String(parsed.reply.contentSnippet ?? ''),
+          }
+        : undefined,
+    forwardedFrom:
+      parsed?.forward && typeof parsed.forward === 'object'
+        ? {
+            messageId: String(parsed.forward.messageId ?? ''),
+            senderId: Number(parsed.forward.senderId ?? 0),
+            senderName: parsed.forward.senderName ? String(parsed.forward.senderName) : undefined,
+            contentSnippet: String(parsed.forward.contentSnippet ?? ''),
+          }
+        : undefined,
     pinned: row.pinned,
     pinnedAt: row.pinned_at ?? undefined,
     pinnedById: row.pinned_by_profile_id ?? undefined,
@@ -156,7 +188,17 @@ interface ChatContextType {
   loadOlderMessages: (conversationId: string) => Promise<void>;
   hasMoreOlderMessages: (conversationId: string) => boolean;
   loadingOlderMessages: (conversationId: string) => boolean;
-  sendMessage: (conversationId: string, content: string, attachments?: ChatAttachment[]) => void;
+  sendMessage: (
+    conversationId: string,
+    content: string,
+    attachments?: ChatAttachment[],
+    opts?: {
+      replyToMessageId?: string;
+      forward?: { messageId: string; senderId: number; senderName?: string; contentSnippet: string };
+    }
+  ) => void;
+  editMessage: (messageId: string, content: string) => Promise<boolean>;
+  deleteMessage: (messageId: string) => Promise<boolean>;
   createPrivateConversation: (otherUserId: number) => Promise<string | null>;
   createGroupConversation: (name: string, participantIds: number[]) => Promise<string>;
   removeParticipantFromGroup: (conversationId: string, userId: number) => Promise<boolean>;
@@ -545,7 +587,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
           void refreshUnreadSummary();
 
-          setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+          // Se a mensagem atualizada for a "última" da conversa, atualizar a prévia na lista.
+          setLastMessageByConv((prev) => {
+            const cur = prev[row.conversation_id];
+            if (cur && cur.id === msg.id) {
+              return { ...prev, [row.conversation_id]: msg };
+            }
+            return prev;
+          });
+
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== msg.id) return m;
+              const contentChanged = m.content !== msg.content;
+              return {
+                ...msg,
+                editedAt: contentChanged ? new Date().toISOString() : m.editedAt,
+              };
+            }),
+          );
         },
       )
       .subscribe();
@@ -615,13 +675,51 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    (conversationId: string, content: string, attachments: ChatAttachment[] = []) => {
+    (
+      conversationId: string,
+      content: string,
+      attachments: ChatAttachment[] = [],
+      opts?: { replyToMessageId?: string },
+    ) => {
       if (!currentUserId) {
         toast.error('Sessão inválida. Volte a iniciar sessão.', { duration: 12000 });
         return;
       }
       const text = content.trim() || '(ficheiro anexado)';
       const withIds = attachments.map((a) => ({ ...a, id: a.id || genId('att') }));
+      const replyTargetId = opts?.replyToMessageId;
+      const replyTarget =
+        replyTargetId ? messagesRef.current.find((m) => m.id === replyTargetId) ?? null : null;
+      const replyPayload =
+        replyTarget && replyTarget.conversationId === conversationId
+          ? {
+              messageId: replyTarget.id,
+              senderId: replyTarget.senderId,
+              senderName: undefined,
+              contentSnippet: (replyTarget.content ?? '').slice(0, 160),
+            }
+          : null;
+      const attachmentsPayload = replyPayload
+        ? ({ attachments: withIds, reply: replyPayload } as unknown as Json)
+        : (withIds as unknown as Json);
+
+      const fwd = (opts as any)?.forward;
+      const forwardPayload =
+        fwd && typeof fwd === 'object'
+          ? {
+              messageId: String(fwd.messageId ?? ''),
+              senderId: Number(fwd.senderId ?? 0),
+              senderName: fwd.senderName ? String(fwd.senderName) : undefined,
+              contentSnippet: String(fwd.contentSnippet ?? ''),
+            }
+          : null;
+
+      const attachmentsPayload2 =
+        forwardPayload && replyPayload
+          ? ({ attachments: withIds, reply: replyPayload, forward: forwardPayload } as unknown as Json)
+          : forwardPayload
+            ? ({ attachments: withIds, forward: forwardPayload } as unknown as Json)
+            : attachmentsPayload;
 
       if (supabaseMode) {
         if (!supabase) {
@@ -637,9 +735,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           senderId: currentUserId,
           content: text,
           createdAt: new Date().toISOString(),
-          status: 'sent',
+          status: 'sending',
           readBy: [currentUserId],
           attachments: withIds,
+          replyTo: replyPayload
+            ? {
+                messageId: replyPayload.messageId,
+                senderId: replyPayload.senderId,
+                senderName: replyPayload.senderName ?? undefined,
+                contentSnippet: replyPayload.contentSnippet,
+              }
+            : undefined,
+          forwardedFrom: forwardPayload
+            ? {
+                messageId: forwardPayload.messageId,
+                senderId: forwardPayload.senderId,
+                senderName: forwardPayload.senderName ?? undefined,
+                contentSnippet: forwardPayload.contentSnippet,
+              }
+            : undefined,
           pinned: false,
         };
         initialPageLoadedRef.current.add(conversationId);
@@ -651,7 +765,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             conversation_id: conversationId,
             sender_profile_id: currentUserId,
             content: text,
-            attachments: withIds as unknown as Json,
+            attachments: attachmentsPayload2,
             read_by_profile_ids: [currentUserId],
             pinned: false,
           });
@@ -662,7 +776,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               duration: 12000,
               description: error.code ? `Código: ${error.code}` : undefined,
             });
+            return;
           }
+          // Confirmação: já está no servidor.
+          setMessages((prev) =>
+            prev.map((m) => (m.id === id ? { ...m, status: 'sent' as MessageStatus } : m)),
+          );
         })();
         return;
       }
@@ -676,6 +795,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         status: 'sent',
         readBy: [currentUserId],
         attachments: withIds,
+        replyTo: replyPayload
+          ? {
+              messageId: replyPayload.messageId,
+              senderId: replyPayload.senderId,
+              senderName: replyPayload.senderName ?? undefined,
+              contentSnippet: replyPayload.contentSnippet,
+            }
+          : undefined,
+        forwardedFrom: forwardPayload
+          ? {
+              messageId: forwardPayload.messageId,
+              senderId: forwardPayload.senderId,
+              senderName: forwardPayload.senderName ?? undefined,
+              contentSnippet: forwardPayload.contentSnippet,
+            }
+          : undefined,
         pinned: false,
       };
       setMessages((prev) => [...prev, newMsg]);
@@ -828,6 +963,91 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [currentUserId, refreshUnreadSummary],
   );
 
+  const editMessage = useCallback(
+    async (messageId: string, content: string): Promise<boolean> => {
+      const text = content.trim();
+      if (!text) return false;
+      const target = messagesRef.current.find((m) => m.id === messageId);
+      if (!target) return false;
+      if (target.senderId !== currentUserId) return false;
+      // Só permite editar enquanto ninguém além do autor leu/confirmou (estilo WhatsApp).
+      // `readBy` contém o autor e, quando lida/confirmada por outros, inclui IDs adicionais.
+      const readByOthers = (target.readBy ?? []).some((id) => id !== currentUserId);
+      if (readByOthers || target.status === 'read') {
+        toast.message('Só pode editar mensagens que ainda não foram lidas.');
+        return false;
+      }
+
+      const nowIso = new Date().toISOString();
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, content: text, editedAt: nowIso } : m)),
+      );
+      setLastMessageByConv((prev) => {
+        const cur = prev[target.conversationId];
+        if (cur && cur.id === messageId) {
+          return { ...prev, [target.conversationId]: { ...cur, content: text, editedAt: nowIso } };
+        }
+        return prev;
+      });
+
+      if (supabaseMode && supabase) {
+        const { error } = await supabase
+          .from('intranet_chat_messages')
+          .update({ content: text })
+          .eq('id', messageId);
+        if (error) {
+          console.error('[chat] editMessage', error);
+          toast.error('Não foi possível editar a mensagem.');
+          return false;
+        }
+      }
+      return true;
+    },
+    [currentUserId, supabaseMode],
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId: string): Promise<boolean> => {
+      const target = messagesRef.current.find((m) => m.id === messageId);
+      if (!target) return false;
+      if (target.senderId !== currentUserId) return false;
+
+      // Soft-delete: mantém a mensagem na conversa e sincroniza via UPDATE.
+      const nowIso = new Date().toISOString();
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, content: '🗑️ Mensagem eliminada', attachments: [], editedAt: nowIso }
+            : m,
+        ),
+      );
+      setLastMessageByConv((prev) => {
+        const cur = prev[target.conversationId];
+        if (cur && cur.id === messageId) {
+          return {
+            ...prev,
+            [target.conversationId]: { ...cur, content: '🗑️ Mensagem eliminada', attachments: [], editedAt: nowIso },
+          };
+        }
+        return prev;
+      });
+
+      if (supabaseMode && supabase) {
+        const { error } = await supabase
+          .from('intranet_chat_messages')
+          .update({ content: '🗑️ Mensagem eliminada', attachments: [] as unknown as Json })
+          .eq('id', messageId);
+        if (error) {
+          console.error('[chat] deleteMessage', error);
+          toast.error('Não foi possível eliminar a mensagem.');
+          return false;
+        }
+      }
+      return true;
+    },
+    [currentUserId, supabaseMode],
+  );
+
   const togglePinMessage = useCallback(
     (messageId: string) => {
       const target = messages.find((m) => m.id === messageId);
@@ -969,6 +1189,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     hasMoreOlderMessages,
     loadingOlderMessages,
     sendMessage,
+    editMessage,
+    deleteMessage,
     createPrivateConversation,
     createGroupConversation,
     removeParticipantFromGroup,
