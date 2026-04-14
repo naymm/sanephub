@@ -1,4 +1,13 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  ReactNode,
+} from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   conversaSoEntreColaboradores,
@@ -199,6 +208,8 @@ interface ChatContextType {
   ) => void;
   editMessage: (messageId: string, content: string) => Promise<boolean>;
   deleteMessage: (messageId: string) => Promise<boolean>;
+  deleteMessageForMe: (messageId: string) => boolean;
+  isMessageHiddenForMe: (messageId: string) => boolean;
   createPrivateConversation: (otherUserId: number) => Promise<string | null>;
   createGroupConversation: (name: string, participantIds: number[]) => Promise<string>;
   removeParticipantFromGroup: (conversationId: string, userId: number) => Promise<boolean>;
@@ -225,6 +236,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [unreadByConv, setUnreadByConv] = useState<Record<string, number>>({});
   const [hasMoreOlderByConv, setHasMoreOlderByConv] = useState<Record<string, boolean>>({});
   const [loadingOlderByConv, setLoadingOlderByConv] = useState<Record<string, boolean>>({});
+  const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -239,6 +251,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const loadOlderLockRef = useRef<Set<string>>(new Set());
 
   const currentUserId = user?.id ?? 0;
+
+  const hiddenStorageKey = useMemo(
+    () => `sanep.chat.hiddenMessages.v1.${currentUserId}`,
+    [currentUserId],
+  );
+
+  useEffect(() => {
+    try {
+      if (!currentUserId) return;
+      const raw = localStorage.getItem(hiddenStorageKey);
+      if (!raw) {
+        setHiddenMessageIds(new Set());
+        return;
+      }
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        setHiddenMessageIds(new Set(arr.filter((x) => typeof x === 'string')));
+      }
+    } catch {
+      setHiddenMessageIds(new Set());
+    }
+  }, [hiddenStorageKey, currentUserId]);
+
+  useEffect(() => {
+    try {
+      if (!currentUserId) return;
+      localStorage.setItem(hiddenStorageKey, JSON.stringify(Array.from(hiddenMessageIds)));
+    } catch {
+      /* ignore */
+    }
+  }, [hiddenMessageIds, hiddenStorageKey, currentUserId]);
 
   /**
    * Som ao receber mensagem nova (realtime).
@@ -625,20 +668,42 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [currentUserId, usuarios],
   );
 
+  const isMessageHiddenForMe = useCallback(
+    (messageId: string) => {
+      return hiddenMessageIds.has(messageId);
+    },
+    [hiddenMessageIds],
+  );
+
+  const deleteMessageForMe = useCallback(
+    (messageId: string): boolean => {
+      if (!currentUserId) return false;
+      setHiddenMessageIds((prev) => {
+        const next = new Set(prev);
+        next.add(messageId);
+        return next;
+      });
+      return true;
+    },
+    [currentUserId],
+  );
+
   const getLastMessage = useCallback(
     (conversationId: string): ChatMessage | null => {
       if (supabaseMode) {
         const fromMap = lastMessageByConv[conversationId];
-        if (fromMap) return fromMap;
+        if (fromMap && !hiddenMessageIds.has(fromMap.id)) return fromMap;
       }
-      const convMessages = messages.filter((m) => m.conversationId === conversationId);
+      const convMessages = messages.filter(
+        (m) => m.conversationId === conversationId && !hiddenMessageIds.has(m.id),
+      );
       return (
         convMessages.sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         )[0] ?? null
       );
     },
-    [messages, lastMessageByConv],
+    [messages, lastMessageByConv, hiddenMessageIds],
   );
 
   const getUnreadCount = useCallback(
@@ -1191,6 +1256,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     sendMessage,
     editMessage,
     deleteMessage,
+    deleteMessageForMe,
+    isMessageHiddenForMe,
     createPrivateConversation,
     createGroupConversation,
     removeParticipantFromGroup,

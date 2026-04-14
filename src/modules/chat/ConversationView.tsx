@@ -107,6 +107,8 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     sendMessage,
     editMessage,
     deleteMessage,
+    deleteMessageForMe,
+    isMessageHiddenForMe,
     markConversationAsRead,
     getConversationDisplayName,
     getPinnedMessages,
@@ -134,6 +136,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   const [actionsMsgId, setActionsMsgId] = useState<string | null>(null);
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardQuery, setForwardQuery] = useState('');
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionAnchor, setMentionAnchor] = useState<number>(0);
@@ -178,14 +181,19 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     [messages, conversationId],
   );
 
+  const allConvMessagesSortedVisible = useMemo(
+    () => allConvMessagesSorted.filter((m) => !isMessageHiddenForMe(m.id)),
+    [allConvMessagesSorted, isMessageHiddenForMe],
+  );
+
   const convMessages = useMemo(() => {
     if (usesMessagePagination) {
-      return allConvMessagesSorted;
+      return allConvMessagesSortedVisible;
     }
     const take = CHAT_PAGE_SIZE + localHistoryExtra;
-    if (allConvMessagesSorted.length <= take) return allConvMessagesSorted;
-    return allConvMessagesSorted.slice(-take);
-  }, [usesMessagePagination, allConvMessagesSorted, localHistoryExtra]);
+    if (allConvMessagesSortedVisible.length <= take) return allConvMessagesSortedVisible;
+    return allConvMessagesSortedVisible.slice(-take);
+  }, [usesMessagePagination, allConvMessagesSortedVisible, localHistoryExtra]);
 
   const actionsMsg = useMemo(
     () => (actionsMsgId ? messages.find((m) => m.id === actionsMsgId) ?? null : null),
@@ -211,7 +219,8 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   }, [conversations, messages, forwardQuery, getConversationDisplayName, user?.id]);
 
   const hasMoreLocalOlder =
-    !usesMessagePagination && allConvMessagesSorted.length > CHAT_PAGE_SIZE + localHistoryExtra;
+    !usesMessagePagination &&
+    allConvMessagesSortedVisible.length > CHAT_PAGE_SIZE + localHistoryExtra;
 
   useEffect(() => {
     setActiveConversationId(conversationId);
@@ -991,8 +1000,15 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                     setActionsOpen(false);
                     return;
                   }
-                  void deleteMessage(msg.id);
-                  setActionsOpen(false);
+                  const readByOthers = (msg.readBy ?? []).some((id) => id !== (user?.id ?? 0));
+                  if (readByOthers || msg.status === 'read') {
+                    deleteMessageForMe(msg.id);
+                    toast.success('Apagada para si.');
+                    setActionsOpen(false);
+                    return;
+                  }
+                  // Ainda não foi lida: perguntar “para mim” ou “para todos”.
+                  setDeleteConfirmOpen(true);
                 }}
               >
                 <span>Eliminar</span>
@@ -1076,6 +1092,69 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                 ))}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Eliminar: confirmar “para mim” vs “para todos” (só quando ainda não foi lida) */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(o) => {
+          setDeleteConfirmOpen(o);
+        }}
+      >
+        <DialogContent className="max-w-md w-[calc(100vw-2rem)] p-0 overflow-hidden">
+          <div className="border-b border-border px-4 py-3">
+            <div className="text-sm font-semibold">Eliminar mensagem</div>
+            <div className="text-xs text-muted-foreground">
+              A mensagem ainda não foi lida. Pretende eliminar para si ou para todos?
+            </div>
+          </div>
+
+          <div className="p-4">
+            <div className="rounded-xl bg-muted/30 p-3 text-sm">
+              <div className="line-clamp-3 whitespace-pre-wrap break-words text-foreground/90">
+                {actionsMsg?.content ?? ''}
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  if (!actionsMsg) return;
+                  deleteMessageForMe(actionsMsg.id);
+                  toast.success('Apagada para si.');
+                  setDeleteConfirmOpen(false);
+                  setActionsOpen(false);
+                }}
+              >
+                Apagar para mim
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  const msg = actionsMsg;
+                  if (!msg) return;
+                  void deleteMessage(msg.id).then((ok) => {
+                    if (ok) toast.success('Eliminada para todos.');
+                  });
+                  setDeleteConfirmOpen(false);
+                  setActionsOpen(false);
+                }}
+              >
+                Apagar para todos
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setDeleteConfirmOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
