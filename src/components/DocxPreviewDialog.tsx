@@ -21,7 +21,7 @@ import {
   PREVIEW_HEADER_SAFE_TOP,
 } from '@/lib/documentPreviewMobileClasses';
 
-/** Visualizador Microsoft (requer URL HTTPS pública acessível na internet). */
+/** Visualizador Microsoft (requer URL HTTPS pública acessível na internet na Internet). */
 const OFFICE_EMBED_BASE = 'https://view.officeapps.live.com/op/embed.aspx';
 
 function officeEmbedUrl(publicFileUrl: string): string {
