@@ -205,7 +205,7 @@ export function IntranetTopbar() {
           >
             <PopoverTrigger asChild>
               <button
-                className={iconBtnClass}
+                className={cn(iconBtnClass, 'max-md:hidden')}
                 aria-label="Abrir módulos"
                 title="Módulos"
                 onClick={() => setSelectedPrincipalModuleId(null)}
