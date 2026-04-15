@@ -7,6 +7,8 @@ import { MobilePinUnlockOverlay } from '@/components/mobile/MobilePinUnlockOverl
 const SESSION_UNLOCK_KEY = 'sanep_msl_unlocked_uid';
 /** Bypass temporário do bloqueio por "segundo plano" (ex.: abrir um PDF em nova aba). */
 const BG_BYPASS_UNTIL_KEY = 'sanep_msl_bg_bypass_until';
+/** No desktop, o refresh pode limpar/recriar `sessionStorage` em alguns cenários; persistimos também aqui. */
+const DESKTOP_UNLOCK_KEY = 'sanep_msl_unlocked_uid_desktop';
 
 /** Sem interação durante este tempo → pedir PIN (mobile e desktop). */
 const IDLE_MS = 10 * 60_000;
@@ -45,7 +47,14 @@ export function useOptionalMobileSessionLock(): Ctx | null {
 
 function readUnlockedUserId(): string | null {
   try {
-    return sessionStorage.getItem(SESSION_UNLOCK_KEY);
+    const sid = sessionStorage.getItem(SESSION_UNLOCK_KEY);
+    if (sid) return sid;
+    // Fallback: em desktop queremos sobreviver a refresh.
+    try {
+      return localStorage.getItem(DESKTOP_UNLOCK_KEY);
+    } catch {
+      return null;
+    }
   } catch {
     return null;
   }
@@ -57,11 +66,22 @@ function writeUnlockedUserId(id: number): void {
   } catch {
     /* ignore */
   }
+  // Desktop: persistir para sobreviver a refresh.
+  try {
+    localStorage.setItem(DESKTOP_UNLOCK_KEY, String(id));
+  } catch {
+    /* ignore */
+  }
 }
 
 function clearUnlocked(): void {
   try {
     sessionStorage.removeItem(SESSION_UNLOCK_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(DESKTOP_UNLOCK_KEY);
   } catch {
     /* ignore */
   }
@@ -162,8 +182,19 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user) clearUnlocked();
-  }, [user]);
+    // `user` pode ficar null por instantes no refresh enquanto o perfil ainda está a ser carregado,
+    // mesmo com `isAuthReady=true` (ver `AuthContext`: `getSession().finally(setAuthReady(true))`).
+    // Para não limpar o unlock erroneamente, só limpamos se continuar sem sessão por algum tempo.
+    if (!isAuthReady) return;
+    if (isAuthenticated) return;
+
+    const t = setTimeout(() => {
+      // Reconfirmar: se ainda não está autenticado após a janela de graça, então é logout real / sem sessão.
+      if (!isAuthenticated) clearUnlocked();
+    }, 2500);
+
+    return () => clearTimeout(t);
+  }, [isAuthReady, isAuthenticated]);
 
   const clearIdleCheck = useCallback(() => {
     if (idleCheckIntervalRef.current) {
