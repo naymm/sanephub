@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Database } from '@/types/supabase';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { mapRowFromDb, NUMERIC_KEYS } from '@/lib/supabaseMappers';
+import { useAuth } from '@/context/AuthContext';
 
 type PostgresChangesPayload = {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -36,6 +37,7 @@ export function useRealtimeTable<T>(
 ) {
   const [rows, setRows] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { user, isAuthReady } = useAuth();
 
   // Ref evita re-subscrições/fetch quando o consumidor passa mapRow inline (nova ref a cada render).
   const mapRowRef = useRef(opts?.mapRow);
@@ -45,6 +47,13 @@ export function useRealtimeTable<T>(
     if (!isSupabaseConfigured() || !supabase) {
       setRows([]);
       setIsLoading(false);
+      return;
+    }
+
+    /** Sem sessão restaurada / utilizador em contexto, o fetch inicial falha com RLS e nunca era repetido após login. */
+    if (!isAuthReady || !user) {
+      setRows([]);
+      setIsLoading(!isAuthReady);
       return;
     }
 
@@ -222,7 +231,7 @@ export function useRealtimeTable<T>(
         }
       }
     };
-  }, [primaryKeyColumn, table]);
+  }, [primaryKeyColumn, table, isAuthReady, user?.id]);
 
   return { rows, isLoading };
 }

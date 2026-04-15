@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import type { Usuario, Perfil } from '@/types';
 import { USUARIOS_SEED } from '@/data/seed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -154,7 +154,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('auth_user_id', authUserId)
       .maybeSingle();
     if (error || !data) {
-      setUser(null);
+      // Não limpar `user` aqui: após `signIn`, o listener pode correr em paralelo e falhar
+      // momentaneamente (RLS/rede), apagando o estado que o `login()` acabou de preencher.
+      if (import.meta.env.DEV) {
+        console.warn('[auth] fetchProfileAndSetUser: sem dados ou erro; mantém estado actual.', error);
+      }
       return;
     }
     const row = data as ProfileRow;
@@ -354,23 +358,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        usuarios,
-        setUsuarios,
-        login,
-        logout,
-        isAuthenticated: !!user,
-        isAuthReady: authReady,
-        createUserInSupabase,
-        refreshSessionUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      usuarios,
+      setUsuarios,
+      login,
+      logout,
+      isAuthenticated: !!user,
+      isAuthReady: authReady,
+      createUserInSupabase,
+      refreshSessionUser,
+    }),
+    [user, usuarios, login, logout, authReady, createUserInSupabase, refreshSessionUser],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
