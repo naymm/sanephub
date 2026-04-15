@@ -5,6 +5,8 @@ import { rpcPerfilTemPontoPin } from '@/lib/pontoPinRpc';
 import { MobilePinUnlockOverlay } from '@/components/mobile/MobilePinUnlockOverlay';
 
 const SESSION_UNLOCK_KEY = 'sanep_msl_unlocked_uid';
+/** Bypass temporário do bloqueio por "segundo plano" (ex.: abrir um PDF em nova aba). */
+const BG_BYPASS_UNTIL_KEY = 'sanep_msl_bg_bypass_until';
 
 /** Sem interação durante este tempo → pedir PIN (mobile e desktop). */
 const IDLE_MS = 10 * 60_000;
@@ -60,6 +62,24 @@ function writeUnlockedUserId(id: number): void {
 function clearUnlocked(): void {
   try {
     sessionStorage.removeItem(SESSION_UNLOCK_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readBgBypassUntil(): number {
+  try {
+    const raw = sessionStorage.getItem(BG_BYPASS_UNTIL_KEY);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function clearBgBypass(): void {
+  try {
+    sessionStorage.removeItem(BG_BYPASS_UNTIL_KEY);
   } catch {
     /* ignore */
   }
@@ -204,6 +224,12 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
           // Desktop: trocar de separador não conta como “sair da app”; o PIN fica só pelos 10 min de inatividade.
           return;
         }
+        // Alguns fluxos (ex.: abrir PDF em nova aba) não devem disparar lock imediato ao regressar.
+        // Nesses casos, uma página pode escrever um "bypass until" no sessionStorage.
+        if (Date.now() < readBgBypassUntil()) {
+          clearBackgroundLockTimers();
+          return;
+        }
         const sinceAuth = Date.now() - lastAuthContextAtRef.current;
         if (sinceAuth < 18_000) return;
         clearBackgroundLockTimers();
@@ -216,6 +242,7 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
         }, VISIBILITY_HIDDEN_CONFIRM_MS);
       } else {
         clearBackgroundLockTimers();
+        clearBgBypass();
         lastActivityAtRef.current = Date.now();
       }
     };

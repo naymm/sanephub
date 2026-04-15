@@ -52,6 +52,9 @@ function filterBirthdaysInLocalMonth(all: BirthdayPerson[], ref: Date): Birthday
   });
 }
 
+/** Notícias publicadas no bloco «Notícias & Atualizações» (mais recentes primeiro). */
+const DASHBOARD_NOTICIAS_MAX = 3;
+
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
 export default function Dashboard() {
@@ -335,17 +338,14 @@ export default function Dashboard() {
     .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
     .slice(0, 6);
 
-  // Feed de "Notícias & Atualizações" (cards consistentes com a imagem de referência)
-  const publishedNews = noticias
+  // Feed de "Notícias & Atualizações": apenas as N notícias mais recentes (por data de publicação).
+  const orderedNews = noticias
     .filter(n => n.publicado)
-    .sort((a, b) => new Date(b.publicadoEm ?? '').getTime() - new Date(a.publicadoEm ?? '').getTime());
+    .slice()
+    .sort((a, b) => new Date(b.publicadoEm ?? '').getTime() - new Date(a.publicadoEm ?? '').getTime())
+    .slice(0, DASHBOARD_NOTICIAS_MAX);
 
-  const featuredNews = publishedNews.find(n => n.featured) ?? null;
-  const orderedNews = featuredNews
-    ? [featuredNews, ...publishedNews.filter(n => n.id !== featuredNews.id)]
-    : publishedNews;
-
-  const newsCardIds = orderedNews.slice(0, 3).map(n => n.id);
+  const newsCardIds = orderedNews.map(n => n.id);
   const newsCardIdsKey = newsCardIds.join(',');
 
   useEffect(() => {
@@ -421,7 +421,7 @@ export default function Dashboard() {
     readMorePath: string;
   };
 
-  const newsCards: NewsCard[] = orderedNews.slice(0, 3).map(n => {
+  const newsCards: NewsCard[] = orderedNews.map(n => {
     const content = (n.conteudo ?? '').trim();
     const excerpt = content.slice(0, 220);
     const hasMore = content.length > 220;

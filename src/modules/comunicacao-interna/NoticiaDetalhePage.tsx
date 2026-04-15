@@ -37,6 +37,11 @@ export default function NoticiaDetalhePage() {
     return noticias.find(n => n.id === noticiaId);
   }, [noticiaId, noticias]);
 
+  const galeriaUrls = useMemo(
+    () => (noticia?.galeriaUrls ?? []).filter((u): u is string => Boolean(u && String(u).trim())).slice(0, 6),
+    [noticia?.galeriaUrls],
+  );
+
   if (!user) return null;
   if (!noticiaId) return null;
 
@@ -255,12 +260,33 @@ export default function NoticiaDetalhePage() {
             />
             </div>
           )}
+          {galeriaUrls.length > 0 && (
+            <div className="border-t border-border/60 bg-muted/10 px-4 py-4 sm:px-6">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Galeria</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+                {galeriaUrls.map((url, i) => {
+                  const src = normalizePublicMediaUrl(url) ?? url;
+                  return (
+                    <a
+                      key={`${url}-${i}`}
+                      href={src}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <img src={src} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]" />
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="p-6 space-y-4">
             <div className="flex items-center gap-2">
               <Eye className="h-5 w-5 text-primary" />
               <h1 className="page-header">{noticia.titulo}</h1>
             </div>
-            <div className={cn('whitespace-pre-wrap text-sm text-foreground', noticia.conteudo ? '' : 'text-muted-foreground')}>
+            <div className={cn('whitespace-pre-wrap text-justify text-sm text-foreground', noticia.conteudo ? '' : 'text-muted-foreground')}>
               {noticia.conteudo}
             </div>
             {noticia.publicadoEm && (

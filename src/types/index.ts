@@ -532,6 +532,8 @@ export interface Noticia {
   titulo: string;
   conteudo: string;
   imagemUrl?: string | null;
+  /** Até 6 URLs de imagens (galeria), além da capa `imagemUrl`. */
+  galeriaUrls?: string[] | null;
   featured: boolean;
   publicado: boolean;
   publicadoEm?: string | null;

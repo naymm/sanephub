@@ -12,8 +12,9 @@ import {
 import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
-import { gerarPdfReciboBlob } from '@/utils/reciboPdf';
+import { gerarPdfRecibo, gerarPdfReciboBlob } from '@/utils/reciboPdf';
 import { pdfPreviewUrlFromGeneratedBlob, releasePdfPreviewUrl } from '@/utils/pdfPreviewPublicUrl';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { IRT_ESCALOES_FALLBACK, salarioBaseParaEscalaoIrtAposFaltas, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,6 @@ import { toast } from 'sonner';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { PdfPreviewDialog } from '@/components/PdfPreviewDialog';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
-import { gerarPdfRecibo } from '@/utils/reciboPdf';
 const MESES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const ANO_ACTUAL = new Date().getFullYear();
@@ -41,6 +41,7 @@ const NOVO_PATH = '/capital-humano/recibos/novo';
 
 export default function RecibosPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobileViewport();
   const { user } = useAuth();
   const { recibos, addRecibo, updateRecibo, deleteRecibo, colaboradores, irtEscalaes } = useData();
   const canEliminar = user?.perfil === 'Admin';
@@ -143,9 +144,19 @@ export default function RecibosPage() {
       const salarioBaseIrt = salarioBaseParaEscalaoIrtAposFaltas(salarioBaseNominal, r.diasFaltaDesconto ?? 0);
       const tabelaIrt = irtEscalaes?.length ? irtEscalaes : IRT_ESCALOES_FALLBACK;
       const esc = selecionarEscalaoIrtPorSalarioBase(salarioBaseIrt, tabelaIrt);
-      const url = gerarPdfRecibo(r, col, { irtTaxaPercent: esc?.taxaPercent ?? null });
-      window.open(url, '_blank', 'noopener,noreferrer');
-      toast.success('PDF do recibo gerado.');
+      const irtOpts = { irtTaxaPercent: esc?.taxaPercent ?? null };
+
+      if (isMobile) {
+        const url = gerarPdfRecibo(r, col, irtOpts);
+        window.open(url, '_blank', 'noopener,noreferrer');
+        toast.success('PDF do recibo gerado.');
+        return;
+      }
+
+      const blob = gerarPdfReciboBlob(r, col, irtOpts);
+      const previewUrl = await pdfPreviewUrlFromGeneratedBlob(blob, 'recibo');
+      setPdfPreviewUrl(previewUrl);
+      setPdfPreviewOpen(true);
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
       toast.error('Não foi possível gerar o PDF. Tente novamente.');

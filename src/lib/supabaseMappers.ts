@@ -187,6 +187,14 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
       estrategiasCustos: deserializePlaneamentoTextList(o.estrategiasCustos),
     };
   }
+  if (tableName === 'noticias') {
+    const o = out as Record<string, unknown>;
+    const g = o.galeriaUrls;
+    out = {
+      ...out,
+      galeriaUrls: Array.isArray(g) ? g.map(x => String(x)).filter(Boolean) : [],
+    };
+  }
   return out as T;
 }
 

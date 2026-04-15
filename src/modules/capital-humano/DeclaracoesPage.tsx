@@ -126,7 +126,9 @@ export default function DeclaracoesPage() {
     }
     try {
       // Igual ao portal: assinatura gravada na declaração (emitente_assinatura_imagem_url, emitido_por, etc.)
-      const blob = await gerarPdfDeclaracaoServicoBlob(d, col, assinaturaPdfFromDeclaracao(d));
+      // Mobile + Safari: `window.open` + `blob:` após async costuma ficar em branco; o `PdfPreviewDialog` renderiza de forma fiável em todos os viewports.
+      const assinatura = assinaturaPdfFromDeclaracao(d);
+      const blob = await gerarPdfDeclaracaoServicoBlob(d, col, assinatura);
       const previewUrl = await pdfPreviewUrlFromGeneratedBlob(blob, 'declaracao');
       setPdfPreviewUrl(previewUrl);
       setPdfPreviewOpen(true);
@@ -313,7 +315,7 @@ export default function DeclaracoesPage() {
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalhe" onClick={() => { setViewItem(d); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
                     {(d.status === 'Emitida' || d.status === 'Entregue') && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir PDF" onClick={() => void handleImprimirPdf(d)}><FileDown className="h-4 w-4" /></Button>
                     )}
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}><Pencil className="h-4 w-4" /></Button>
                     {canEliminar && (
@@ -364,7 +366,7 @@ export default function DeclaracoesPage() {
                 <Eye className="h-4 w-4" />
               </Button>
               {(d.status === 'Emitida' || d.status === 'Entregue') && (
-                <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => handleImprimirPdf(d)} aria-label="Imprimir PDF">
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => void handleImprimirPdf(d)} aria-label="Imprimir PDF">
                   <FileDown className="h-4 w-4" />
                 </Button>
               )}
@@ -578,8 +580,15 @@ export default function DeclaracoesPage() {
                 {viewItem.emitidoPor && <p><span className="text-muted-foreground">Emitido por:</span> {viewItem.emitidoPor}</p>}
               </div>
               {(viewItem.status === 'Emitida' || viewItem.status === 'Entregue') && (
-                <Button onClick={() => { handleImprimirPdf(viewItem); setViewOpen(false); }} className="w-full sm:w-auto">
-                  <FileDown className="h-4 w-4 mr-2" />
+                <Button
+                  type="button"
+                  className="w-full min-h-11 gap-2 rounded-xl font-medium sm:w-auto"
+                  onClick={() => {
+                    void handleImprimirPdf(viewItem);
+                    setViewOpen(false);
+                  }}
+                >
+                  <FileDown className="h-4 w-4 shrink-0" />
                   Imprimir PDF (Declaração de Serviço)
                 </Button>
               )}

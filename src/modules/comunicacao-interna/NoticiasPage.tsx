@@ -20,7 +20,7 @@ import {
 } from '@/components/shared/MobileCreateFormDialogContent';
 import { Label } from '@/components/ui/label';
 
-import { Search, Plus, Pencil, Trash2, Eye, Star, Megaphone } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Eye, Star, Megaphone, Images, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 
@@ -48,10 +48,14 @@ async function invokeNoticiaPushNotify(noticiaId: number) {
 const LIST_PATH = '/comunicacao-interna/noticias';
 const NOVO_PATH = '/comunicacao-interna/noticias/novo';
 
+/** Máximo de fotos na galeria (além da imagem de capa). */
+const MAX_GALERIA_FOTOS = 6;
+
 const emptyForm: Omit<Noticia, 'id' | 'empresaId'> = {
   titulo: '',
   conteudo: '',
   imagemUrl: null,
+  galeriaUrls: [],
   featured: false,
   publicado: false,
   publicadoEm: null,
@@ -143,6 +147,7 @@ export default function NoticiasPage() {
       titulo: n.titulo,
       conteudo: n.conteudo,
       imagemUrl: n.imagemUrl ?? null,
+      galeriaUrls: Array.isArray(n.galeriaUrls) ? [...n.galeriaUrls] : [],
       featured: n.featured,
       publicado: n.publicado,
       publicadoEm: n.publicadoEm ?? null,
@@ -175,6 +180,56 @@ export default function NoticiasPage() {
     }
   };
 
+  const removeGaleriaFoto = (index: number) => {
+    setForm(f => ({
+      ...f,
+      galeriaUrls: (f.galeriaUrls ?? []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const uploadGaleriaFotos = async (files: File[]) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error('Upload de imagem requer Supabase configurado.');
+      return;
+    }
+    if (!empresaIdForMutation && editing == null) {
+      toast.error('Selecione uma empresa para associar as imagens.');
+      return;
+    }
+    const actuais = form.galeriaUrls ?? [];
+    const vagas = MAX_GALERIA_FOTOS - actuais.length;
+    if (vagas <= 0) {
+      toast.error(`Máximo de ${MAX_GALERIA_FOTOS} fotos na galeria.`);
+      return;
+    }
+    const imagens = files.filter(f => f.type.startsWith('image/')).slice(0, vagas);
+    if (imagens.length === 0) {
+      toast.error('Seleccione ficheiros de imagem.');
+      return;
+    }
+    const novasUrls: string[] = [];
+    try {
+      for (const file of imagens) {
+        const ext = file.name.split('.').pop() || 'jpg';
+        const baseId = editing?.id ?? Date.now();
+        const companyPart = String(empresaIdForMutation ?? editing?.empresaId ?? '0');
+        const path = `comunicacao/${companyPart}/noticias/gal-${baseId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+        const bucket = 'noticias';
+        const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+        if (error || !data?.path) throw new Error(error?.message || 'Erro ao fazer upload');
+        const { data: pub } = supabase.storage.from(bucket).getPublicUrl(data.path);
+        novasUrls.push(pub.publicUrl);
+      }
+      setForm(f => ({
+        ...f,
+        galeriaUrls: [...(f.galeriaUrls ?? []), ...novasUrls].slice(0, MAX_GALERIA_FOTOS),
+      }));
+      toast.success(novasUrls.length === 1 ? '1 imagem adicionada à galeria.' : `${novasUrls.length} imagens adicionadas à galeria.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível carregar as imagens da galeria.');
+    }
+  };
+
   const save = async () => {
     if (!isAdmin) return;
     if (!empresaIdForMutation && editing == null) {
@@ -188,6 +243,8 @@ export default function NoticiasPage() {
       return;
     }
 
+    const galeriaUrls = (form.galeriaUrls ?? []).filter(Boolean).slice(0, MAX_GALERIA_FOTOS);
+
     const isPublishNow = form.publicado && !editing?.publicado;
     const isUnpublish = !form.publicado && !!editing?.publicado;
 
@@ -197,6 +254,7 @@ export default function NoticiasPage() {
           titulo,
           conteudo,
           imagemUrl: form.imagemUrl ?? null,
+          galeriaUrls,
           featured: form.featured,
           publicado: form.publicado,
           publicadoEm: form.publicado ? (form.publicadoEm ?? todayISO()) : null,
@@ -239,6 +297,7 @@ export default function NoticiasPage() {
           titulo,
           conteudo,
           imagemUrl: form.imagemUrl ?? null,
+          galeriaUrls,
           featured: form.featured,
           publicado: form.publicado,
           publicadoEm: form.publicado ? (todayISO() as string) : null,
@@ -385,7 +444,7 @@ export default function NoticiasPage() {
           desktopContentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
           desktopHeader={mobileCreateDesktopHeader(
             editing ? 'Editar notícia' : 'Nova notícia',
-            'Crie/actualize a notícia. Pode carregar imagem e definir destaque.',
+            'Capa, galeria (até 6 fotos), destaque e publicação.',
           )}
           formBody={
             <div className="grid gap-4 py-2">
@@ -401,7 +460,7 @@ export default function NoticiasPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Imagem (upload)</Label>
+                <Label>Imagem de capa</Label>
                 <Input
                   type="file"
                   accept="image/*"
@@ -413,7 +472,7 @@ export default function NoticiasPage() {
                 {form.imagemUrl && (
                   <img
                     src={normalizePublicMediaUrl(form.imagemUrl) ?? form.imagemUrl}
-                    alt="Pré-visualização"
+                    alt="Pré-visualização da capa"
                     className="w-full h-32 object-cover rounded-xl border"
                   />
                 )}
@@ -440,6 +499,57 @@ export default function NoticiasPage() {
                   Ao publicar, a notícia fica visível no Dashboard e integra notificações.
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border/60 bg-muted/15 p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="flex items-center gap-2 font-medium">
+                  <Images className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  Galeria (opcional, máx. {MAX_GALERIA_FOTOS} fotos)
+                </Label>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {(form.galeriaUrls ?? []).length}/{MAX_GALERIA_FOTOS}
+                </span>
+              </div>
+              <Input
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={(form.galeriaUrls ?? []).length >= MAX_GALERIA_FOTOS}
+                onChange={e => {
+                  const list = e.target.files;
+                  if (list?.length) void uploadGaleriaFotos(Array.from(list));
+                  e.target.value = '';
+                }}
+                className="cursor-pointer"
+              />
+              {(form.galeriaUrls ?? []).length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                  {(form.galeriaUrls ?? []).map((url, idx) => (
+                    <div key={`${url}-${idx}`} className="relative aspect-video overflow-hidden rounded-lg border bg-background">
+                      <img
+                        src={normalizePublicMediaUrl(url) ?? url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        className="absolute right-1 top-1 h-8 w-8 rounded-full shadow-sm"
+                        aria-label="Remover foto da galeria"
+                        onClick={() => removeGaleriaFoto(idx)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Sem fotos na galeria. As imagens aparecem na página da notícia abaixo da capa.
+                </p>
+              )}
             </div>
           </div>
           }

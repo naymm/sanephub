@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
+import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { GestaoDocumentoArquivo, GestaoDocumentoPasta, GestaoDocumentoAuditoria } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,7 @@ import {
 import { nomeFicheiroParaDownload } from '@/utils/nomeFicheiroDownload';
 
 const BUCKET = 'gestao-documentos';
+const MOBILE_BG_LOCK_BYPASS_MS = 60_000;
 
 const MODULO_OPTIONS = [
   { value: 'capital-humano', label: 'Capital Humano' },
@@ -453,6 +455,7 @@ export default function GestaoDocumentosPage() {
   const { user } = useAuth();
   const { currentEmpresaId } = useTenant();
   const { departamentos } = useData();
+  const isMobile = useIsMobileViewport();
 
   const empresaIdNum =
     currentEmpresaId === 'consolidado' ? null : (currentEmpresaId as number);
@@ -693,23 +696,44 @@ export default function GestaoDocumentosPage() {
   const abrirVer = async (a: GestaoDocumentoArquivo) => {
     const url = publicUrl(a.storagePath);
     if (!url) return;
-    await logAudit(a.id, 'view', { nome: a.nomeFicheiro });
     if (isDocxArquivo(a)) {
+      await logAudit(a.id, 'view', { nome: a.nomeFicheiro });
       setDocxPreviewArquivo(a);
       setDocxPreviewOpen(true);
       return;
     }
     if (isPdfArquivo(a)) {
+      if (isMobile) {
+        // Ao abrir o PDF em nova aba, o browser pode enviar a app para segundo plano por alguns segundos.
+        // Guardamos um bypass temporário para não pedir PIN ao regressar.
+        try {
+          sessionStorage.setItem('sanep_msl_bg_bypass_until', String(Date.now() + MOBILE_BG_LOCK_BYPASS_MS));
+        } catch {
+          /* ignore */
+        }
+        // Importante: abrir a aba/janela imediatamente (antes de awaits), senão o Safari/Chrome podem bloquear como pop-up.
+        const w = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!w) {
+          // Fallback quando o browser bloqueia pop-ups: abre na mesma aba.
+          window.location.assign(url);
+        }
+        void logAudit(a.id, 'view', { nome: a.nomeFicheiro });
+        return;
+      }
+      await logAudit(a.id, 'view', { nome: a.nomeFicheiro });
       setPdfPreviewUrl(url);
       setPdfPreviewTitulo(a.titulo);
       setPdfPreviewOpen(true);
       return;
+      
     }
     if (isExcelArquivo(a)) {
+      await logAudit(a.id, 'view', { nome: a.nomeFicheiro });
       setExcelPreviewArquivo(a);
       setExcelPreviewOpen(true);
       return;
     }
+    await logAudit(a.id, 'view', { nome: a.nomeFicheiro });
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
