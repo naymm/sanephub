@@ -12,8 +12,8 @@ dist
 dist-ssr
 *.local
 /backupdb/
-/*.sql
-/*.dump
+/backupdb/*.sql
+*.dump
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
