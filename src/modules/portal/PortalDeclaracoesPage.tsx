@@ -8,7 +8,9 @@ import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
-import { gerarPdfDeclaracaoServico, assinaturaPdfFromDeclaracao } from '@/utils/declaracaoServicoPdf';
+import { gerarPdfDeclaracaoServicoBlob, assinaturaPdfFromDeclaracao } from '@/utils/declaracaoServicoPdf';
+import { pdfPreviewUrlFromGeneratedBlob, releasePdfPreviewUrl } from '@/utils/pdfPreviewPublicUrl';
+import { PdfPreviewDialog } from '@/components/PdfPreviewDialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -109,8 +111,9 @@ export default function PortalDeclaracoesPage() {
       return;
     }
     try {
-      const blobUrl = await gerarPdfDeclaracaoServico(d, col, assinaturaPdfFromDeclaracao(d));
-      setPdfPreviewUrl(blobUrl);
+      const blob = await gerarPdfDeclaracaoServicoBlob(d, col, assinaturaPdfFromDeclaracao(d));
+      const previewUrl = await pdfPreviewUrlFromGeneratedBlob(blob, 'declaracao');
+      setPdfPreviewUrl(previewUrl);
       setPdfPreviewOpen(true);
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
@@ -421,37 +424,20 @@ export default function PortalDeclaracoesPage() {
         />
       </Dialog>
 
-      <Dialog
+      <PdfPreviewDialog
         open={pdfPreviewOpen}
         onOpenChange={open => {
           setPdfPreviewOpen(open);
           if (!open) {
-            setPdfPreviewUrl(null);
+            setPdfPreviewUrl(prev => {
+              releasePdfPreviewUrl(prev);
+              return null;
+            });
           }
         }}
-      >
-        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
-          <DialogTitle className="sr-only">Pré-visualização da declaração de serviço (PDF)</DialogTitle>
-          {pdfPreviewUrl ? (
-            <>
-              <DialogDescription className="sr-only">
-                Documento PDF da declaração de serviço em pré-visualização.
-              </DialogDescription>
-              <div className="w-full h-full">
-                <iframe
-                  src={pdfPreviewUrl}
-                  title="Pré-visualização da declaração de serviço"
-                  className="w-full h-full border-0 rounded-md"
-                />
-              </div>
-            </>
-          ) : (
-            <div className="p-6 pt-10">
-              <DialogDescription>Gerando pré-visualização...</DialogDescription>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        url={pdfPreviewUrl}
+        iframeTitle="Pré-visualização da declaração de serviço"
+      />
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogContent>

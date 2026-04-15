@@ -10,6 +10,8 @@ const SESSION_UNLOCK_KEY = 'sanep_msl_unlocked_uid';
 const IDLE_MS = 10 * 60_000;
 /** Bloqueio ao meter em segundo plano: só em mobile (PWA / app); no desktop mudar de aba não deve pedir PIN. */
 const BACKGROUND_LOCK_MS = 5_000;
+/** Safari/iOS pode reportar `visibility=hidden` ao abrir PDF no iframe ou fechar modais — só armar bloqueio se continuar hidden. */
+const VISIBILITY_HIDDEN_CONFIRM_MS = 2_500;
 
 function isDesktopViewport(): boolean {
   if (typeof window === 'undefined') return true;
@@ -22,6 +24,8 @@ const MOVE_THROTTLE_MS = 750;
 
 type Ctx = {
   lockNow: () => void;
+  /** Anula temporizadores de bloqueio por “segundo plano” e renova inatividade (ex.: fechar modal de PDF no iOS). */
+  bumpActivity: () => void;
 };
 
 const MobileSessionLockContext = createContext<Ctx | null>(null);
@@ -30,6 +34,11 @@ export function useMobileSessionLock(): Ctx {
   const c = useContext(MobileSessionLockContext);
   if (!c) throw new Error('useMobileSessionLock outside provider');
   return c;
+}
+
+/** Para componentes opcionais (ex.: `PdfPreviewDialog`) que podem estar fora de testes sem provider. */
+export function useOptionalMobileSessionLock(): Ctx | null {
+  return useContext(MobileSessionLockContext);
 }
 
 function readUnlockedUserId(): string | null {
@@ -65,6 +74,9 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
   const lastMoveBumpAtRef = useRef<number>(0);
   const idleCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bgConfirmHiddenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Após login, o Safari pode reportar `visibility=hidden` ao fechar o teclado — evita bloquear por PIN de imediato. */
+  const lastAuthContextAtRef = useRef<number>(0);
 
   useEffect(() => {
     if (!user || !isSupabaseConfigured() || !supabase) {
@@ -103,11 +115,28 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
     lock();
   }, [lock]);
 
+  const clearBackgroundLockTimers = useCallback(() => {
+    if (bgConfirmHiddenTimerRef.current) {
+      clearTimeout(bgConfirmHiddenTimerRef.current);
+      bgConfirmHiddenTimerRef.current = null;
+    }
+    if (bgTimerRef.current) {
+      clearTimeout(bgTimerRef.current);
+      bgTimerRef.current = null;
+    }
+  }, []);
+
+  const bumpActivity = useCallback(() => {
+    lastActivityAtRef.current = Date.now();
+    clearBackgroundLockTimers();
+  }, [clearBackgroundLockTimers]);
+
   useEffect(() => {
     if (!user) {
       setPinUnlocked(false);
       return;
     }
+    lastAuthContextAtRef.current = Date.now();
     const sid = readUnlockedUserId();
     setPinUnlocked(sid === String(user.id));
   }, [user?.id]);
@@ -175,24 +204,28 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
           // Desktop: trocar de separador não conta como “sair da app”; o PIN fica só pelos 10 min de inatividade.
           return;
         }
-        if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
-        bgTimerRef.current = setTimeout(() => {
-          lock();
-        }, BACKGROUND_LOCK_MS);
+        const sinceAuth = Date.now() - lastAuthContextAtRef.current;
+        if (sinceAuth < 18_000) return;
+        clearBackgroundLockTimers();
+        bgConfirmHiddenTimerRef.current = setTimeout(() => {
+          bgConfirmHiddenTimerRef.current = null;
+          if (document.visibilityState !== 'hidden') return;
+          bgTimerRef.current = setTimeout(() => {
+            lock();
+          }, BACKGROUND_LOCK_MS);
+        }, VISIBILITY_HIDDEN_CONFIRM_MS);
       } else {
-        if (bgTimerRef.current) {
-          clearTimeout(bgTimerRef.current);
-          bgTimerRef.current = null;
-        }
+        clearBackgroundLockTimers();
+        lastActivityAtRef.current = Date.now();
       }
     };
 
     document.addEventListener('visibilitychange', onVis);
     return () => {
       document.removeEventListener('visibilitychange', onVis);
-      if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+      clearBackgroundLockTimers();
     };
-  }, [user, pinConfigured, lock]);
+  }, [user, pinConfigured, lock, clearBackgroundLockTimers]);
 
   const needsUnlock = Boolean(
     isAuthReady &&
@@ -203,7 +236,7 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
       isSupabaseConfigured(),
   );
 
-  const ctx = useMemo(() => ({ lockNow }), [lockNow]);
+  const ctx = useMemo(() => ({ lockNow, bumpActivity }), [lockNow, bumpActivity]);
 
   return (
     <MobileSessionLockContext.Provider value={ctx}>

@@ -571,7 +571,7 @@ export default function Dashboard() {
           ) : null}
           {canCapitalHumano ? (
             <KpiCard
-              title="Clientes"
+              title="Colaboradores"
               value={activeClients}
               icon={<UsersRound className="h-5 w-5" />}
               description="Colaboradores ativos"

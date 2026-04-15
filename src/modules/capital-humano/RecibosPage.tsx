@@ -12,7 +12,8 @@ import {
 import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
-import { gerarPdfRecibo } from '@/utils/reciboPdf';
+import { gerarPdfReciboBlob } from '@/utils/reciboPdf';
+import { pdfPreviewUrlFromGeneratedBlob, releasePdfPreviewUrl } from '@/utils/pdfPreviewPublicUrl';
 import { IRT_ESCALOES_FALLBACK, salarioBaseParaEscalaoIrtAposFaltas, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,8 +29,9 @@ import {
 import { Search, Plus, Eye, FileDown, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { PdfPreviewDialog } from '@/components/PdfPreviewDialog';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
-
+import { gerarPdfRecibo } from '@/utils/reciboPdf';
 const MESES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 const MES_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const ANO_ACTUAL = new Date().getFullYear();
@@ -129,7 +131,7 @@ export default function RecibosPage() {
 
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
 
-  const handleGerarPdf = (r: ReciboSalario) => {
+  const handleGerarPdf = async (r: ReciboSalario) => {
     const col = colaboradores.find(c => c.id === r.colaboradorId);
     if (!col) {
       toast.error('Dados do colaborador não encontrados.');
@@ -141,9 +143,9 @@ export default function RecibosPage() {
       const salarioBaseIrt = salarioBaseParaEscalaoIrtAposFaltas(salarioBaseNominal, r.diasFaltaDesconto ?? 0);
       const tabelaIrt = irtEscalaes?.length ? irtEscalaes : IRT_ESCALOES_FALLBACK;
       const esc = selecionarEscalaoIrtPorSalarioBase(salarioBaseIrt, tabelaIrt);
-      const blobUrl = gerarPdfRecibo(r, col, { irtTaxaPercent: esc?.taxaPercent ?? null });
-      setPdfPreviewUrl(blobUrl);
-      setPdfPreviewOpen(true);
+      const url = gerarPdfRecibo(r, col, { irtTaxaPercent: esc?.taxaPercent ?? null });
+      window.open(url, '_blank', 'noopener,noreferrer');
+      toast.success('PDF do recibo gerado.');
     } catch (e) {
       console.error('Erro ao gerar PDF:', e);
       toast.error('Não foi possível gerar o PDF. Tente novamente.');
@@ -288,7 +290,7 @@ export default function RecibosPage() {
                 <td className="py-3 px-5 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver detalhe" onClick={() => { setViewItem(r); setViewOpen(true); }}><Eye className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Gerar PDF" onClick={() => handleGerarPdf(r)}><FileDown className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Gerar PDF" onClick={() => void handleGerarPdf(r)}><FileDown className="h-4 w-4" /></Button>
                     {r.status === 'Emitido' && (
                       <Button variant="ghost" size="sm" onClick={() => marcarPago(r)}>Marcar Pago</Button>
                     )}
@@ -331,31 +333,48 @@ export default function RecibosPage() {
             { label: 'Status', value: <StatusBadge status={r.status} /> },
           ]}
           renderActions={r => (
-            <>
-              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => { setViewItem(r); setViewOpen(true); }} aria-label="Ver detalhe">
-                <Eye className="h-4 w-4" />
+            <div className="flex w-full min-w-0 flex-col gap-2">
+              <Button
+                type="button"
+                className="w-full min-h-11 gap-2 rounded-xl font-medium"
+                onClick={() => void handleGerarPdf(r)}
+              >
+                <FileDown className="h-4 w-4 shrink-0" />
+                Gerar PDF do recibo
               </Button>
-              <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => handleGerarPdf(r)} aria-label="Gerar PDF">
-                <FileDown className="h-4 w-4" />
-              </Button>
-              {r.status === 'Emitido' && (
-                <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => marcarPago(r)}>
-                  Marcar Pago
-                </Button>
-              )}
-              {canEliminar && (
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => remove(r)}
-                  aria-label="Remover"
+                  className="h-11 w-11 shrink-0 rounded-xl"
+                  onClick={() => {
+                    setViewItem(r);
+                    setViewOpen(true);
+                  }}
+                  aria-label="Ver detalhe"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Eye className="h-4 w-4" />
                 </Button>
-              )}
-            </>
+                {r.status === 'Emitido' && (
+                  <Button type="button" variant="outline" size="sm" className="min-h-11 rounded-xl" onClick={() => marcarPago(r)}>
+                    Marcar Pago
+                  </Button>
+                )}
+                {canEliminar && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => remove(r)}
+                    aria-label="Remover"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
           )}
         />
       </div>
@@ -473,29 +492,20 @@ export default function RecibosPage() {
         />
       </Dialog>
 
-      <Dialog
+      <PdfPreviewDialog
         open={pdfPreviewOpen}
         onOpenChange={open => {
           setPdfPreviewOpen(open);
           if (!open) {
-            setPdfPreviewUrl(null);
+            setPdfPreviewUrl(prev => {
+              releasePdfPreviewUrl(prev);
+              return null;
+            });
           }
         }}
-      >
-        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
-          {pdfPreviewUrl ? (
-            <div className="w-full h-full">
-              <iframe
-                src={pdfPreviewUrl}
-                title="Pré-visualização do recibo de salário"
-                className="w-full h-full border-0 rounded-md"
-              />
-            </div>
-          ) : (
-            <DialogDescription>Gerando pré-visualização...</DialogDescription>
-          )}
-        </DialogContent>
-      </Dialog>
+        url={pdfPreviewUrl}
+        iframeTitle="Pré-visualização do recibo de salário"
+      />
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogContent>
@@ -522,8 +532,15 @@ export default function RecibosPage() {
                 <p className="font-semibold pt-2 border-t"><span className="text-muted-foreground">Líquido:</span> {formatKz(viewItem.liquido)}</p>
                 <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
               </div>
-              <Button onClick={() => { handleGerarPdf(viewItem); setViewOpen(false); }} className="w-full sm:w-auto">
-                <FileDown className="h-4 w-4 mr-2" />
+              <Button
+                type="button"
+                className="w-full min-h-11 gap-2 rounded-xl font-medium sm:w-auto"
+                onClick={() => {
+                  void handleGerarPdf(viewItem);
+                  setViewOpen(false);
+                }}
+              >
+                <FileDown className="h-4 w-4 shrink-0" />
                 Gerar PDF do recibo
               </Button>
             </div>

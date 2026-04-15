@@ -41,7 +41,11 @@ morada:"Rua Direita da Samba, Edificio LGT, 1º Andar"
 const DIAS_MES = 22
 const CAMBIO = 500
 
-export function gerarPdfRecibo(recibo:any,colaborador:any, opts?: { irtTaxaPercent?: number | null }): string {
+export function gerarPdfReciboBlob(
+  recibo: any,
+  colaborador: any,
+  opts?: { irtTaxaPercent?: number | null },
+): Blob {
 
 const doc = new jsPDF({unit:"mm",format:"a4"})
 const pageW = doc.internal.pageSize.getWidth()
@@ -272,6 +276,10 @@ doc.line(left,y+5,left+80,y+5)
 doc.setFontSize(7)
 doc.text("© PRIMAVERA BSS / Licença de: SANEP-SGPS, SA",left,285)
 
-const blob = doc.output("blob")
-return URL.createObjectURL(blob)
+  const blob = doc.output('blob');
+  return blob as Blob;
+}
+
+export function gerarPdfRecibo(recibo: any, colaborador: any, opts?: { irtTaxaPercent?: number | null }): string {
+  return URL.createObjectURL(gerarPdfReciboBlob(recibo, colaborador, opts));
 }

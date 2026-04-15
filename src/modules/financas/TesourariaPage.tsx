@@ -28,6 +28,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { PdfPreviewDialog } from '@/components/PdfPreviewDialog';
 import {
   Select,
   SelectContent,
@@ -1121,21 +1122,16 @@ export default function TesourariaPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <PdfPreviewDialog
         open={pdfPreviewOpen}
         onOpenChange={open => {
           setPdfPreviewOpen(open);
           if (!open) setPdfPreviewUrl(null);
         }}
-      >
-        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
-          {pdfPreviewUrl ? (
-            <iframe src={pdfPreviewUrl} title="Pré-visualização do comprovativo" className="w-full h-full min-h-[80vh] border-0 rounded-md" />
-          ) : (
-            <DialogDescription className="p-4">A carregar pré-visualização…</DialogDescription>
-          )}
-        </DialogContent>
-      </Dialog>
+        url={pdfPreviewUrl}
+        iframeTitle="Pré-visualização do comprovativo"
+        loadingText="A carregar pré-visualização…"
+      />
     </div>
   );
 }

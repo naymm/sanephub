@@ -321,11 +321,11 @@ export function assinaturaPdfFromDeclaracao(d: Declaracao): AssinaturaDigitalInf
   };
 }
 
-export async function gerarPdfDeclaracaoServico(
+export async function gerarPdfDeclaracaoServicoBlob(
   declaracao: Declaracao,
   colaborador: Colaborador,
-  assinatura?: AssinaturaDigitalInfo
-): Promise<string> {
+  assinatura?: AssinaturaDigitalInfo,
+): Promise<Blob> {
   let imgData: string | null = null;
   let carimboData: string | null = null;
   let assinaturaData: string | null = null;
@@ -452,8 +452,16 @@ export async function gerarPdfDeclaracaoServico(
   doc.setFontSize(10);
   doc.text(cargoAssinatura, pageW / 2, y, { align: 'center' });
 
-  // Devolver uma URL object (por exemplo, para num modal com <iframe />).
   // `output('bloburl')` pode falhar dependendo do ambiente; `output('blob')` é mais consistente.
-  const blob = doc.output('blob') as Blob;
+  return doc.output('blob') as Blob;
+}
+
+/** URL `blob:` para abrir noutro separador ou compatibilidade antiga. */
+export async function gerarPdfDeclaracaoServico(
+  declaracao: Declaracao,
+  colaborador: Colaborador,
+  assinatura?: AssinaturaDigitalInfo,
+): Promise<string> {
+  const blob = await gerarPdfDeclaracaoServicoBlob(declaracao, colaborador, assinatura);
   return URL.createObjectURL(blob);
 }

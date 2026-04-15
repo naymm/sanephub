@@ -28,6 +28,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { PdfPreviewDialog } from '@/components/PdfPreviewDialog';
 import {
   Select,
   SelectContent,
@@ -1414,7 +1415,7 @@ export default function RequisicoesPage() {
       </Dialog>
 
       {/* Dialog de pré-visualização de PDFs (proforma, factura, comprovativo) */}
-      <Dialog
+      <PdfPreviewDialog
         open={pdfPreviewOpen}
         onOpenChange={open => {
           setPdfPreviewOpen(open);
@@ -1422,21 +1423,9 @@ export default function RequisicoesPage() {
             setPdfPreviewUrl(null);
           }
         }}
-      >
-        <DialogContent className="max-w-[90vw] w-full h-[95vh] p-0">
-          {pdfPreviewUrl ? (
-            <div className="w-full h-full">
-              <iframe
-                src={pdfPreviewUrl}
-                title="Pré-visualização do documento"
-                className="w-full h-full border-0 rounded-md"
-              />
-            </div>
-          ) : (
-            <DialogDescription>Gerando pré-visualização...</DialogDescription>
-          )}
-        </DialogContent>
-      </Dialog>
+        url={pdfPreviewUrl}
+        iframeTitle="Pré-visualização do documento"
+      />
     </div>
   );
 }

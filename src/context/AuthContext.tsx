@@ -113,6 +113,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
   /** False enquanto Supabase restaura a sessão (evita flash da página de login). */
   isAuthReady: boolean;
+  /**
+   * Incrementa quando a sessão Supabase muda (login, logout, refresh).
+   * Os hooks de dados em tempo real usam-no para voltar a fazer fetch com o JWT correcto (ex.: mobile após login).
+   */
+  authSessionRevision: number;
   /** Cria utilizador no Supabase Auth + profiles (Edge Function). Só disponível com Supabase configurado. */
   createUserInSupabase: (payload: CreateUserSupabasePayload) => Promise<Usuario>;
   /** Recarrega o perfil a partir do Supabase (após alterações em `profiles`, PIN, etc.). */
@@ -145,6 +150,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   });
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured());
+  const [authSessionRevision, setAuthSessionRevision] = useState(0);
+
+  const bumpAuthSessionRevision = useCallback(() => {
+    setAuthSessionRevision((n) => n + 1);
+  }, []);
 
   const fetchProfileAndSetUser = useCallback(async (authUserId: string) => {
     if (!supabase) return;
@@ -191,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => {
         setAuthReady(true);
+        bumpAuthSessionRevision();
       });
 
     const {
@@ -198,11 +209,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       // Se houver eventos mas `getSession()` ficou preso, desbloqueia o layout.
       setAuthReady(true);
+      bumpAuthSessionRevision();
       if (session?.user) void fetchProfileAndSetUser(session.user.id);
       else setUser(null);
     });
     return () => subscription.unsubscribe();
-  }, [fetchProfileAndSetUser]);
+  }, [fetchProfileAndSetUser, bumpAuthSessionRevision]);
 
   // Com Supabase: lista de utilizadores só após haver sessão (JWT), senão a RLS devolve vazio.
   // Recarrega ao iniciar sessão / mudar utilizador (evita «Não há outros utilizadores» no Chat).
@@ -296,6 +308,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
         if (error) return false;
+        // Safari / mobile: garantir que o cliente aplicou o JWT antes dos selects (evita RLS vazio + UI presa).
+        await supabase.auth.getSession();
         const authUserId = data.user?.id;
         if (!authUserId) return false;
         const { data: profile, error: profileError } = await supabase
@@ -311,6 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let u = profileToUsuario(prow);
         u = await mergeFotoPerfilFromColaborador(supabase, u, prow.colaborador_id);
         setUser(u);
+        bumpAuthSessionRevision();
         return true;
       }
       const idLower = identificador.trim().toLowerCase();
@@ -326,13 +341,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return false;
     },
-    [usuarios]
+    [usuarios, bumpAuthSessionRevision]
   );
 
   const logout = useCallback(() => {
     if (isSupabaseConfigured() && supabase) supabase.auth.signOut();
     setUser(null);
-  }, []);
+    bumpAuthSessionRevision();
+  }, [bumpAuthSessionRevision]);
 
   const createUserInSupabase = useCallback(
     async (payload: CreateUserSupabasePayload): Promise<Usuario> => {
@@ -367,10 +383,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       isAuthenticated: !!user,
       isAuthReady: authReady,
+      authSessionRevision,
       createUserInSupabase,
       refreshSessionUser,
     }),
-    [user, usuarios, login, logout, authReady, createUserInSupabase, refreshSessionUser],
+    [user, usuarios, login, logout, authReady, authSessionRevision, createUserInSupabase, refreshSessionUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
