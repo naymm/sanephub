@@ -579,6 +579,29 @@ export interface Evento {
   alertaEm?: string | null;
 }
 
+/** Valores alinhados à coluna `comunicados.tipo` na base de dados. */
+export type ComunicadoTipo =
+  | 'feriado'
+  | 'tolerancia_ponto'
+  | 'situacao_interna'
+  | 'nova_contratacao'
+  | 'nomeacao'
+  | 'exoneracao'
+  | 'demissao'
+  | 'outro';
+
+export interface Comunicado {
+  id: number;
+  empresaId: number;
+  titulo: string;
+  resumo: string;
+  conteudo: string;
+  tipo: ComunicadoTipo;
+  anexoUrl?: string | null;
+  anexoNome?: string | null;
+  publicadoEm: string;
+}
+
 export interface Notificacao {
   id: string;
   tipo: 'info' | 'alerta' | 'urgente' | 'sucesso';

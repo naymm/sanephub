@@ -31,6 +31,7 @@ import type {
   RelatorioMensalPlaneamento,
   Noticia,
   Evento,
+  Comunicado,
   Banco,
   ContaBancaria,
   IRTEscalao,
@@ -70,6 +71,7 @@ const TABLE_NAMES = {
   relatorios_planeamento: 'relatorios_planeamento',
   noticias: 'noticias',
   eventos: 'eventos',
+  comunicados: 'comunicados',
   bancos: 'bancos',
   contas_bancarias: 'contas_bancarias',
   geofences: 'geofences',
@@ -264,6 +266,7 @@ export async function loadAllTables(supabase: SupabaseClient) {
     { data: relatoriosPlaneamento },
     { data: noticias },
     { data: eventos },
+    { data: comunicados },
     { data: bancos },
     { data: contasBancarias },
     { data: irtEscalaes },
@@ -295,6 +298,7 @@ export async function loadAllTables(supabase: SupabaseClient) {
     supabase.from('relatorios_planeamento').select('*'),
     supabase.from('noticias').select('*'),
     supabase.from('eventos').select('*'),
+    supabase.from('comunicados').select('*'),
     supabase.from('bancos').select('*'),
     supabase.from('contas_bancarias').select('*'),
     supabase.from('irt_escalaes').select('*'),
@@ -339,6 +343,7 @@ export async function loadAllTables(supabase: SupabaseClient) {
     relatoriosPlaneamento: mapRowsFromDb<RelatorioMensalPlaneamento>('relatorios_planeamento', relatoriosPlaneamento ?? []),
     noticias: mapRowsFromDb<Noticia>('noticias', noticias ?? []),
     eventos: mapRowsFromDb<Evento>('eventos', eventos ?? []),
+    comunicados: mapRowsFromDb<Comunicado>('comunicados', comunicados ?? []),
     bancos: mapRowsFromDb<Banco>('bancos', bancos ?? []),
     contasBancarias: mapRowsFromDb<ContaBancaria>('contas_bancarias', contasBancarias ?? []),
     irtEscalaes: mapRowsFromDb<IRTEscalao>('irt_escalaes', irtEscalaes ?? []),
@@ -737,6 +742,13 @@ export const db = {
     insert: (s: SupabaseClient, p: Partial<Evento>) => insertOne<Evento>(s, 'eventos', p as Record<string, unknown>, 'eventos'),
     update: (s: SupabaseClient, id: number, p: Partial<Evento>) => updateOne<Evento>(s, 'eventos', id, p as Record<string, unknown>, 'eventos'),
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'eventos', id),
+  },
+  comunicados: {
+    insert: (s: SupabaseClient, p: Partial<Comunicado>) =>
+      insertOne<Comunicado>(s, 'comunicados', p as Record<string, unknown>, 'comunicados'),
+    update: (s: SupabaseClient, id: number, p: Partial<Comunicado>) =>
+      updateOne<Comunicado>(s, 'comunicados', id, p as Record<string, unknown>, 'comunicados'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'comunicados', id),
   },
   bancos: {
     insert: (s: SupabaseClient, p: Partial<Banco>) => insertOne<Banco>(s, 'bancos', p as Record<string, unknown>, 'bancos'),

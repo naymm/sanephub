@@ -21,6 +21,7 @@ import {
   Palmtree,
   Scale,
   Search,
+  ScrollText,
   Settings,
   Stamp,
   Target,
@@ -511,6 +512,10 @@ export function IntranetTopbar() {
                   <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/eventos')}>
                     <CalendarDays className="mr-2 h-4 w-4" />
                     Eventos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/comunicados')}>
+                    <ScrollText className="mr-2 h-4 w-4" />
+                    Comunicados
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => navigate('/comunicacao-interna/aniversarios')}>
                     <Cake className="mr-2 h-4 w-4" />

@@ -132,6 +132,7 @@ export const MODULE_GROUPS: MenuGroup[] = [
     children: [
       { label: 'Notícias', path: '/comunicacao-interna/noticias', module: 'comunicacao-interna' },
       { label: 'Eventos', path: '/comunicacao-interna/eventos', module: 'comunicacao-interna' },
+      { label: 'Comunicados', path: '/comunicacao-interna/comunicados', module: 'comunicacao-interna' },
       { label: 'Aniversariantes', path: '/comunicacao-interna/aniversarios', module: 'comunicacao-interna' },
     ],
   },

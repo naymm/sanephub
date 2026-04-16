@@ -17,6 +17,7 @@ import {
   Bell,
   MessageCircle,
   Package,
+  ScrollText,
 } from 'lucide-react';
 
 /** Ícones partilhados entre menu horizontal e drawer mobile (evita duplicar JSX). */
@@ -65,6 +66,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/planeamento/dashboard': <Target className="h-4 w-4 shrink-0" />,
     '/comunicacao-interna/noticias': <Megaphone className="h-4 w-4 shrink-0" />,
     '/comunicacao-interna/eventos': <CalendarDays className="h-4 w-4 shrink-0" />,
+    '/comunicacao-interna/comunicados': <ScrollText className="h-4 w-4 shrink-0" />,
     '/comunicacao-interna/aniversarios': <Cake className="h-4 w-4 shrink-0" />,
   };
   return map[path] ?? null;

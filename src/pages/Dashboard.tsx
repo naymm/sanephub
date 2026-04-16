@@ -5,7 +5,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getCurrentDatePT, formatKz, formatDate, diasRestantes, getGreeting } from '@/utils/formatters';
-import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Download, Star, Heart, MessageCircle, MapPin, Clock, Cake } from 'lucide-react';
+import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Download, Star, Heart, MessageCircle, MapPin, Clock, Cake, ScrollText, Paperclip } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
+import { comunicadoConteudoToPlainText } from '@/modules/comunicacao-interna/comunicadoConteudoHtml';
 
 type BirthdayPerson = {
   id: number;
@@ -54,12 +55,13 @@ function filterBirthdaysInLocalMonth(all: BirthdayPerson[], ref: Date): Birthday
 
 /** Notícias publicadas no bloco «Notícias & Atualizações» (mais recentes primeiro). */
 const DASHBOARD_NOTICIAS_MAX = 3;
+const DASHBOARD_COMUNICADOS_MAX = 4;
 
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { colaboradores, requisicoes, contratos, reunioes, processos, prazos, centrosCusto, pagamentos, documentosOficiais, noticias, eventos } = useData();
+  const { colaboradores, requisicoes, contratos, reunioes, processos, prazos, centrosCusto, pagamentos, documentosOficiais, noticias, eventos, comunicados } = useData();
   const { currentEmpresaId } = useTenant();
   const { addNotification } = useNotifications();
   const navigate = useNavigate();
@@ -344,6 +346,11 @@ export default function Dashboard() {
     .slice()
     .sort((a, b) => new Date(b.publicadoEm ?? '').getTime() - new Date(a.publicadoEm ?? '').getTime())
     .slice(0, DASHBOARD_NOTICIAS_MAX);
+
+  const recentComunicados = comunicados
+    .slice()
+    .sort((a, b) => new Date(b.publicadoEm).getTime() - new Date(a.publicadoEm).getTime())
+    .slice(0, DASHBOARD_COMUNICADOS_MAX);
 
   const newsCardIds = orderedNews.map(n => n.id);
   const newsCardIdsKey = newsCardIds.join(',');
@@ -681,6 +688,8 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          
         </section>
         ) : null}
 
@@ -844,6 +853,58 @@ export default function Dashboard() {
             </div>
           </div>
           ) : null}
+
+<div className="bg-card rounded-xl border border-border/80 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-foreground">Comunicados recentes</h3>
+                <p className="text-sm text-muted-foreground mt-1">Feriados, tolerâncias de ponto e avisos internos.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate('/comunicacao-interna/comunicados')}>
+                Ver todos
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {recentComunicados.map(c => {
+                const previewBase = (c.resumo || comunicadoConteudoToPlainText(c.conteudo)).trim();
+                const preview = previewBase.slice(0, 150);
+                const hasMore = previewBase.length > 150;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => navigate(`/comunicacao-interna/comunicados/${c.id}`)}
+                    className="w-full rounded-xl border border-border/70 bg-background/40 p-4 text-left transition-colors hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ScrollText className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span>{new Date(c.publicadoEm).toLocaleString('pt-PT')}</span>
+                        {c.anexoUrl ? (
+                          <span className="inline-flex items-center gap-1 text-primary">
+                            <Paperclip className="h-3.5 w-3.5" />
+                            Anexo
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-foreground line-clamp-2">{c.titulo}</p>
+                      <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
+                        {preview || 'Sem descrição.'}
+                        {hasMore ? '...' : ''}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {recentComunicados.length === 0 ? (
+                <div className="rounded-xl border border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
+                  Sem comunicados recentes.
+                </div>
+              ) : null}
+            </div>
+          </div>
 
         </section>
         ) : null}

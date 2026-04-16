@@ -11,6 +11,7 @@ import {
   LogOut,
   Lock,
   Megaphone,
+  ScrollText,
   Settings,
   User,
 } from 'lucide-react';
@@ -148,6 +149,7 @@ export default function MobileProfileMenuPage() {
             <div className="flex flex-col gap-2">
               <MenuRow to="/comunicacao-interna/noticias" label="Notícias" icon={Megaphone} />
               <MenuRow to="/comunicacao-interna/eventos" label="Eventos" icon={CalendarDays} />
+              <MenuRow to="/comunicacao-interna/comunicados" label="Comunicados" icon={ScrollText} />
               <MenuRow to="/comunicacao-interna/aniversarios" label="Aniversariantes" icon={Cake} />
             </div>
           </>

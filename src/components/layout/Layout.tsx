@@ -15,6 +15,7 @@ import { HorizontalMenu } from './HorizontalMenu';
 import { FloatingCornerActions } from './FloatingCornerActions';
 import { MobileBottomNav } from './MobileBottomNav';
 import { ColaboradorPrimeiroAcessoWizard } from '@/components/onboarding/ColaboradorPrimeiroAcessoWizard';
+import { ComunicadoLeituraPopup } from '@/components/comunicacao-interna/ComunicadoLeituraPopup';
 import { MobileWebPushBanner } from '@/components/mobile/MobileWebPushBanner';
 import { PwaGeolocationBanner } from '@/components/mobile/PwaGeolocationBanner';
 
@@ -148,6 +149,7 @@ export function Layout() {
         <FloatingCornerActions />
       </div>
       <ColaboradorPrimeiroAcessoWizard />
+      <ComunicadoLeituraPopup />
     </div>
   );
 }

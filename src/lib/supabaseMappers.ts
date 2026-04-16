@@ -142,6 +142,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   notificacoes: ['destinatarioColaboradorId', 'empresaId'],
   noticias: ['id', 'empresaId'],
   eventos: ['id', 'empresaId', 'alertarAntesHoras'],
+  comunicados: ['id', 'empresaId'],
   noticias_comentarios: ['id', 'empresaId', 'noticiaId', 'autorColaboradorId', 'autorPerfilId', 'parentComentarioId'],
   noticias_gostos: ['id', 'empresaId', 'noticiaId', 'autorPerfilId', 'colaboradorId'],
   organizacao_settings: ['id'],
@@ -209,6 +210,21 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
       ...out,
       galeriaUrls: Array.isArray(g) ? g.map(x => String(x)).filter(Boolean) : [],
     };
+  }
+  if (tableName === 'comunicados') {
+    const o = out as Record<string, unknown>;
+    const allowed = new Set([
+      'feriado',
+      'tolerancia_ponto',
+      'situacao_interna',
+      'nova_contratacao',
+      'nomeacao',
+      'exoneracao',
+      'demissao',
+      'outro',
+    ]);
+    const t = String(o.tipo ?? 'outro');
+    out = { ...out, tipo: allowed.has(t) ? t : 'outro' };
   }
   if (tableName === 'patrimonio_movimentos') {
     const o = out as Record<string, unknown>;

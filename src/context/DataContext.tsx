@@ -28,6 +28,7 @@ import type {
   RescisaoContrato,
   Noticia,
   Evento,
+  Comunicado,
   Banco,
   ContaBancaria,
   IRTEscalao,
@@ -132,6 +133,8 @@ interface DataContextType {
   setNoticias: React.Dispatch<React.SetStateAction<Noticia[]>>;
   eventos: Evento[];
   setEventos: React.Dispatch<React.SetStateAction<Evento[]>>;
+  comunicados: Comunicado[];
+  setComunicados: React.Dispatch<React.SetStateAction<Comunicado[]>>;
   processosDisciplinares: ProcessoDisciplinar[];
   setProcessosDisciplinares: React.Dispatch<React.SetStateAction<ProcessoDisciplinar[]>>;
   rescissoesContrato: RescisaoContrato[];
@@ -227,6 +230,9 @@ interface DataContextType {
   addEvento: (p: Partial<Evento>) => Promise<Evento>;
   updateEvento: (id: number, p: Partial<Evento>) => Promise<Evento>;
   deleteEvento: (id: number) => Promise<void>;
+  addComunicado: (p: Partial<Comunicado>) => Promise<Comunicado>;
+  updateComunicado: (id: number, p: Partial<Comunicado>) => Promise<Comunicado>;
+  deleteComunicado: (id: number) => Promise<void>;
   /** Módulos e rotas desactivados globalmente (Admin em Configurações). */
   organizacaoSettings: OrganizacaoSettings;
   updateOrganizacaoSettings: (next: OrganizacaoSettings) => Promise<OrganizacaoSettings>;
@@ -290,6 +296,7 @@ const emptyArrays = {
   relatoriosPlaneamento: [] as RelatorioMensalPlaneamento[],
   noticias: [] as Noticia[],
   eventos: [] as Evento[],
+  comunicados: [] as Comunicado[],
   processosDisciplinares: [] as ProcessoDisciplinar[],
   rescissoesContrato: [] as RescisaoContrato[],
   geofences: [] as Geofence[],
@@ -333,6 +340,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [relatoriosPlaneamento, setRelatoriosPlaneamento] = useState<RelatorioMensalPlaneamento[]>(emptyArrays.relatoriosPlaneamento);
   const [noticias, setNoticias] = useState<Noticia[]>(emptyArrays.noticias);
   const [eventos, setEventos] = useState<Evento[]>(emptyArrays.eventos);
+  const [comunicados, setComunicados] = useState<Comunicado[]>(emptyArrays.comunicados);
   const [processosDisciplinares, setProcessosDisciplinares] = useState<ProcessoDisciplinar[]>(emptyArrays.processosDisciplinares);
   const [rescissoesContrato, setRescissoesContrato] = useState<RescisaoContrato[]>(emptyArrays.rescissoesContrato);
   const [geofences, setGeofences] = useState<Geofence[]>(emptyArrays.geofences);
@@ -366,6 +374,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const declaracoesRT = useRealtimeTable<Declaracao>('declaracoes', 'id');
   const noticiasRT = useRealtimeTable<Noticia>('noticias', 'id');
   const eventosRT = useRealtimeTable<Evento>('eventos', 'id');
+  const comunicadosRT = useRealtimeTable<Comunicado>('comunicados', 'id');
   const requisicoesRT = useRealtimeTable<Requisicao>('requisicoes', 'id');
   const centrosCustoRT = useRealtimeTable<CentroCusto>('centros_custo', 'id');
   const projectosRT = useRealtimeTable<Projecto>('projectos', 'id');
@@ -398,6 +407,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     declaracoesRT.isLoading ||
     noticiasRT.isLoading ||
     eventosRT.isLoading ||
+    comunicadosRT.isLoading ||
     requisicoesRT.isLoading ||
     centrosCustoRT.isLoading ||
     projectosRT.isLoading ||
@@ -434,6 +444,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => setDeclaracoes(declaracoesRT.rows), [declaracoesRT.rows]);
   useEffect(() => setNoticias(noticiasRT.rows), [noticiasRT.rows]);
   useEffect(() => setEventos(eventosRT.rows), [eventosRT.rows]);
+  useEffect(() => setComunicados(comunicadosRT.rows), [comunicadosRT.rows]);
   useEffect(() => setRequisicoes(requisicoesRT.rows), [requisicoesRT.rows]);
   useEffect(() => setCentrosCusto(centrosCustoRT.rows), [centrosCustoRT.rows]);
   useEffect(() => setProjectos(projectosRT.rows), [projectosRT.rows]);
@@ -516,6 +527,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setRelatoriosPlaneamento(data.relatoriosPlaneamento);
       setNoticias(data.noticias);
       setEventos(data.eventos);
+      setComunicados(data.comunicados);
       setProcessosDisciplinares(data.processosDisciplinares);
       setRescissoesContrato(data.rescissoesContrato);
       setGeofences(data.geofences);
@@ -558,6 +570,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       relatoriosPlaneamento: isConsolidado ? relatoriosPlaneamento : relatoriosPlaneamento.filter(r => r.empresaId === currentEmpresaId),
       noticias: isConsolidado ? noticias : noticias.filter(n => n.empresaId === currentEmpresaId),
       eventos: isConsolidado ? eventos : eventos.filter(e => e.empresaId === currentEmpresaId),
+      comunicados: isConsolidado ? comunicados : comunicados.filter(c => c.empresaId === currentEmpresaId),
       processosDisciplinares: isConsolidado ? processosDisciplinares : processosDisciplinares.filter(p => p.empresaId === currentEmpresaId),
       rescissoesContrato: isConsolidado ? rescissoesContrato : rescissoesContrato.filter(r => r.empresaId === currentEmpresaId),
       contratos: isConsolidado ? contratos : contratos.filter(c => c.empresaId == null || c.empresaId === currentEmpresaId),
@@ -595,6 +608,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     relatoriosPlaneamento,
     noticias,
     eventos,
+    comunicados,
     processosDisciplinares,
     rescissoesContrato,
     contratos,
@@ -1114,6 +1128,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [runMutation]
   );
 
+  const addComunicado = useCallback(
+    (p: Partial<Comunicado>) =>
+      runMutation(() => db.comunicados.insert(supabase!, p), row => setComunicados(prev => [...prev, row])),
+    [runMutation]
+  );
+
+  const updateComunicado = useCallback(
+    (id: number, p: Partial<Comunicado>) =>
+      runMutation(() => db.comunicados.update(supabase!, id, p), row => setComunicados(prev => prev.map(c => (c.id === id ? row : c)))),
+    [runMutation]
+  );
+
+  const deleteComunicado = useCallback(
+    (id: number) =>
+      runMutation(() => (db.comunicados.delete(supabase!, id) as Promise<void>), () => setComunicados(prev => prev.filter(c => c.id !== id))),
+    [runMutation]
+  );
+
   const addPatrimonioCategoria = useCallback(
     (p: Partial<PatrimonioCategoriaCfg>) =>
       runMutation(() => db.patrimonio_categorias.insert(supabase!, p), row => setPatrimonioCategorias(prev => [...prev, row])),
@@ -1285,6 +1317,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setNoticias,
       eventos: filtered.eventos,
       setEventos,
+      comunicados: filtered.comunicados,
+      setComunicados,
       processosDisciplinares: filtered.processosDisciplinares,
       setProcessosDisciplinares,
       rescissoesContrato: filtered.rescissoesContrato,
@@ -1375,6 +1409,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addEvento,
       updateEvento,
       deleteEvento,
+      addComunicado,
+      updateComunicado,
+      deleteComunicado,
       organizacaoSettings,
       updateOrganizacaoSettings,
       patrimonioActivos: filtered.patrimonioActivos,
@@ -1507,6 +1544,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addEvento,
       updateEvento,
       deleteEvento,
+      addComunicado,
+      updateComunicado,
+      deleteComunicado,
       patrimonioActivos,
       patrimonioMovimentos,
       patrimonioVerificacoes,

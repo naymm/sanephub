@@ -23,6 +23,13 @@ import { Label } from '@/components/ui/label';
 import { Search, Plus, Pencil, Trash2, Eye, Star, Megaphone, Images, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
+import {
+  podePublicarEmMultiplasEmpresas,
+  resolveEmpresaIdsParaPublicacao,
+  empresaIdsActivos,
+  type AlcancePublicacaoModo,
+} from '@/modules/comunicacao-interna/publicacaoAlcanceEmpresas';
+import { PublicacaoAlcanceEmpresasFields } from '@/modules/comunicacao-interna/PublicacaoAlcanceEmpresasFields';
 
 const NOTIF_TARGET_PROFILES = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'];
 
@@ -67,8 +74,9 @@ export default function NoticiasPage() {
   const empresaIdForMutation = typeof currentEmpresaId === 'number' ? currentEmpresaId : null;
   const { user } = useAuth();
   const isAdmin = user?.perfil === 'Admin';
+  const podeMultiEmpresas = useMemo(() => podePublicarEmMultiplasEmpresas(user), [user]);
 
-  const { noticias, addNoticia, updateNoticia, deleteNoticia } = useData();
+  const { noticias, empresas, addNoticia, updateNoticia, deleteNoticia } = useData();
   const { addNotification } = useNotifications();
 
   const [search, setSearch] = useState('');
@@ -76,25 +84,60 @@ export default function NoticiasPage() {
   const [editing, setEditing] = useState<Noticia | null>(null);
 
   const [form, setForm] = useState<Omit<Noticia, 'id' | 'empresaId'>>(emptyForm);
+  const [alcanceModo, setAlcanceModo] = useState<AlcancePublicacaoModo>('empresa_actual');
+  const [umaEmpresaId, setUmaEmpresaId] = useState<number | null>(null);
+  const [empresasEscolhidas, setEmpresasEscolhidas] = useState<number[]>([]);
 
   const prepareCreate = useCallback(() => {
     if (!isAdmin) {
       navigate(LIST_PATH, { replace: true });
       return;
     }
-    if (!empresaIdForMutation) {
+    if (!podeMultiEmpresas && !empresaIdForMutation) {
       toast.error('Para criar notícias, selecione uma empresa (não use “consolidado”).');
       navigate(LIST_PATH, { replace: true });
       return;
     }
+    const activos = empresaIdsActivos(empresas);
     setEditing(null);
     setForm({ ...emptyForm });
-  }, [empresaIdForMutation, isAdmin, navigate]);
+    if (podeMultiEmpresas) {
+      if (typeof currentEmpresaId === 'number') {
+        setAlcanceModo('empresa_actual');
+        setUmaEmpresaId(currentEmpresaId);
+        setEmpresasEscolhidas([currentEmpresaId]);
+      } else {
+        setAlcanceModo('todas_empresas');
+        setUmaEmpresaId(activos[0] ?? null);
+        setEmpresasEscolhidas([]);
+      }
+    } else {
+      setAlcanceModo('empresa_actual');
+      setUmaEmpresaId(null);
+      setEmpresasEscolhidas([]);
+    }
+  }, [currentEmpresaId, empresas, empresaIdForMutation, isAdmin, navigate, podeMultiEmpresas]);
 
   const resetModal = useCallback(() => {
     setEditing(null);
     setForm({ ...emptyForm });
-  }, []);
+    const activos = empresaIdsActivos(empresas);
+    if (podeMultiEmpresas) {
+      if (typeof currentEmpresaId === 'number') {
+        setAlcanceModo('empresa_actual');
+        setUmaEmpresaId(currentEmpresaId);
+        setEmpresasEscolhidas([currentEmpresaId]);
+      } else {
+        setAlcanceModo('todas_empresas');
+        setUmaEmpresaId(activos[0] ?? null);
+        setEmpresasEscolhidas([]);
+      }
+    } else {
+      setAlcanceModo('empresa_actual');
+      setUmaEmpresaId(null);
+      setEmpresasEscolhidas([]);
+    }
+  }, [currentEmpresaId, empresas, podeMultiEmpresas]);
 
   const {
     isNovoRoute,
@@ -133,11 +176,26 @@ export default function NoticiasPage() {
       toast.error('Apenas Admin pode criar notícias.');
       return;
     }
-    if (!empresaIdForMutation) {
+    if (!podeMultiEmpresas && !empresaIdForMutation) {
       toast.error('Para criar notícias, selecione uma empresa (não use “consolidado”).');
       return;
     }
     openCreateNavigateOrDialog();
+  };
+
+  const getDraftStorageEmpresaId = (): number | null => {
+    if (editing?.empresaId != null) return editing.empresaId;
+    if (!podeMultiEmpresas && empresaIdForMutation != null) return empresaIdForMutation;
+    if (podeMultiEmpresas) {
+      if (alcanceModo === 'empresa_actual' && typeof currentEmpresaId === 'number') return currentEmpresaId;
+      if (alcanceModo === 'uma_empresa') return umaEmpresaId;
+      if (alcanceModo === 'empresas_escolhidas' && empresasEscolhidas.length) return empresasEscolhidas[0];
+      if (alcanceModo === 'todas_empresas') {
+        const a = empresaIdsActivos(empresas);
+        return a[0] ?? null;
+      }
+    }
+    return empresaIdForMutation;
   };
 
   const openEdit = (n: Noticia) => {
@@ -160,14 +218,14 @@ export default function NoticiasPage() {
       toast.error('Upload de imagem requer Supabase configurado.');
       return;
     }
-    if (!empresaIdForMutation && editing == null) {
-      toast.error('Selecione uma empresa para associar a imagem.');
+    if (getDraftStorageEmpresaId() == null && editing == null) {
+      toast.error('Defina o alcance da publicação ou seleccione uma empresa para associar a imagem.');
       return;
     }
     try {
       const ext = file.name.split('.').pop() || 'png';
       const baseId = editing?.id ?? Date.now();
-      const companyPart = String(empresaIdForMutation ?? editing?.empresaId ?? '0');
+      const companyPart = String(getDraftStorageEmpresaId() ?? editing?.empresaId ?? '0');
       const path = `comunicacao/${companyPart}/noticias/not-${baseId}-${Date.now()}.${ext}`;
       const bucket = 'noticias';
       const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
@@ -192,8 +250,8 @@ export default function NoticiasPage() {
       toast.error('Upload de imagem requer Supabase configurado.');
       return;
     }
-    if (!empresaIdForMutation && editing == null) {
-      toast.error('Selecione uma empresa para associar as imagens.');
+    if (getDraftStorageEmpresaId() == null && editing == null) {
+      toast.error('Defina o alcance da publicação ou seleccione uma empresa para associar as imagens.');
       return;
     }
     const actuais = form.galeriaUrls ?? [];
@@ -212,7 +270,7 @@ export default function NoticiasPage() {
       for (const file of imagens) {
         const ext = file.name.split('.').pop() || 'jpg';
         const baseId = editing?.id ?? Date.now();
-        const companyPart = String(empresaIdForMutation ?? editing?.empresaId ?? '0');
+        const companyPart = String(getDraftStorageEmpresaId() ?? editing?.empresaId ?? '0');
         const path = `comunicacao/${companyPart}/noticias/gal-${baseId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
         const bucket = 'noticias';
         const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
@@ -232,9 +290,21 @@ export default function NoticiasPage() {
 
   const save = async () => {
     if (!isAdmin) return;
-    if (!empresaIdForMutation && editing == null) {
-      toast.error('Selecione uma empresa para criar.');
-      return;
+    let targetEmpresaIds: number[] | null = null;
+    if (!editing) {
+      const r = resolveEmpresaIdsParaPublicacao({
+        podeMulti: podeMultiEmpresas,
+        modo: alcanceModo,
+        empresaIdContexto: empresaIdForMutation,
+        umaEmpresaId,
+        empresasEscolhidas,
+        todasEmpresasActivasIds: empresaIdsActivos(empresas),
+      });
+      if (!r.ok) {
+        toast.error(r.message);
+        return;
+      }
+      targetEmpresaIds = r.ids;
     }
     const titulo = form.titulo.trim();
     const conteudo = form.conteudo.trim();
@@ -292,36 +362,47 @@ export default function NoticiasPage() {
         setDialogOpen(false);
         setEditing(null);
       } else {
-        const created = await addNoticia({
-          empresaId: empresaIdForMutation!,
-          titulo,
-          conteudo,
-          imagemUrl: form.imagemUrl ?? null,
-          galeriaUrls,
-          featured: form.featured,
-          publicado: form.publicado,
-          publicadoEm: form.publicado ? (todayISO() as string) : null,
-        });
-
-        if (form.featured) {
-          const companyId = empresaIdForMutation!;
-          const others = noticias.filter(n => n.empresaId === companyId && n.featured && n.id !== created.id);
-          if (others.length) {
+        const ids = targetEmpresaIds!;
+        let running = [...noticias];
+        const createdList: Noticia[] = [];
+        for (const empresaId of ids) {
+          if (form.featured) {
+            const others = running.filter(n => n.empresaId === empresaId && n.featured);
             await Promise.all(others.map(o => updateNoticia(o.id, { featured: false })));
+            running = running.map(n => (n.empresaId === empresaId && n.featured ? { ...n, featured: false } : n));
+          }
+          const created = await addNoticia({
+            empresaId,
+            titulo,
+            conteudo,
+            imagemUrl: form.imagemUrl ?? null,
+            galeriaUrls,
+            featured: form.featured,
+            publicado: form.publicado,
+            publicadoEm: form.publicado ? (todayISO() as string) : null,
+          });
+          running = [...running, created];
+          createdList.push(created);
+        }
+
+        if (form.publicado && createdList.length) {
+          addNotification({
+            tipo: 'sucesso',
+            titulo: ids.length > 1 ? 'Notícias publicadas' : 'Nova notícia publicada',
+            mensagem:
+              ids.length > 1
+                ? `Foram criadas e publicadas ${ids.length} notícias: ${titulo}`
+                : `Foi publicada a notícia: ${createdList[0].titulo}`,
+            moduloOrigem: 'comunicacao-interna',
+            destinatarioPerfil: NOTIF_TARGET_PROFILES,
+            link: `/comunicacao-interna/noticias/${createdList[0].id}`,
+          });
+          for (const c of createdList) {
+            if (c.publicado) void invokeNoticiaPushNotify(c.id);
           }
         }
 
-        if (created.publicado) {
-          addNotification({
-            tipo: 'sucesso',
-            titulo: 'Nova notícia publicada',
-            mensagem: `Foi publicada a notícia: ${created.titulo}`,
-            moduloOrigem: 'comunicacao-interna',
-            destinatarioPerfil: NOTIF_TARGET_PROFILES,
-            link: `/comunicacao-interna/noticias/${created.id}`,
-          });
-          void invokeNoticiaPushNotify(created.id);
-        }
+        toast.success(ids.length > 1 ? `Criadas ${ids.length} notícias.` : 'Notícia criada.');
 
         setDialogOpen(false);
         if (isNovoRoute) {
@@ -452,6 +533,35 @@ export default function NoticiasPage() {
               <Label>Título</Label>
               <Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
             </div>
+
+            {editing ? (
+              <p className="text-xs text-muted-foreground">
+                Empresa:{' '}
+                <span className="font-medium text-foreground">
+                  {empresas.find(e => e.id === editing.empresaId)?.nome ?? `ID ${editing.empresaId}`}
+                </span>
+              </p>
+            ) : null}
+
+            {!editing && podeMultiEmpresas ? (
+              <PublicacaoAlcanceEmpresasFields
+                empresas={empresas}
+                currentEmpresaId={currentEmpresaId}
+                modo={alcanceModo}
+                onModoChange={m => {
+                  setAlcanceModo(m);
+                  const act = empresaIdsActivos(empresas);
+                  if (m === 'empresas_escolhidas' && empresasEscolhidas.length === 0 && typeof currentEmpresaId === 'number') {
+                    setEmpresasEscolhidas([currentEmpresaId]);
+                  }
+                  if (m === 'uma_empresa' && umaEmpresaId == null && act[0] != null) setUmaEmpresaId(act[0]);
+                }}
+                umaEmpresaId={umaEmpresaId}
+                onUmaEmpresaIdChange={setUmaEmpresaId}
+                empresasEscolhidas={empresasEscolhidas}
+                onEmpresasEscolhidasChange={setEmpresasEscolhidas}
+              />
+            ) : null}
 
             <div className="grid gap-2">
               <Label>Conteúdo</Label>

@@ -72,6 +72,8 @@ import NoticiaDetalhePage from "@/modules/comunicacao-interna/NoticiaDetalhePage
 import EventosPage from "@/modules/comunicacao-interna/EventosPage";
 import EventoDetalhePage from "@/modules/comunicacao-interna/EventoDetalhePage";
 import AniversariosPage from "@/modules/comunicacao-interna/AniversariosPage";
+import ComunicadosPage from "@/modules/comunicacao-interna/ComunicadosPage";
+import ComunicadoDetalhePage from "@/modules/comunicacao-interna/ComunicadoDetalhePage";
 import PatrimonioPage from "@/modules/patrimonio/PatrimonioPage";
 
 const queryClient = new QueryClient();
@@ -191,6 +193,9 @@ const App = () => (
                   <Route path="/comunicacao-interna/eventos" element={<EventosPage />} />
                   <Route path="/comunicacao-interna/eventos/novo" element={<EventosPage />} />
                   <Route path="/comunicacao-interna/eventos/:id" element={<EventoDetalhePage />} />
+                  <Route path="/comunicacao-interna/comunicados" element={<ComunicadosPage />} />
+                  <Route path="/comunicacao-interna/comunicados/novo" element={<ComunicadosPage />} />
+                  <Route path="/comunicacao-interna/comunicados/:id" element={<ComunicadoDetalhePage />} />
                   <Route path="/comunicacao-interna/aniversarios" element={<AniversariosPage />} />
                   {/* Config */}
                   <Route path="/configuracoes" element={<GenericModulePage title="Configurações" module="config" />} />

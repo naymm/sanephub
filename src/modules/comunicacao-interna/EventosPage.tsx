@@ -22,6 +22,13 @@ import { Label } from '@/components/ui/label';
 import { Search, Plus, Pencil, Trash2, Eye, CalendarDays, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
+import {
+  podePublicarEmMultiplasEmpresas,
+  resolveEmpresaIdsParaPublicacao,
+  empresaIdsActivos,
+  type AlcancePublicacaoModo,
+} from '@/modules/comunicacao-interna/publicacaoAlcanceEmpresas';
+import { PublicacaoAlcanceEmpresasFields } from '@/modules/comunicacao-interna/PublicacaoAlcanceEmpresasFields';
 
 const NOTIF_TARGET_PROFILES = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico'];
 
@@ -43,11 +50,12 @@ export default function EventosPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.perfil === 'Admin';
+  const podeMultiEmpresas = useMemo(() => podePublicarEmMultiplasEmpresas(user), [user]);
 
   const { currentEmpresaId } = useTenant();
   const empresaIdForMutation = typeof currentEmpresaId === 'number' ? currentEmpresaId : null;
 
-  const { eventos, addEvento, updateEvento, deleteEvento } = useData();
+  const { eventos, empresas, addEvento, updateEvento, deleteEvento } = useData();
   const { addNotification } = useNotifications();
 
   const [search, setSearch] = useState('');
@@ -55,25 +63,60 @@ export default function EventosPage() {
   const [editing, setEditing] = useState<Evento | null>(null);
 
   const [form, setForm] = useState<Omit<Evento, 'id' | 'empresaId'>>(emptyForm);
+  const [alcanceModo, setAlcanceModo] = useState<AlcancePublicacaoModo>('empresa_actual');
+  const [umaEmpresaId, setUmaEmpresaId] = useState<number | null>(null);
+  const [empresasEscolhidas, setEmpresasEscolhidas] = useState<number[]>([]);
 
   const prepareCreate = useCallback(() => {
     if (!isAdmin) {
       navigate(LIST_PATH, { replace: true });
       return;
     }
-    if (!empresaIdForMutation) {
+    if (!podeMultiEmpresas && !empresaIdForMutation) {
       toast.error('Para criar eventos, selecione uma empresa (não use “consolidado”).');
       navigate(LIST_PATH, { replace: true });
       return;
     }
+    const activos = empresaIdsActivos(empresas);
     setEditing(null);
     setForm({ ...emptyForm, dataInicio: new Date().toISOString() });
-  }, [empresaIdForMutation, isAdmin, navigate]);
+    if (podeMultiEmpresas) {
+      if (typeof currentEmpresaId === 'number') {
+        setAlcanceModo('empresa_actual');
+        setUmaEmpresaId(currentEmpresaId);
+        setEmpresasEscolhidas([currentEmpresaId]);
+      } else {
+        setAlcanceModo('todas_empresas');
+        setUmaEmpresaId(activos[0] ?? null);
+        setEmpresasEscolhidas([]);
+      }
+    } else {
+      setAlcanceModo('empresa_actual');
+      setUmaEmpresaId(null);
+      setEmpresasEscolhidas([]);
+    }
+  }, [currentEmpresaId, empresas, empresaIdForMutation, isAdmin, navigate, podeMultiEmpresas]);
 
   const resetModal = useCallback(() => {
     setEditing(null);
     setForm({ ...emptyForm, dataInicio: new Date().toISOString() });
-  }, []);
+    const activos = empresaIdsActivos(empresas);
+    if (podeMultiEmpresas) {
+      if (typeof currentEmpresaId === 'number') {
+        setAlcanceModo('empresa_actual');
+        setUmaEmpresaId(currentEmpresaId);
+        setEmpresasEscolhidas([currentEmpresaId]);
+      } else {
+        setAlcanceModo('todas_empresas');
+        setUmaEmpresaId(activos[0] ?? null);
+        setEmpresasEscolhidas([]);
+      }
+    } else {
+      setAlcanceModo('empresa_actual');
+      setUmaEmpresaId(null);
+      setEmpresasEscolhidas([]);
+    }
+  }, [currentEmpresaId, empresas, podeMultiEmpresas]);
 
   const {
     isNovoRoute,
@@ -103,11 +146,26 @@ export default function EventosPage() {
 
   const openCreate = () => {
     if (!isAdmin) return;
-    if (!empresaIdForMutation) {
+    if (!podeMultiEmpresas && !empresaIdForMutation) {
       toast.error('Para criar eventos, selecione uma empresa (não use “consolidado”).');
       return;
     }
     openCreateNavigateOrDialog();
+  };
+
+  const getDraftStorageEmpresaId = (): number | null => {
+    if (editing?.empresaId != null) return editing.empresaId;
+    if (!podeMultiEmpresas && empresaIdForMutation != null) return empresaIdForMutation;
+    if (podeMultiEmpresas) {
+      if (alcanceModo === 'empresa_actual' && typeof currentEmpresaId === 'number') return currentEmpresaId;
+      if (alcanceModo === 'uma_empresa') return umaEmpresaId;
+      if (alcanceModo === 'empresas_escolhidas' && empresasEscolhidas.length) return empresasEscolhidas[0];
+      if (alcanceModo === 'todas_empresas') {
+        const a = empresaIdsActivos(empresas);
+        return a[0] ?? null;
+      }
+    }
+    return empresaIdForMutation;
   };
 
   const openEdit = (e: Evento) => {
@@ -134,7 +192,7 @@ export default function EventosPage() {
     try {
       const ext = file.name.split('.').pop() || 'png';
       const baseId = editing?.id ?? Date.now();
-      const companyPart = String(empresaIdForMutation ?? editing?.empresaId ?? '0');
+      const companyPart = String(getDraftStorageEmpresaId() ?? editing?.empresaId ?? '0');
       const path = `comunicacao/${companyPart}/eventos/ev-${baseId}-${Date.now()}.${ext}`;
       const bucket = 'eventos';
       const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
@@ -149,9 +207,21 @@ export default function EventosPage() {
 
   const save = async () => {
     if (!isAdmin) return;
-    if (!empresaIdForMutation && editing == null) {
-      toast.error('Selecione uma empresa para criar.');
-      return;
+    let targetEmpresaIds: number[] | null = null;
+    if (!editing) {
+      const r = resolveEmpresaIdsParaPublicacao({
+        podeMulti: podeMultiEmpresas,
+        modo: alcanceModo,
+        empresaIdContexto: empresaIdForMutation,
+        umaEmpresaId,
+        empresasEscolhidas,
+        todasEmpresasActivasIds: empresaIdsActivos(empresas),
+      });
+      if (!r.ok) {
+        toast.error(r.message);
+        return;
+      }
+      targetEmpresaIds = r.ids;
     }
     const titulo = form.titulo.trim();
     const local = form.local.trim();
@@ -186,29 +256,41 @@ export default function EventosPage() {
       if (editing) {
         await updateEvento(editing.id, payload);
         toast.success('Evento actualizado.');
+        setDialogOpen(false);
+        setEditing(null);
       } else {
-        const created = await addEvento({
-          empresaId: empresaIdForMutation!,
-          ...(payload as any),
-        });
+        const ids = targetEmpresaIds!;
+        const createdList: Evento[] = [];
+        for (const empresaId of ids) {
+          const created = await addEvento({
+            empresaId,
+            ...(payload as any),
+          });
+          createdList.push(created);
+        }
 
-        addNotification({
-          tipo: 'info',
-          titulo: 'Novo evento criado',
-          mensagem: `Foi criado um novo evento: ${created.titulo}`,
-          moduloOrigem: 'comunicacao-interna',
-          destinatarioPerfil: NOTIF_TARGET_PROFILES,
-          link: `/comunicacao-interna/eventos/${created.id}`,
-        });
+        if (createdList.length) {
+          addNotification({
+            tipo: 'info',
+            titulo: ids.length > 1 ? 'Novos eventos criados' : 'Novo evento criado',
+            mensagem:
+              ids.length > 1
+                ? `Foram criados ${ids.length} eventos: ${titulo}`
+                : `Foi criado um novo evento: ${createdList[0].titulo}`,
+            moduloOrigem: 'comunicacao-interna',
+            destinatarioPerfil: NOTIF_TARGET_PROFILES,
+            link: `/comunicacao-interna/eventos/${createdList[0].id}`,
+          });
+        }
 
-        toast.success('Evento criado.');
-      }
+        toast.success(ids.length > 1 ? `Criados ${ids.length} eventos.` : 'Evento criado.');
 
-      setDialogOpen(false);
-      setEditing(null);
-      if (isNovoRoute && !editing) {
-        endMobileCreateFlow();
-        navigate(LIST_PATH, { replace: true });
+        setDialogOpen(false);
+        setEditing(null);
+        if (isNovoRoute) {
+          endMobileCreateFlow();
+          navigate(LIST_PATH, { replace: true });
+        }
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar evento.');
@@ -329,6 +411,35 @@ export default function EventosPage() {
               <Label>Título</Label>
               <Input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
             </div>
+
+            {editing ? (
+              <p className="text-xs text-muted-foreground">
+                Empresa:{' '}
+                <span className="font-medium text-foreground">
+                  {empresas.find(e => e.id === editing.empresaId)?.nome ?? `ID ${editing.empresaId}`}
+                </span>
+              </p>
+            ) : null}
+
+            {!editing && podeMultiEmpresas ? (
+              <PublicacaoAlcanceEmpresasFields
+                empresas={empresas}
+                currentEmpresaId={currentEmpresaId}
+                modo={alcanceModo}
+                onModoChange={m => {
+                  setAlcanceModo(m);
+                  const act = empresaIdsActivos(empresas);
+                  if (m === 'empresas_escolhidas' && empresasEscolhidas.length === 0 && typeof currentEmpresaId === 'number') {
+                    setEmpresasEscolhidas([currentEmpresaId]);
+                  }
+                  if (m === 'uma_empresa' && umaEmpresaId == null && act[0] != null) setUmaEmpresaId(act[0]);
+                }}
+                umaEmpresaId={umaEmpresaId}
+                onUmaEmpresaIdChange={setUmaEmpresaId}
+                empresasEscolhidas={empresasEscolhidas}
+                onEmpresasEscolhidasChange={setEmpresasEscolhidas}
+              />
+            ) : null}
 
             <div className="grid gap-2">
               <Label>Descrição</Label>

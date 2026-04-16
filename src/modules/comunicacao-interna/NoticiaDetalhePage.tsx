@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { mapRowsFromDb } from '@/lib/supabaseMappers';
+import { NoticiaGaleriaLightbox } from '@/modules/comunicacao-interna/NoticiaGaleriaLightbox';
 
 export default function NoticiaDetalhePage() {
   const { user } = useAuth();
@@ -31,6 +32,8 @@ export default function NoticiaDetalhePage() {
   const [commentText, setCommentText] = useState('');
   const [replyToId, setReplyToId] = useState<number | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [galeriaOpen, setGaleriaOpen] = useState(false);
+  const [galeriaIndex, setGaleriaIndex] = useState(0);
 
   const noticia: Noticia | undefined = useMemo(() => {
     if (noticiaId == null) return undefined;
@@ -262,23 +265,38 @@ export default function NoticiaDetalhePage() {
           )}
           {galeriaUrls.length > 0 && (
             <div className="border-t border-border/60 bg-muted/10 px-4 py-4 sm:px-6">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Galeria</p>
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Galeria</p>
+                <p className="text-[11px] text-muted-foreground">Toque numa foto para ver em ecrã completo.</p>
+              </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
                 {galeriaUrls.map((url, i) => {
                   const src = normalizePublicMediaUrl(url) ?? url;
                   return (
-                    <a
+                    <button
                       key={`${url}-${i}`}
-                      href={src}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      type="button"
+                      onClick={() => {
+                        setGaleriaIndex(i);
+                        setGaleriaOpen(true);
+                      }}
+                      className="group relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-background text-left ring-offset-background transition-shadow hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <img src={src} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]" />
-                    </a>
+                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/20 group-hover:opacity-100">
+                        <Eye className="h-8 w-8 text-white drop-shadow-md" strokeWidth={2} />
+                      </span>
+                    </button>
                   );
                 })}
               </div>
+              <NoticiaGaleriaLightbox
+                open={galeriaOpen}
+                onOpenChange={setGaleriaOpen}
+                titulo={noticia.titulo}
+                urls={galeriaUrls}
+                initialIndex={galeriaIndex}
+              />
             </div>
           )}
           <div className="p-6 space-y-4">

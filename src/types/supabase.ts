@@ -212,6 +212,23 @@ export interface Database {
           updated_at?: string;
         };
       };
+      comunicado_leituras: {
+        Row: {
+          comunicado_id: number;
+          profile_id: number;
+          lido_em: string;
+        };
+        Insert: {
+          comunicado_id: number;
+          profile_id: number;
+          lido_em?: string;
+        };
+        Update: {
+          comunicado_id?: number;
+          profile_id?: number;
+          lido_em?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: {
