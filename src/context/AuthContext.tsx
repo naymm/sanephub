@@ -434,6 +434,8 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
     'Contabilidade',
     'Planeamento',
   ],
+  /** Inventário físico: local, responsável e histórico. */
+  'patrimonio': ['Admin', 'PCA', 'Secretaria', 'Director', 'Financeiro', 'RH', 'Contabilidade', 'Planeamento'],
   'portal-colaborador': ['Colaborador'],
   'configuracoes': ['Admin'],
 };
@@ -459,6 +461,7 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
       return MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;
     }
     if (module === 'gestao-documentos' && user.modulos.includes('secretaria')) return true;
+    if (module === 'patrimonio' && user.modulos.includes('secretaria')) return true;
     return user.modulos.includes(module);
   }
 
@@ -467,6 +470,7 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
     return porPerfil;
   }
   if (module === 'gestao-documentos' && user.modulos.includes('secretaria')) return true;
+  if (module === 'patrimonio' && user.modulos.includes('secretaria')) return true;
   if (user.modulos.includes(module)) return true;
   return porPerfil;
 }

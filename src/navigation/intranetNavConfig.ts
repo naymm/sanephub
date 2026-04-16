@@ -15,6 +15,7 @@ import {
   Calculator,
   Fingerprint,
   MapPin,
+  Package,
 } from 'lucide-react';
 import { PORTAL_MENU_ITEMS } from '@/navigation/portalMenu';
 
@@ -93,6 +94,12 @@ export const MODULE_GROUPS: MenuGroup[] = [
     module: 'gestao-documentos',
     icon: FolderArchive,
     children: [{ label: 'Documentos', path: '/gestao-documentos', module: 'gestao-documentos' }],
+  },
+  {
+    label: 'Património',
+    module: 'patrimonio',
+    icon: Package,
+    children: [{ label: 'Activos e verificação', path: '/patrimonio', module: 'patrimonio' }],
   },
   {
     label: 'Jurídico',

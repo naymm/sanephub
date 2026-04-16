@@ -1,5 +1,44 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, ReactNode } from 'react';
-import type { Colaborador, Empresa, Geofence, ColaboradorGeofenceLink, Ferias, Falta, ReciboSalario, Declaracao, Requisicao, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, Correspondencia, DocumentoOficial, RiscoJuridico, Pagamento, PendenciaDocumental, Departamento, MovimentoTesouraria, RelatorioMensalPlaneamento, ProcessoDisciplinar, RescisaoContrato, Noticia, Evento, Banco, ContaBancaria, IRTEscalao, OrganizacaoSettings } from '@/types';
+import type {
+  Colaborador,
+  Empresa,
+  Geofence,
+  ColaboradorGeofenceLink,
+  Ferias,
+  Falta,
+  ReciboSalario,
+  Declaracao,
+  Requisicao,
+  CentroCusto,
+  Projecto,
+  Reuniao,
+  Acta,
+  Contrato,
+  ProcessoJudicial,
+  PrazoLegal,
+  Correspondencia,
+  DocumentoOficial,
+  RiscoJuridico,
+  Pagamento,
+  PendenciaDocumental,
+  Departamento,
+  MovimentoTesouraria,
+  RelatorioMensalPlaneamento,
+  ProcessoDisciplinar,
+  RescisaoContrato,
+  Noticia,
+  Evento,
+  Banco,
+  ContaBancaria,
+  IRTEscalao,
+  OrganizacaoSettings,
+  PatrimonioActivo,
+  PatrimonioCategoriaCfg,
+  PatrimonioMovimento,
+  PatrimonioSubcategoriaCfg,
+  PatrimonioVerificacao,
+  PatrimonioVerificacaoItem,
+} from '@/types';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
@@ -191,6 +230,34 @@ interface DataContextType {
   /** Módulos e rotas desactivados globalmente (Admin em Configurações). */
   organizacaoSettings: OrganizacaoSettings;
   updateOrganizacaoSettings: (next: OrganizacaoSettings) => Promise<OrganizacaoSettings>;
+  patrimonioActivos: PatrimonioActivo[];
+  setPatrimonioActivos: React.Dispatch<React.SetStateAction<PatrimonioActivo[]>>;
+  patrimonioMovimentos: PatrimonioMovimento[];
+  setPatrimonioMovimentos: React.Dispatch<React.SetStateAction<PatrimonioMovimento[]>>;
+  patrimonioVerificacoes: PatrimonioVerificacao[];
+  setPatrimonioVerificacoes: React.Dispatch<React.SetStateAction<PatrimonioVerificacao[]>>;
+  patrimonioVerificacaoItens: PatrimonioVerificacaoItem[];
+  setPatrimonioVerificacaoItens: React.Dispatch<React.SetStateAction<PatrimonioVerificacaoItem[]>>;
+  patrimonioCategorias: PatrimonioCategoriaCfg[];
+  setPatrimonioCategorias: React.Dispatch<React.SetStateAction<PatrimonioCategoriaCfg[]>>;
+  patrimonioSubcategorias: PatrimonioSubcategoriaCfg[];
+  setPatrimonioSubcategorias: React.Dispatch<React.SetStateAction<PatrimonioSubcategoriaCfg[]>>;
+  addPatrimonioCategoria: (p: Partial<PatrimonioCategoriaCfg>) => Promise<PatrimonioCategoriaCfg>;
+  updatePatrimonioCategoria: (id: number, p: Partial<PatrimonioCategoriaCfg>) => Promise<PatrimonioCategoriaCfg>;
+  deletePatrimonioCategoria: (id: number) => Promise<void>;
+  addPatrimonioSubcategoria: (p: Partial<PatrimonioSubcategoriaCfg>) => Promise<PatrimonioSubcategoriaCfg>;
+  updatePatrimonioSubcategoria: (id: number, p: Partial<PatrimonioSubcategoriaCfg>) => Promise<PatrimonioSubcategoriaCfg>;
+  deletePatrimonioSubcategoria: (id: number) => Promise<void>;
+  addPatrimonioActivo: (p: Partial<PatrimonioActivo>) => Promise<PatrimonioActivo>;
+  updatePatrimonioActivo: (id: number, p: Partial<PatrimonioActivo>) => Promise<PatrimonioActivo>;
+  deletePatrimonioActivo: (id: number) => Promise<void>;
+  addPatrimonioMovimento: (p: Partial<PatrimonioMovimento>) => Promise<PatrimonioMovimento>;
+  addPatrimonioVerificacao: (p: Partial<PatrimonioVerificacao>) => Promise<PatrimonioVerificacao>;
+  updatePatrimonioVerificacao: (id: number, p: Partial<PatrimonioVerificacao>) => Promise<PatrimonioVerificacao>;
+  deletePatrimonioVerificacao: (id: number) => Promise<void>;
+  addPatrimonioVerificacaoItem: (p: Partial<PatrimonioVerificacaoItem>) => Promise<PatrimonioVerificacaoItem>;
+  updatePatrimonioVerificacaoItem: (id: number, p: Partial<PatrimonioVerificacaoItem>) => Promise<PatrimonioVerificacaoItem>;
+  deletePatrimonioVerificacaoItem: (id: number) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -227,6 +294,12 @@ const emptyArrays = {
   rescissoesContrato: [] as RescisaoContrato[],
   geofences: [] as Geofence[],
   colaboradorGeofenceLinks: [] as ColaboradorGeofenceLink[],
+  patrimonioActivos: [] as PatrimonioActivo[],
+  patrimonioMovimentos: [] as PatrimonioMovimento[],
+  patrimonioVerificacoes: [] as PatrimonioVerificacao[],
+  patrimonioVerificacaoItens: [] as PatrimonioVerificacaoItem[],
+  patrimonioCategorias: [] as PatrimonioCategoriaCfg[],
+  patrimonioSubcategorias: [] as PatrimonioSubcategoriaCfg[],
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -265,6 +338,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [geofences, setGeofences] = useState<Geofence[]>(emptyArrays.geofences);
   const [colaboradorGeofenceLinks, setColaboradorGeofenceLinks] = useState<ColaboradorGeofenceLink[]>(
     emptyArrays.colaboradorGeofenceLinks,
+  );
+  const [patrimonioActivos, setPatrimonioActivos] = useState<PatrimonioActivo[]>(emptyArrays.patrimonioActivos);
+  const [patrimonioMovimentos, setPatrimonioMovimentos] = useState<PatrimonioMovimento[]>(emptyArrays.patrimonioMovimentos);
+  const [patrimonioVerificacoes, setPatrimonioVerificacoes] = useState<PatrimonioVerificacao[]>(
+    emptyArrays.patrimonioVerificacoes,
+  );
+  const [patrimonioVerificacaoItens, setPatrimonioVerificacaoItens] = useState<PatrimonioVerificacaoItem[]>(
+    emptyArrays.patrimonioVerificacaoItens,
+  );
+  const [patrimonioCategorias, setPatrimonioCategorias] = useState<PatrimonioCategoriaCfg[]>(emptyArrays.patrimonioCategorias);
+  const [patrimonioSubcategorias, setPatrimonioSubcategorias] = useState<PatrimonioSubcategoriaCfg[]>(
+    emptyArrays.patrimonioSubcategorias,
   );
   const [organizacaoSettings, setOrganizacaoSettings] = useState<OrganizacaoSettings>({
     modulosDesactivados: [],
@@ -435,6 +520,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setRescissoesContrato(data.rescissoesContrato);
       setGeofences(data.geofences);
       setColaboradorGeofenceLinks(data.colaboradorGeofenceLinks);
+      setPatrimonioActivos(data.patrimonioActivos);
+      setPatrimonioMovimentos(data.patrimonioMovimentos);
+      setPatrimonioVerificacoes(data.patrimonioVerificacoes);
+      setPatrimonioVerificacaoItens(data.patrimonioVerificacaoItens);
+      setPatrimonioCategorias(data.patrimonioCategorias);
+      setPatrimonioSubcategorias(data.patrimonioSubcategorias);
     } catch (e) {
       setDataError(e instanceof Error ? e.message : 'Erro ao carregar dados');
     } finally {
@@ -473,8 +564,48 @@ export function DataProvider({ children }: { children: ReactNode }) {
       processos: isConsolidado ? processos : processos.filter(p => p.empresaId == null || p.empresaId === currentEmpresaId),
       prazos: isConsolidado ? prazos : prazos.filter(pr => pr.empresaId == null || pr.empresaId === currentEmpresaId),
       riscos: isConsolidado ? riscos : riscos.filter(r => r.empresaId == null || r.empresaId === currentEmpresaId),
+      patrimonioActivos: isConsolidado ? patrimonioActivos : patrimonioActivos.filter(a => a.empresaId === currentEmpresaId),
+      patrimonioMovimentos: isConsolidado
+        ? patrimonioMovimentos
+        : patrimonioMovimentos.filter(m => m.empresaId === currentEmpresaId),
+      patrimonioVerificacoes: isConsolidado
+        ? patrimonioVerificacoes
+        : patrimonioVerificacoes.filter(v => v.empresaId === currentEmpresaId),
+      patrimonioVerificacaoItens: (() => {
+        if (isConsolidado) return patrimonioVerificacaoItens;
+        const verIds = new Set(
+          patrimonioVerificacoes.filter(v => v.empresaId === currentEmpresaId).map(v => v.id),
+        );
+        return patrimonioVerificacaoItens.filter(i => verIds.has(i.verificacaoId));
+      })(),
     };
-  }, [currentEmpresaId, colaboradores, requisicoes, centrosCusto, projectos, ferias, faltas, recibos, declaracoes, pagamentos, movimentosTesouraria, contasBancarias, relatoriosPlaneamento, noticias, eventos, processosDisciplinares, rescissoesContrato, contratos, processos, prazos, riscos]);
+  }, [
+    currentEmpresaId,
+    colaboradores,
+    requisicoes,
+    centrosCusto,
+    projectos,
+    ferias,
+    faltas,
+    recibos,
+    declaracoes,
+    pagamentos,
+    movimentosTesouraria,
+    contasBancarias,
+    relatoriosPlaneamento,
+    noticias,
+    eventos,
+    processosDisciplinares,
+    rescissoesContrato,
+    contratos,
+    processos,
+    prazos,
+    riscos,
+    patrimonioActivos,
+    patrimonioMovimentos,
+    patrimonioVerificacoes,
+    patrimonioVerificacaoItens,
+  ]);
 
   function runMutation<T>(fn: () => Promise<T>, then?: (result: T) => void): Promise<T> {
     if (!supabase || !isSupabaseConfigured()) return Promise.reject(new Error('Supabase não configurado'));
@@ -983,6 +1114,117 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [runMutation]
   );
 
+  const addPatrimonioCategoria = useCallback(
+    (p: Partial<PatrimonioCategoriaCfg>) =>
+      runMutation(() => db.patrimonio_categorias.insert(supabase!, p), row => setPatrimonioCategorias(prev => [...prev, row])),
+    [runMutation],
+  );
+  const updatePatrimonioCategoria = useCallback(
+    (id: number, p: Partial<PatrimonioCategoriaCfg>) =>
+      runMutation(() => db.patrimonio_categorias.update(supabase!, id, p), row =>
+        setPatrimonioCategorias(prev => prev.map(x => (x.id === id ? row : x))),
+      ),
+    [runMutation],
+  );
+  const deletePatrimonioCategoria = useCallback(
+    (id: number) =>
+      runMutation(() => (db.patrimonio_categorias.delete(supabase!, id) as Promise<void>), () => {
+        setPatrimonioCategorias(prev => prev.filter(x => x.id !== id));
+        setPatrimonioSubcategorias(prev => prev.filter(s => s.categoriaId !== id));
+      }),
+    [runMutation],
+  );
+  const addPatrimonioSubcategoria = useCallback(
+    (p: Partial<PatrimonioSubcategoriaCfg>) =>
+      runMutation(() => db.patrimonio_subcategorias.insert(supabase!, p), row =>
+        setPatrimonioSubcategorias(prev => [...prev, row]),
+      ),
+    [runMutation],
+  );
+  const updatePatrimonioSubcategoria = useCallback(
+    (id: number, p: Partial<PatrimonioSubcategoriaCfg>) =>
+      runMutation(() => db.patrimonio_subcategorias.update(supabase!, id, p), row =>
+        setPatrimonioSubcategorias(prev => prev.map(x => (x.id === id ? row : x))),
+      ),
+    [runMutation],
+  );
+  const deletePatrimonioSubcategoria = useCallback(
+    (id: number) =>
+      runMutation(() => (db.patrimonio_subcategorias.delete(supabase!, id) as Promise<void>), () => {
+        setPatrimonioSubcategorias(prev => prev.filter(x => x.id !== id));
+        setPatrimonioActivos(prev => prev.map(a => (a.subcategoriaId === id ? { ...a, subcategoriaId: null } : a)));
+      }),
+    [runMutation],
+  );
+
+  const addPatrimonioActivo = useCallback(
+    (p: Partial<PatrimonioActivo>) =>
+      runMutation(() => db.patrimonio_activos.insert(supabase!, p), row => setPatrimonioActivos(prev => [...prev, row])),
+    [runMutation],
+  );
+  const updatePatrimonioActivo = useCallback(
+    (id: number, p: Partial<PatrimonioActivo>) =>
+      runMutation(() => db.patrimonio_activos.update(supabase!, id, p), row =>
+        setPatrimonioActivos(prev => prev.map(x => (x.id === id ? row : x))),
+      ),
+    [runMutation],
+  );
+  const deletePatrimonioActivo = useCallback(
+    (id: number) =>
+      runMutation(() => (db.patrimonio_activos.delete(supabase!, id) as Promise<void>), () =>
+        setPatrimonioActivos(prev => prev.filter(x => x.id !== id)),
+      ),
+    [runMutation],
+  );
+  const addPatrimonioMovimento = useCallback(
+    (p: Partial<PatrimonioMovimento>) =>
+      runMutation(() => db.patrimonio_movimentos.insert(supabase!, p), row => setPatrimonioMovimentos(prev => [...prev, row])),
+    [runMutation],
+  );
+  const addPatrimonioVerificacao = useCallback(
+    (p: Partial<PatrimonioVerificacao>) =>
+      runMutation(() => db.patrimonio_verificacoes.insert(supabase!, p), row =>
+        setPatrimonioVerificacoes(prev => [...prev, row]),
+      ),
+    [runMutation],
+  );
+  const updatePatrimonioVerificacao = useCallback(
+    (id: number, p: Partial<PatrimonioVerificacao>) =>
+      runMutation(() => db.patrimonio_verificacoes.update(supabase!, id, p), row =>
+        setPatrimonioVerificacoes(prev => prev.map(x => (x.id === id ? row : x))),
+      ),
+    [runMutation],
+  );
+  const deletePatrimonioVerificacao = useCallback(
+    (id: number) =>
+      runMutation(() => (db.patrimonio_verificacoes.delete(supabase!, id) as Promise<void>), () => {
+        setPatrimonioVerificacoes(prev => prev.filter(x => x.id !== id));
+        setPatrimonioVerificacaoItens(prev => prev.filter(i => i.verificacaoId !== id));
+      }),
+    [runMutation],
+  );
+  const addPatrimonioVerificacaoItem = useCallback(
+    (p: Partial<PatrimonioVerificacaoItem>) =>
+      runMutation(() => db.patrimonio_verificacao_itens.insert(supabase!, p), row =>
+        setPatrimonioVerificacaoItens(prev => [...prev, row]),
+      ),
+    [runMutation],
+  );
+  const updatePatrimonioVerificacaoItem = useCallback(
+    (id: number, p: Partial<PatrimonioVerificacaoItem>) =>
+      runMutation(() => db.patrimonio_verificacao_itens.update(supabase!, id, p), row =>
+        setPatrimonioVerificacaoItens(prev => prev.map(x => (x.id === id ? row : x))),
+      ),
+    [runMutation],
+  );
+  const deletePatrimonioVerificacaoItem = useCallback(
+    (id: number) =>
+      runMutation(() => (db.patrimonio_verificacao_itens.delete(supabase!, id) as Promise<void>), () =>
+        setPatrimonioVerificacaoItens(prev => prev.filter(x => x.id !== id)),
+      ),
+    [runMutation],
+  );
+
   const value = useMemo<DataContextType>(
     () => ({
       dataLoading,
@@ -1135,6 +1377,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteEvento,
       organizacaoSettings,
       updateOrganizacaoSettings,
+      patrimonioActivos: filtered.patrimonioActivos,
+      setPatrimonioActivos,
+      patrimonioMovimentos: filtered.patrimonioMovimentos,
+      setPatrimonioMovimentos,
+      patrimonioVerificacoes: filtered.patrimonioVerificacoes,
+      setPatrimonioVerificacoes,
+      patrimonioVerificacaoItens: filtered.patrimonioVerificacaoItens,
+      setPatrimonioVerificacaoItens,
+      patrimonioCategorias,
+      setPatrimonioCategorias,
+      patrimonioSubcategorias,
+      setPatrimonioSubcategorias,
+      addPatrimonioCategoria,
+      updatePatrimonioCategoria,
+      deletePatrimonioCategoria,
+      addPatrimonioSubcategoria,
+      updatePatrimonioSubcategoria,
+      deletePatrimonioSubcategoria,
+      addPatrimonioActivo,
+      updatePatrimonioActivo,
+      deletePatrimonioActivo,
+      addPatrimonioMovimento,
+      addPatrimonioVerificacao,
+      updatePatrimonioVerificacao,
+      deletePatrimonioVerificacao,
+      addPatrimonioVerificacaoItem,
+      updatePatrimonioVerificacaoItem,
+      deletePatrimonioVerificacaoItem,
     }),
     [
       dataLoading,
@@ -1237,6 +1507,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addEvento,
       updateEvento,
       deleteEvento,
+      patrimonioActivos,
+      patrimonioMovimentos,
+      patrimonioVerificacoes,
+      patrimonioVerificacaoItens,
+      patrimonioCategorias,
+      patrimonioSubcategorias,
+      addPatrimonioCategoria,
+      updatePatrimonioCategoria,
+      deletePatrimonioCategoria,
+      addPatrimonioSubcategoria,
+      updatePatrimonioSubcategoria,
+      deletePatrimonioSubcategoria,
+      addPatrimonioActivo,
+      updatePatrimonioActivo,
+      deletePatrimonioActivo,
+      addPatrimonioMovimento,
+      addPatrimonioVerificacao,
+      updatePatrimonioVerificacao,
+      deletePatrimonioVerificacao,
+      addPatrimonioVerificacaoItem,
+      updatePatrimonioVerificacaoItem,
+      deletePatrimonioVerificacaoItem,
     ]
   );
 

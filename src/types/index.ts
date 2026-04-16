@@ -911,3 +911,97 @@ export interface RelatorioMensalPlaneamento {
   analisadoPor?: string;
   analisadoEm?: string;
 }
+
+/** Valores guardados em `computador_sistema_operacional`. */
+export type PatrimonioComputadorSO = 'windows_10' | 'windows_11' | 'mac_os' | 'linux';
+
+/** Categoria de activo configurável por empresa (Património). */
+export interface PatrimonioCategoriaCfg {
+  id: number;
+  empresaId: number;
+  nome: string;
+  slug: string;
+  ordem: number;
+  comportamentoViatura: boolean;
+  /** Activa campos de ficha técnica de computador no registo do activo. */
+  comportamentoComputador: boolean;
+  createdAt: string;
+}
+
+/** Subcategoria opcional ligada a uma categoria de património. */
+export interface PatrimonioSubcategoriaCfg {
+  id: number;
+  categoriaId: number;
+  nome: string;
+  ordem: number;
+  createdAt: string;
+}
+
+export type PatrimonioEstado = 'disponivel' | 'em_uso' | 'inactivo';
+
+export type PatrimonioMovimentoTipo =
+  | 'criacao'
+  | 'atribuir_colaborador'
+  | 'remover_colaborador'
+  | 'transferir_empresa'
+  | 'trocar_responsavel'
+  | 'alterar_estado'
+  | 'edicao_geral';
+
+export interface PatrimonioActivo {
+  id: number;
+  empresaId: number;
+  codigo: string;
+  nome: string;
+  /** Unidades representadas por esta linha (>= 1). */
+  quantidade: number;
+  categoriaId: number;
+  subcategoriaId?: number | null;
+  viaturaMarca?: string | null;
+  viaturaModelo?: string | null;
+  viaturaCor?: string | null;
+  viaturaMatricula?: string | null;
+  computadorMarca?: string | null;
+  computadorModelo?: string | null;
+  computadorSistemaOperacional?: PatrimonioComputadorSO | null;
+  computadorProcessador?: string | null;
+  computadorArmazenamentoGb?: number | null;
+  computadorRamGb?: number | null;
+  responsavelColaboradorId?: number | null;
+  estado: PatrimonioEstado;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PatrimonioMovimento {
+  id: number;
+  activoId: number;
+  empresaId: number;
+  tipo: PatrimonioMovimentoTipo;
+  resumo: string;
+  detalhe?: Record<string, unknown> | null;
+  actorPerfilId?: number | null;
+  actorNome?: string | null;
+  createdAt: string;
+}
+
+export interface PatrimonioVerificacao {
+  id: number;
+  empresaId: number;
+  anoMes: string;
+  titulo: string;
+  fechada: boolean;
+  createdBy?: number | null;
+  createdAt: string;
+}
+
+export interface PatrimonioVerificacaoItem {
+  id: number;
+  verificacaoId: number;
+  activoId: number;
+  existe?: boolean | null;
+  localCorrecto?: boolean | null;
+  responsavelCorrecto?: boolean | null;
+  observacoes: string;
+  updatedAt: string;
+}

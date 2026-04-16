@@ -72,6 +72,7 @@ import NoticiaDetalhePage from "@/modules/comunicacao-interna/NoticiaDetalhePage
 import EventosPage from "@/modules/comunicacao-interna/EventosPage";
 import EventoDetalhePage from "@/modules/comunicacao-interna/EventoDetalhePage";
 import AniversariosPage from "@/modules/comunicacao-interna/AniversariosPage";
+import PatrimonioPage from "@/modules/patrimonio/PatrimonioPage";
 
 const queryClient = new QueryClient();
 
@@ -155,6 +156,7 @@ const App = () => (
                   <Route path="/secretaria/documentos/novo" element={<DocumentosOficiaisPage />} />
                   <Route path="/gestao-documentos" element={<GestaoDocumentosPage />} />
                   <Route path="/secretaria/gestao-documentos" element={<Navigate to="/gestao-documentos" replace />} />
+                  <Route path="/patrimonio" element={<PatrimonioPage />} />
                   <Route path="/secretaria/correspondencias" element={<CorrespondenciasPage />} />
                   <Route path="/secretaria/correspondencias/novo" element={<CorrespondenciasPage />} />
                   <Route path="/secretaria/arquivo" element={<ArquivoPage />} />

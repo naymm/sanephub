@@ -25,6 +25,7 @@ const PATH_TO_MODULE: Record<string, string> = {
   '/contabilidade': 'contabilidade',
   '/secretaria': 'secretaria',
   '/gestao-documentos': 'gestao-documentos',
+  '/patrimonio': 'patrimonio',
   '/juridico': 'juridico',
   '/planeamento': 'planeamento',
   '/conselho-administracao': 'conselho-administracao',

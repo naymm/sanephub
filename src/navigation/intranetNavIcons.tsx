@@ -16,6 +16,7 @@ import {
   MapPin,
   Bell,
   MessageCircle,
+  Package,
 } from 'lucide-react';
 
 /** Ícones partilhados entre menu horizontal e drawer mobile (evita duplicar JSX). */
@@ -49,6 +50,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/secretaria/actas': <FileText className="h-4 w-4 shrink-0" />,
     '/secretaria/documentos': <FileText className="h-4 w-4 shrink-0" />,
     '/gestao-documentos': <FolderArchive className="h-4 w-4 shrink-0" />,
+    '/patrimonio': <Package className="h-4 w-4 shrink-0" />,
     '/secretaria/correspondencias': <MessageCircle className="h-4 w-4 shrink-0" />,
     '/secretaria/arquivo': <Scale className="h-4 w-4 shrink-0" />,
     '/juridico/contratos': <Scale className="h-4 w-4 shrink-0" />,

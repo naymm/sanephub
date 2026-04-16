@@ -35,6 +35,7 @@ export const MODULOS_DESACTIVAVEIS_PELA_ORG: { id: string; label: string }[] = [
   { id: 'planeamento', label: 'Planeamento' },
   { id: 'secretaria', label: 'Secretaria Geral' },
   { id: 'gestao-documentos', label: 'Gestão de Documentos' },
+  { id: 'patrimonio', label: 'Património' },
   { id: 'juridico', label: 'Jurídico' },
   { id: 'conselho-administracao', label: 'Conselho de Administração' },
   { id: 'portal-colaborador', label: 'Portal Colaborador' },

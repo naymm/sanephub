@@ -2,7 +2,46 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
 import { serializePlaneamentoTextList } from '@/utils/planeamentoTextLists';
-import type { Empresa, Departamento, Colaborador, Geofence, ColaboradorGeofenceLink, CentroCusto, Projecto, Reuniao, Acta, Contrato, ProcessoJudicial, PrazoLegal, RiscoJuridico, ProcessoDisciplinar, RescisaoContrato, Requisicao, Pagamento, MovimentoTesouraria, Ferias, Falta, ReciboSalario, Declaracao, Correspondencia, DocumentoOficial, PendenciaDocumental, RelatorioMensalPlaneamento, Noticia, Evento, Banco, ContaBancaria, IRTEscalao, OrganizacaoSettings } from '@/types';
+import type {
+  Empresa,
+  Departamento,
+  Colaborador,
+  Geofence,
+  ColaboradorGeofenceLink,
+  CentroCusto,
+  Projecto,
+  Reuniao,
+  Acta,
+  Contrato,
+  ProcessoJudicial,
+  PrazoLegal,
+  RiscoJuridico,
+  ProcessoDisciplinar,
+  RescisaoContrato,
+  Requisicao,
+  Pagamento,
+  MovimentoTesouraria,
+  Ferias,
+  Falta,
+  ReciboSalario,
+  Declaracao,
+  Correspondencia,
+  DocumentoOficial,
+  PendenciaDocumental,
+  RelatorioMensalPlaneamento,
+  Noticia,
+  Evento,
+  Banco,
+  ContaBancaria,
+  IRTEscalao,
+  OrganizacaoSettings,
+  PatrimonioActivo,
+  PatrimonioCategoriaCfg,
+  PatrimonioMovimento,
+  PatrimonioSubcategoriaCfg,
+  PatrimonioVerificacao,
+  PatrimonioVerificacaoItem,
+} from '@/types';
 
 const TABLE_NAMES = {
   empresas: 'empresas',
@@ -34,6 +73,12 @@ const TABLE_NAMES = {
   bancos: 'bancos',
   contas_bancarias: 'contas_bancarias',
   geofences: 'geofences',
+  patrimonio_activos: 'patrimonio_activos',
+  patrimonio_categorias: 'patrimonio_categorias',
+  patrimonio_subcategorias: 'patrimonio_subcategorias',
+  patrimonio_movimentos: 'patrimonio_movimentos',
+  patrimonio_verificacoes: 'patrimonio_verificacoes',
+  patrimonio_verificacao_itens: 'patrimonio_verificacao_itens',
 } as const;
 
 function num(id: number | string): number {
@@ -118,6 +163,79 @@ function isProvavelTabelaGeofencesInexistente(err: { message?: string; code?: st
   );
 }
 
+function isProvavelTabelaPatrimonioInexistente(err: { message?: string; code?: string; details?: string }): boolean {
+  const blob = `${err.message ?? ''} ${err.details ?? ''} ${err.code ?? ''}`.toLowerCase();
+  return (
+    blob.includes('404') ||
+    blob.includes('not found') ||
+    blob.includes('does not exist') ||
+    blob.includes('schema cache') ||
+    err.code === '42P01' ||
+    err.code === 'PGRST205'
+  );
+}
+
+async function loadPatrimonioSafe(supabase: SupabaseClient): Promise<{
+  patrimonioActivos: PatrimonioActivo[];
+  patrimonioMovimentos: PatrimonioMovimento[];
+  patrimonioVerificacoes: PatrimonioVerificacao[];
+  patrimonioVerificacaoItens: PatrimonioVerificacaoItem[];
+  patrimonioCategorias: PatrimonioCategoriaCfg[];
+  patrimonioSubcategorias: PatrimonioSubcategoriaCfg[];
+}> {
+  const r0 = await supabase.from('patrimonio_activos').select('*');
+  if (r0.error && isProvavelTabelaPatrimonioInexistente(r0.error)) {
+    return {
+      patrimonioActivos: [],
+      patrimonioMovimentos: [],
+      patrimonioVerificacoes: [],
+      patrimonioVerificacaoItens: [],
+      patrimonioCategorias: [],
+      patrimonioSubcategorias: [],
+    };
+  }
+  if (r0.error) throw r0.error;
+  const [r1, r2, r3, rc, rs] = await Promise.all([
+    supabase.from('patrimonio_movimentos').select('*'),
+    supabase.from('patrimonio_verificacoes').select('*'),
+    supabase.from('patrimonio_verificacao_itens').select('*'),
+    supabase.from('patrimonio_categorias').select('*'),
+    supabase.from('patrimonio_subcategorias').select('*'),
+  ]);
+  if (r1.error) throw r1.error;
+  if (r2.error) throw r2.error;
+  if (r3.error) throw r3.error;
+  let patrimonioCategorias: PatrimonioCategoriaCfg[] = [];
+  if (rc.error) {
+    if (!isProvavelTabelaPatrimonioInexistente(rc.error)) throw rc.error;
+  } else {
+    patrimonioCategorias = mapRowsFromDb<PatrimonioCategoriaCfg>(
+      'patrimonio_categorias',
+      (rc.data ?? []) as Record<string, unknown>[],
+    );
+  }
+  let patrimonioSubcategorias: PatrimonioSubcategoriaCfg[] = [];
+  if (rs.error) {
+    if (!isProvavelTabelaPatrimonioInexistente(rs.error)) throw rs.error;
+  } else {
+    patrimonioSubcategorias = mapRowsFromDb<PatrimonioSubcategoriaCfg>(
+      'patrimonio_subcategorias',
+      (rs.data ?? []) as Record<string, unknown>[],
+    );
+  }
+  return {
+    patrimonioActivos: mapRowsFromDb<PatrimonioActivo>('patrimonio_activos', (r0.data ?? []) as Record<string, unknown>[]),
+    patrimonioMovimentos: mapRowsFromDb<PatrimonioMovimento>('patrimonio_movimentos', (r1.data ?? []) as Record<string, unknown>[]),
+    patrimonioVerificacoes: mapRowsFromDb<PatrimonioVerificacao>('patrimonio_verificacoes', (r2.data ?? []) as Record<string, unknown>[]),
+    patrimonioVerificacaoItens: mapRowsFromDb<PatrimonioVerificacaoItem>(
+      'patrimonio_verificacao_itens',
+      (r3.data ?? []) as Record<string, unknown>[],
+    ),
+    patrimonioCategorias,
+    patrimonioSubcategorias,
+  };
+}
+
 export async function loadAllTables(supabase: SupabaseClient) {
   const [
     { data: empresas },
@@ -192,6 +310,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     throw colaboradorGeofencesRes.error;
   }
 
+  const patrimonio = await loadPatrimonioSafe(supabase);
+
   return {
     empresas: mapRowsFromDb<Empresa>('empresas', empresas ?? []),
     departamentos: mapRowsFromDb<Departamento>('departamentos', departamentos ?? []),
@@ -224,6 +344,12 @@ export async function loadAllTables(supabase: SupabaseClient) {
     irtEscalaes: mapRowsFromDb<IRTEscalao>('irt_escalaes', irtEscalaes ?? []),
     geofences: mapRowsFromDb<Geofence>('geofences', geofences ?? []),
     colaboradorGeofenceLinks: mapRowsFromDb<ColaboradorGeofenceLink>('colaborador_geofences', colaboradorGeofences ?? []),
+    patrimonioActivos: patrimonio.patrimonioActivos,
+    patrimonioMovimentos: patrimonio.patrimonioMovimentos,
+    patrimonioVerificacoes: patrimonio.patrimonioVerificacoes,
+    patrimonioVerificacaoItens: patrimonio.patrimonioVerificacaoItens,
+    patrimonioCategorias: patrimonio.patrimonioCategorias,
+    patrimonioSubcategorias: patrimonio.patrimonioSubcategorias,
   };
 }
 
@@ -623,5 +749,66 @@ export const db = {
     update: (s: SupabaseClient, id: number, p: Partial<ContaBancaria>) =>
       updateOne<ContaBancaria>(s, 'contas_bancarias', id, p as Record<string, unknown>, 'contas_bancarias'),
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'contas_bancarias', id),
+  },
+  patrimonio_activos: {
+    insert: (s: SupabaseClient, p: Partial<PatrimonioActivo>) =>
+      insertOne<PatrimonioActivo>(s, 'patrimonio_activos', p as Record<string, unknown>, 'patrimonio_activos'),
+    update: (s: SupabaseClient, id: number, p: Partial<PatrimonioActivo>) =>
+      updateOne<PatrimonioActivo>(s, 'patrimonio_activos', id, p as Record<string, unknown>, 'patrimonio_activos'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'patrimonio_activos', id),
+  },
+  patrimonio_categorias: {
+    insert: (s: SupabaseClient, p: Partial<PatrimonioCategoriaCfg>) =>
+      insertOne<PatrimonioCategoriaCfg>(s, 'patrimonio_categorias', p as Record<string, unknown>, 'patrimonio_categorias'),
+    update: (s: SupabaseClient, id: number, p: Partial<PatrimonioCategoriaCfg>) =>
+      updateOne<PatrimonioCategoriaCfg>(s, 'patrimonio_categorias', id, p as Record<string, unknown>, 'patrimonio_categorias'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'patrimonio_categorias', id),
+  },
+  patrimonio_subcategorias: {
+    insert: (s: SupabaseClient, p: Partial<PatrimonioSubcategoriaCfg>) =>
+      insertOne<PatrimonioSubcategoriaCfg>(
+        s,
+        'patrimonio_subcategorias',
+        p as Record<string, unknown>,
+        'patrimonio_subcategorias',
+      ),
+    update: (s: SupabaseClient, id: number, p: Partial<PatrimonioSubcategoriaCfg>) =>
+      updateOne<PatrimonioSubcategoriaCfg>(
+        s,
+        'patrimonio_subcategorias',
+        id,
+        p as Record<string, unknown>,
+        'patrimonio_subcategorias',
+      ),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'patrimonio_subcategorias', id),
+  },
+  patrimonio_movimentos: {
+    insert: (s: SupabaseClient, p: Partial<PatrimonioMovimento>) =>
+      insertOne<PatrimonioMovimento>(s, 'patrimonio_movimentos', p as Record<string, unknown>, 'patrimonio_movimentos'),
+  },
+  patrimonio_verificacoes: {
+    insert: (s: SupabaseClient, p: Partial<PatrimonioVerificacao>) =>
+      insertOne<PatrimonioVerificacao>(s, 'patrimonio_verificacoes', p as Record<string, unknown>, 'patrimonio_verificacoes'),
+    update: (s: SupabaseClient, id: number, p: Partial<PatrimonioVerificacao>) =>
+      updateOne<PatrimonioVerificacao>(s, 'patrimonio_verificacoes', id, p as Record<string, unknown>, 'patrimonio_verificacoes'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'patrimonio_verificacoes', id),
+  },
+  patrimonio_verificacao_itens: {
+    insert: (s: SupabaseClient, p: Partial<PatrimonioVerificacaoItem>) =>
+      insertOne<PatrimonioVerificacaoItem>(
+        s,
+        'patrimonio_verificacao_itens',
+        p as Record<string, unknown>,
+        'patrimonio_verificacao_itens',
+      ),
+    update: (s: SupabaseClient, id: number, p: Partial<PatrimonioVerificacaoItem>) =>
+      updateOne<PatrimonioVerificacaoItem>(
+        s,
+        'patrimonio_verificacao_itens',
+        id,
+        p as Record<string, unknown>,
+        'patrimonio_verificacao_itens',
+      ),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'patrimonio_verificacao_itens', id),
   },
 };

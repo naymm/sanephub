@@ -27,6 +27,7 @@ import {
   User,
   UserCircle,
   Users,
+  Package,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -101,6 +102,7 @@ export function IntranetTopbar() {
       { moduleId: 'contabilidade', label: 'Contabilidade', icon: <FileText className="h-4 w-4" /> },
       { moduleId: 'secretaria', label: 'Secretaria Geral', icon: <Stamp className="h-4 w-4" /> },
       { moduleId: 'gestao-documentos', label: 'Gestão documental', icon: <FolderArchive className="h-4 w-4" /> },
+      { moduleId: 'patrimonio', label: 'Património', icon: <Package className="h-4 w-4" /> },
       { moduleId: 'juridico', label: 'Jurídico', icon: <Scale className="h-4 w-4" /> },
       { moduleId: 'planeamento', label: 'Planeamento', icon: <Target className="h-4 w-4" /> },
     ];
@@ -158,6 +160,7 @@ export function IntranetTopbar() {
       'gestao-documentos': [
         { key: 'gestao-documentos-main', label: 'Documentos', path: '/gestao-documentos' },
       ],
+      patrimonio: [{ key: 'patrimonio-main', label: 'Activos e verificação', path: '/patrimonio' }],
       juridico: [
         { key: 'juridico-contratos', label: 'Contratos', path: '/juridico/contratos' },
         { key: 'juridico-processos', label: 'Processos Judiciais', path: '/juridico/processos' },

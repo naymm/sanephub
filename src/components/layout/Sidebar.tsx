@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
   Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock,   ShieldAlert, FolderArchive, Layers,
-  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator
+  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator, Package
 } from 'lucide-react';
 
 interface NavItem {
@@ -71,6 +71,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: FolderArchive,
     path: '/gestao-documentos',
     module: 'gestao-documentos',
+  },
+  {
+    label: 'Património',
+    icon: Package,
+    path: '/patrimonio',
+    module: 'patrimonio',
   },
   {
     label: 'Jurídico', icon: Scale, module: 'juridico',

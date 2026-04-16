@@ -10,6 +10,7 @@ export const MODULOS_ATIVOS_PADRAO_GRUPO: readonly string[] = [
   'planeamento',
   'secretaria',
   'gestao-documentos',
+  'patrimonio',
   'juridico',
   'conselho-administracao',
   'portal-colaborador',
@@ -32,7 +33,8 @@ export function getModulosAtivosForContext(
 
 /**
  * Verifica se o módulo está activo para a empresa.
- * `gestao-documentos` fica disponível também quando `secretaria` está na lista (retrocompatibilidade).
+ * `gestao-documentos` e `patrimonio` ficam disponíveis também quando `secretaria` está na lista (retrocompatibilidade
+ * com empresas guardadas antes destes módulos existirem na checklist).
  */
 export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleId: string): boolean {
   /** Comunicação interna é transversal; o desligue global fica em `organizacaoSettings.modulosDesactivados`. */
@@ -42,5 +44,6 @@ export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleI
   if (modulosAtivos == null) return true;
   if (modulosAtivos.includes(moduleId)) return true;
   if (moduleId === 'gestao-documentos' && modulosAtivos.includes('secretaria')) return true;
+  if (moduleId === 'patrimonio' && modulosAtivos.includes('secretaria')) return true;
   return false;
 }

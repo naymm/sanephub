@@ -145,6 +145,21 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   noticias_comentarios: ['id', 'empresaId', 'noticiaId', 'autorColaboradorId', 'autorPerfilId', 'parentComentarioId'],
   noticias_gostos: ['id', 'empresaId', 'noticiaId', 'autorPerfilId', 'colaboradorId'],
   organizacao_settings: ['id'],
+  patrimonio_activos: [
+    'id',
+    'empresaId',
+    'quantidade',
+    'categoriaId',
+    'subcategoriaId',
+    'responsavelColaboradorId',
+    'computadorArmazenamentoGb',
+    'computadorRamGb',
+  ],
+  patrimonio_categorias: ['id', 'empresaId', 'ordem'],
+  patrimonio_subcategorias: ['id', 'categoriaId', 'ordem'],
+  patrimonio_movimentos: ['id', 'activoId', 'empresaId', 'actorPerfilId'],
+  patrimonio_verificacoes: ['id', 'empresaId', 'createdBy'],
+  patrimonio_verificacao_itens: ['id', 'verificacaoId', 'activoId'],
 };
 
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {
@@ -193,6 +208,31 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
     out = {
       ...out,
       galeriaUrls: Array.isArray(g) ? g.map(x => String(x)).filter(Boolean) : [],
+    };
+  }
+  if (tableName === 'patrimonio_movimentos') {
+    const o = out as Record<string, unknown>;
+    const d = o.detalhe;
+    out = {
+      ...out,
+      detalhe:
+        d && typeof d === 'object' && !Array.isArray(d) ? (d as Record<string, unknown>) : {},
+    };
+  }
+  if (tableName === 'patrimonio_activos') {
+    const o = out as Record<string, unknown>;
+    const q = Number(o.quantidade ?? 1);
+    out = {
+      ...out,
+      quantidade: Number.isFinite(q) && q >= 1 ? q : 1,
+    };
+  }
+  if (tableName === 'patrimonio_categorias') {
+    const o = out as Record<string, unknown>;
+    out = {
+      ...out,
+      comportamentoViatura: Boolean(o.comportamentoViatura),
+      comportamentoComputador: Boolean(o.comportamentoComputador),
     };
   }
   return out as T;
