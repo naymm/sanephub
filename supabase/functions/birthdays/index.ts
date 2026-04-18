@@ -129,6 +129,18 @@ Deno.serve(async (req) => {
     const rows = (rowsAll ?? []) as { id: number; nome: string; data_nascimento: string; empresa_id: number }[];
 
     const collaboratorIds = rows.map((r) => r.id).filter((x) => x != null);
+
+    const { data: fotosRows } = collaboratorIds.length
+      ? await supabase.from('colaboradores').select('id, foto_perfil_url').in('id', collaboratorIds)
+      : { data: [] as any[] };
+
+    const fotoByCollaboratorId = new Map<number, string | null>();
+    for (const row of (fotosRows ?? []) as any[]) {
+      const id = row.id as number;
+      const u = (row.foto_perfil_url as string | null | undefined)?.trim();
+      fotoByCollaboratorId.set(id, u || null);
+    }
+
     const { data: avatarsRows } = collaboratorIds.length
       ? await supabase
           .from('profiles')
@@ -147,7 +159,14 @@ Deno.serve(async (req) => {
       name: c.nome as string,
       birth_date: c.data_nascimento as string,
       company_id: c.empresa_id as number,
-      avatar: avatarByCollaboratorId.get(c.id) ?? null,
+      /** URL da foto (`colaboradores.foto_perfil_url`); fallback para `profiles.avatar` só se for URL (evita letra). */
+      avatar: (() => {
+        const foto = fotoByCollaboratorId.get(c.id);
+        if (foto) return foto;
+        const letter = avatarByCollaboratorId.get(c.id);
+        if (letter && /^https?:\/\//i.test(String(letter).trim())) return String(letter).trim();
+        return null;
+      })(),
     });
 
     const todayBirthdays = (rowsToday ?? []).map(toPayload);

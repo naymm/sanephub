@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { AniversariosParabensBlock } from '@/modules/comunicacao-interna/AniversariosParabensBlock';
 import { AniversariosMeusParabensPanel } from '@/modules/comunicacao-interna/AniversariosMeusParabensPanel';
@@ -36,6 +37,24 @@ type BirthdaysApiResponse = {
 function looksLikeUrl(s?: string | null): boolean {
   if (!s) return false;
   return s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/');
+}
+
+/** URL da foto: prioridade `colaboradores.fotoPerfilUrl`, depois `avatar` da API só se for URL. */
+function birthdayProfilePhotoUrl(p: BirthdayPerson, colaboradores: { id: number; fotoPerfilUrl?: string | null }[]): string | null {
+  const c = colaboradores.find(x => x.id === p.id);
+  const foto = c?.fotoPerfilUrl?.trim();
+  if (foto) return foto;
+  const a = typeof p.avatar === 'string' ? p.avatar.trim() : '';
+  if (a && looksLikeUrl(a)) return a;
+  return null;
+}
+
+function birthdayPhotoSrc(
+  p: BirthdayPerson,
+  colaboradores: { id: number; fotoPerfilUrl?: string | null }[],
+): string | undefined {
+  const u = birthdayProfilePhotoUrl(p, colaboradores);
+  return u ? normalizePublicMediaUrl(u) ?? u : undefined;
 }
 
 /** Mês (0–11) e dia a partir de YYYY-MM-DD (calendário do próprio campo). */
@@ -79,10 +98,12 @@ type ColaboradorRow = {
   data_nascimento: string;
   empresa_id: number;
   status?: string;
+  foto_perfil_url?: string | null;
 };
 
 export default function AniversariosPage() {
   const { user } = useAuth();
+  const { colaboradores } = useData();
   const { currentEmpresaId } = useTenant();
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState<BirthdayPerson[]>([]);
@@ -127,7 +148,7 @@ export default function AniversariosPage() {
 
     let q = supabase
       .from('colaboradores')
-      .select('id, nome, data_nascimento, empresa_id, status')
+      .select('id, nome, data_nascimento, empresa_id, status, foto_perfil_url')
       .not('data_nascimento', 'is', null)
       .eq('status', 'Activo')
       .order('nome', { ascending: true });
@@ -155,13 +176,18 @@ export default function AniversariosPage() {
       }
     }
 
-    return list.map(c => ({
-      id: c.id,
-      name: c.nome,
-      birth_date: c.data_nascimento,
-      company_id: c.empresa_id,
-      avatar: avatarById.get(c.id) ?? null,
-    }));
+    return list.map(c => {
+      const foto = (c.foto_perfil_url ?? '').trim();
+      const letter = avatarById.get(c.id);
+      const letterAsUrl = letter && looksLikeUrl(letter) ? letter : null;
+      return {
+        id: c.id,
+        name: c.nome,
+        birth_date: c.data_nascimento,
+        company_id: c.empresa_id,
+        avatar: foto || letterAsUrl || null,
+      };
+    });
   }, [companyId]);
 
   useEffect(() => {
@@ -253,16 +279,16 @@ export default function AniversariosPage() {
             {TZ_ANIVERSARIO.replace('_', ' ')}). Se hoje é o teu aniversário, abre a aba &quot;Os meus parabéns&quot; para ver todas as mensagens.
           </p>
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap">
-            {todayBirthdays.map(p => (
+            {todayBirthdays.map(p => {
+              const imgSrc = birthdayPhotoSrc(p, colaboradores);
+              return (
               <div
                 key={p.id}
                 className="flex min-w-[min(100%,280px)] flex-1 flex-col gap-2 rounded-xl border border-border/60 bg-background/30 px-3 py-3 sm:max-w-md"
               >
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                    {looksLikeUrl(p.avatar) ? (
-                      <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
-                    ) : null}
+                    {imgSrc ? <AvatarImage src={imgSrc} alt="" /> : null}
                     <AvatarFallback>
                       {(p.name || '?')
                         .split(/\s+/)
@@ -283,7 +309,8 @@ export default function AniversariosPage() {
                   isBirthdayToday
                 />
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}
@@ -329,6 +356,7 @@ export default function AniversariosPage() {
                 {sortedForList.map(p => {
                   const day = birthMonthAndDayFromIso(p.birth_date).day;
                   const isHoje = todayIds.has(p.id);
+                  const imgSrc = birthdayPhotoSrc(p, colaboradores);
                   return (
                     <li
                       key={p.id}
@@ -345,9 +373,7 @@ export default function AniversariosPage() {
                           <span className="text-lg font-bold leading-tight">{day}</span>
                         </div>
                         <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                          {looksLikeUrl(p.avatar) ? (
-                            <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
-                          ) : null}
+                          {imgSrc ? <AvatarImage src={imgSrc} alt="" /> : null}
                           <AvatarFallback>
                             {(p.name || '?')
                               .split(/\s+/)

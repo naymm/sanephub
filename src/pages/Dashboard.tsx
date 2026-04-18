@@ -29,8 +29,19 @@ type BirthdayPerson = {
   name: string;
   birth_date: string;
   company_id: number;
+  /** URL da foto (API) ou letra de perfil legada — o UI usa `fotoPerfilUrl` do `colaboradores` quando existir. */
   avatar?: string | null;
 };
+
+/** Foto de perfil real: prioridade `colaboradores.fotoPerfilUrl`, depois `avatar` da API só se for URL. */
+function birthdayProfilePhotoUrl(p: BirthdayPerson, colaboradores: { id: number; fotoPerfilUrl?: string | null }[]): string | null {
+  const c = colaboradores.find(x => x.id === p.id);
+  const foto = c?.fotoPerfilUrl?.trim();
+  if (foto) return foto;
+  const a = typeof p.avatar === 'string' ? p.avatar.trim() : '';
+  if (a && (a.startsWith('http://') || a.startsWith('https://') || a.startsWith('/'))) return a;
+  return null;
+}
 
 /** Mês/dia do aniversário no calendário local (alinhado com o que o utilizador considera «hoje»). */
 function isBirthdayAnniversaryToday(birthDateIso: string): boolean {
@@ -73,8 +84,6 @@ export default function Dashboard() {
   const [birthdaysMonth, setBirthdaysMonth] = useState<BirthdayPerson[]>([]);
   const [birthdaysLoading, setBirthdaysLoading] = useState(false);
   const [birthdaysError, setBirthdaysError] = useState<string | null>(null);
-
-  const looksLikeUrl = (s?: string | null) => !!s && (s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/'));
 
   useEffect(() => {
     let cancelled = false;
@@ -514,7 +523,10 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 min-w-0 flex-1">
-              {birthdaysToday.map(p => (
+              {birthdaysToday.map(p => {
+                const photoUrl = birthdayProfilePhotoUrl(p, colaboradores);
+                const imgSrc = photoUrl ? normalizePublicMediaUrl(photoUrl) ?? photoUrl : undefined;
+                return (
                 <button
                   key={p.id}
                   type="button"
@@ -522,9 +534,7 @@ export default function Dashboard() {
                   className="inline-flex items-center gap-2 rounded-lg border border-amber-300/60 bg-background/70 dark:border-amber-700/50 px-2.5 py-1.5 text-left hover:bg-background transition-colors"
                 >
                   <Avatar className="h-8 w-8 ring-1 ring-border/50">
-                    {looksLikeUrl(p.avatar) ? (
-                      <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
-                    ) : null}
+                    {imgSrc ? <AvatarImage src={imgSrc} alt="" /> : null}
                     <AvatarFallback className="text-xs">
                       {(p.name || '?')
                         .split(/\s+/)
@@ -536,7 +546,8 @@ export default function Dashboard() {
                   </Avatar>
                   <span className="text-sm font-medium truncate max-w-[140px]">{p.name}</span>
                 </button>
-              ))}
+              );
+              })}
             </div>
           </div>
         </div>
@@ -826,12 +837,13 @@ export default function Dashboard() {
               {birthdaysLoading ? (
                 <p className="text-sm text-muted-foreground">Carregando...</p>
               ) : birthdaysToday.length > 0 ? (
-                birthdaysToday.map(p => (
+                birthdaysToday.map(p => {
+                  const photoUrl = birthdayProfilePhotoUrl(p, colaboradores);
+                  const imgSrc = photoUrl ? normalizePublicMediaUrl(photoUrl) ?? photoUrl : undefined;
+                  return (
                   <div key={p.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/30 px-3 py-2">
                     <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                      {looksLikeUrl(p.avatar) ? (
-                        <AvatarImage src={normalizePublicMediaUrl(p.avatar) ?? p.avatar ?? undefined} />
-                      ) : null}
+                      {imgSrc ? <AvatarImage src={imgSrc} alt="" /> : null}
                       <AvatarFallback>
                         {(p.name || '?')
                           .split(/\s+/)
@@ -846,7 +858,8 @@ export default function Dashboard() {
                       <div className="text-xs text-muted-foreground">{formatDate(p.birth_date)}</div>
                     </div>
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-sm text-muted-foreground">Sem aniversariantes hoje.</p>
               )}
