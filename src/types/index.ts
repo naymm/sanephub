@@ -17,6 +17,8 @@ export interface OrganizacaoSettings {
   modulosDesactivados: string[];
   /** Caminhos exactos ou prefixos (ex. `/capital-humano/zonas-trabalho`) desactivados. */
   recursosDesactivados: string[];
+  /** URL pública (ex. PNG no Storage) para o banner de feriados no Dashboard (desktop). */
+  dashboardBannerFeriadosUrl?: string | null;
 }
 
 export interface Departamento {

@@ -97,6 +97,7 @@ function isOrganizacaoSettingsUnavailable(err: { code?: string; message?: string
 const defaultOrganizacaoSettings = (): OrganizacaoSettings => ({
   modulosDesactivados: [],
   recursosDesactivados: [],
+  dashboardBannerFeriadosUrl: null,
 });
 
 export async function fetchOrganizacaoSettings(supabase: SupabaseClient): Promise<OrganizacaoSettings> {
@@ -106,13 +107,18 @@ export async function fetchOrganizacaoSettings(supabase: SupabaseClient): Promis
     throw error;
   }
   if (!data) return defaultOrganizacaoSettings();
-  const row = mapRowFromDb<{ modulosDesactivados?: string[]; recursosDesactivados?: string[] }>(
-    'organizacao_settings',
-    data as Record<string, unknown>,
-  );
+  const row = mapRowFromDb<{
+    modulosDesactivados?: string[];
+    recursosDesactivados?: string[];
+    dashboardBannerFeriadosUrl?: string | null;
+  }>('organizacao_settings', data as Record<string, unknown>);
   return {
     modulosDesactivados: Array.isArray(row.modulosDesactivados) ? row.modulosDesactivados : [],
     recursosDesactivados: Array.isArray(row.recursosDesactivados) ? row.recursosDesactivados : [],
+    dashboardBannerFeriadosUrl:
+      typeof row.dashboardBannerFeriadosUrl === 'string' && row.dashboardBannerFeriadosUrl.trim()
+        ? row.dashboardBannerFeriadosUrl.trim()
+        : null,
   };
 }
 
@@ -127,6 +133,7 @@ export async function upsertOrganizacaoSettings(
         id: 1,
         modulos_desactivados: settings.modulosDesactivados,
         recursos_desactivados: settings.recursosDesactivados,
+        dashboard_banner_feriados_url: settings.dashboardBannerFeriadosUrl ?? null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' },
@@ -134,13 +141,18 @@ export async function upsertOrganizacaoSettings(
     .select('*')
     .single();
   if (error) throw error;
-  const row = mapRowFromDb<{ modulosDesactivados?: string[]; recursosDesactivados?: string[] }>(
-    'organizacao_settings',
-    data as Record<string, unknown>,
-  );
+  const row = mapRowFromDb<{
+    modulosDesactivados?: string[];
+    recursosDesactivados?: string[];
+    dashboardBannerFeriadosUrl?: string | null;
+  }>('organizacao_settings', data as Record<string, unknown>);
   return {
     modulosDesactivados: Array.isArray(row.modulosDesactivados) ? row.modulosDesactivados : [],
     recursosDesactivados: Array.isArray(row.recursosDesactivados) ? row.recursosDesactivados : [],
+    dashboardBannerFeriadosUrl:
+      typeof row.dashboardBannerFeriadosUrl === 'string' && row.dashboardBannerFeriadosUrl.trim()
+        ? row.dashboardBannerFeriadosUrl.trim()
+        : null,
   };
 }
 

@@ -10,6 +10,7 @@ import {
 } from '@/utils/orgFeatureAccess';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,13 +24,19 @@ export default function ModulosRecursosPage() {
   const { organizacaoSettings, updateOrganizacaoSettings } = useData();
   const [modulosOff, setModulosOff] = useState<string[]>([]);
   const [recursosOff, setRecursosOff] = useState<string[]>([]);
+  const [bannerFeriadosUrl, setBannerFeriadosUrl] = useState('');
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     setModulosOff([...organizacaoSettings.modulosDesactivados]);
     setRecursosOff([...organizacaoSettings.recursosDesactivados]);
+    setBannerFeriadosUrl((organizacaoSettings.dashboardBannerFeriadosUrl ?? '').trim());
     setDirty(false);
-  }, [organizacaoSettings.modulosDesactivados, organizacaoSettings.recursosDesactivados]);
+  }, [
+    organizacaoSettings.modulosDesactivados,
+    organizacaoSettings.recursosDesactivados,
+    organizacaoSettings.dashboardBannerFeriadosUrl,
+  ]);
 
   const recursosPorModulo = useMemo(() => {
     const fromMenu: RecursoLinha[] = MODULE_GROUPS.flatMap(g =>
@@ -82,6 +89,7 @@ export default function ModulosRecursosPage() {
       await updateOrganizacaoSettings({
         modulosDesactivados: modulosSafe,
         recursosDesactivados: recursosSafe,
+        dashboardBannerFeriadosUrl: bannerFeriadosUrl.trim() || null,
       });
       setDirty(false);
       toast.success('Visibilidade da organização actualizada.');
@@ -117,6 +125,30 @@ export default function ModulosRecursosPage() {
           </p>
         )}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Dashboard — banner de feriados</CardTitle>
+          <CardDescription>
+            URL pública da imagem (recomendado PNG) mostrada à direita do resumo no Dashboard em ecrãs grandes.
+            Pode ser um ficheiro no Storage Supabase (bucket público) ou outro URL HTTPS.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="org-dashboard-banner">URL da imagem</Label>
+          <Input
+            id="org-dashboard-banner"
+            type="url"
+            placeholder="https://…/feriado.png"
+            value={bannerFeriadosUrl}
+            onChange={e => {
+              setBannerFeriadosUrl(e.target.value);
+              setDirty(true);
+            }}
+            className="font-mono text-sm"
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -200,6 +232,7 @@ export default function ModulosRecursosPage() {
           onClick={() => {
             setModulosOff([...organizacaoSettings.modulosDesactivados]);
             setRecursosOff([...organizacaoSettings.recursosDesactivados]);
+            setBannerFeriadosUrl((organizacaoSettings.dashboardBannerFeriadosUrl ?? '').trim());
             setDirty(false);
           }}
         >

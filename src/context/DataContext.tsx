@@ -362,6 +362,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [organizacaoSettings, setOrganizacaoSettings] = useState<OrganizacaoSettings>({
     modulosDesactivados: [],
     recursosDesactivados: [],
+    dashboardBannerFeriadosUrl: null,
   });
 
   // Realtime: mantém os arrays do DataContext sincronizados sem refresh/polling.
@@ -469,14 +470,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const reloadOrganizacaoSettings = useCallback(async () => {
     if (!supabase || !isSupabaseConfigured()) {
-      setOrganizacaoSettings({ modulosDesactivados: [], recursosDesactivados: [] });
+      setOrganizacaoSettings({ modulosDesactivados: [], recursosDesactivados: [], dashboardBannerFeriadosUrl: null });
       return;
     }
     try {
       const s = await fetchOrganizacaoSettings(supabase);
       setOrganizacaoSettings(s);
     } catch {
-      setOrganizacaoSettings({ modulosDesactivados: [], recursosDesactivados: [] });
+      setOrganizacaoSettings({ modulosDesactivados: [], recursosDesactivados: [], dashboardBannerFeriadosUrl: null });
     }
   }, []);
 

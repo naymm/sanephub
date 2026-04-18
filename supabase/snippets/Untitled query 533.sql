@@ -1,5 +1,2 @@
-create policy "comunicado_leituras: insert own"
-  on public.comunicado_leituras for insert
-  with check (
-    profile_id = (select p.id from public.profiles p where p.auth_user_id = auth.uid())
-  );
+comment on column public.organizacao_settings.dashboard_banner_feriados_url is
+  'URL da imagem (ex. PNG) para o banner à direita do Dashboard em desktop; vazio = placeholder.';

@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
 import { comunicadoConteudoToPlainText } from '@/modules/comunicacao-interna/comunicadoConteudoHtml';
+import { DashboardTopBanners } from '@/components/dashboard/DashboardTopBanners';
 
 type BirthdayPerson = {
   id: number;
@@ -72,7 +73,22 @@ const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B'
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { colaboradores, requisicoes, contratos, reunioes, processos, prazos, centrosCusto, pagamentos, documentosOficiais, noticias, eventos, comunicados } = useData();
+  const {
+    colaboradores,
+    requisicoes,
+    contratos,
+    reunioes,
+    processos,
+    prazos,
+    centrosCusto,
+    pagamentos,
+    documentosOficiais,
+    noticias,
+    eventos,
+    comunicados,
+    organizacaoSettings,
+    empresas,
+  } = useData();
   const { currentEmpresaId } = useTenant();
   const { addNotification } = useNotifications();
   const navigate = useNavigate();
@@ -455,6 +471,45 @@ export default function Dashboard() {
     };
   });
 
+  const dashboardBannerSrc = useMemo(() => {
+    const isLikelyImageUrl = (url: string) => {
+      const u = url.toLowerCase();
+      return (
+        u.endsWith('.png') ||
+        u.endsWith('.jpg') ||
+        u.endsWith('.jpeg') ||
+        u.endsWith('.webp') ||
+        u.endsWith('.gif') ||
+        u.includes('format=png') ||
+        u.includes('format=jpg') ||
+        u.includes('format=jpeg') ||
+        u.includes('format=webp')
+      );
+    };
+
+    const latestHoliday = [...comunicados]
+      .filter(c => c.tipo === 'feriado')
+      .sort((a, b) => new Date(b.publicadoEm).getTime() - new Date(a.publicadoEm).getTime())[0];
+
+    const fromComunicado = (latestHoliday?.anexoUrl ?? '').trim();
+    if (fromComunicado) {
+      const resolved = normalizePublicMediaUrl(fromComunicado) ?? fromComunicado;
+      if (isLikelyImageUrl(resolved)) return resolved;
+    }
+
+    const raw = organizacaoSettings.dashboardBannerFeriadosUrl?.trim();
+    if (!raw) return null;
+    return normalizePublicMediaUrl(raw) ?? raw;
+  }, [comunicados, organizacaoSettings.dashboardBannerFeriadosUrl]);
+
+  const organizationDisplayName = useMemo(() => {
+    if (currentEmpresaId === 'consolidado') {
+      if (empresas.length === 1) return empresas[0].nome;
+      return 'Grupo SANEP';
+    }
+    return empresas.find(e => e.id === currentEmpresaId)?.nome ?? 'Grupo SANEP';
+  }, [currentEmpresaId, empresas]);
+
   if (!user) return null;
 
   const canComunicacao = hasModuleAccess(user, 'comunicacao-interna');
@@ -480,23 +535,92 @@ export default function Dashboard() {
   const hasRightColumn = quickLinks.length > 0 || rightHasCalendarOrBirthdays;
   const hasMainGrid = hasNewsColumn || hasRightColumn;
 
+  /** Sem imagem de feriado e sem aniversariantes hoje (após carregar) — não reservar coluna à direita. */
+  const hasTopBannerColumn =
+    !!dashboardBannerSrc || (canComunicacao && !birthdaysLoading && birthdaysToday.length > 0);
+
   return (
     <div className="space-y-8">
-      {/* Hero — intranet moderna */}
+      {/* Topo: saudação + resumo; à direita só se houver banner (feriado e/ou aniversário) */}
       <div
-        className="relative overflow-hidden rounded-2xl border border-border/80"
-        style={{ background: 'linear-gradient(to right, #d4a926, #a57e26)' }}
+        className={cn(
+          'grid grid-cols-1 gap-6',
+          hasTopBannerColumn && 'lg:grid-cols-[minmax(0,1fr)_minmax(220px,32%)] lg:items-stretch',
+        )}
       >
-        <div className="absolute inset-0 opacity-[0.15] bg-[radial-gradient(circle_at_top,_transparent_0,_rgba(255,255,255,0.9)_45%,_transparent_60%)]" />
-        <div className="relative p-6 sm:p-8">
-          <h1 className="text-white text-xl lg:text-2xl font-semibold tracking-tight">
-            Olá, {user.nome.split(' ')[0]}
-          </h1>
-          <p className="text-white/90 text-sm mt-1">
-            Resumo e atalhos dos módulos a que tem acesso
-          </p>
-          <p className="text-white/80 text-xs mt-2 capitalize">{getCurrentDatePT()}</p>
+        <div className="flex min-w-0 flex-col gap-4">
+          <div
+            className="relative overflow-hidden rounded-2xl border border-border/80"
+            style={{ background: 'linear-gradient(to right, #d4a926, #a57e26)' }}
+          >
+            <div className="absolute inset-0 opacity-[0.15] bg-[radial-gradient(circle_at_top,_transparent_0,_rgba(255,255,255,0.9)_45%,_transparent_60%)]" />
+            <div className="relative p-6 sm:p-8">
+              <h1 className="text-white text-xl lg:text-2xl font-semibold tracking-tight">
+                Olá, {user.nome.split(' ')[0]}
+              </h1>
+              <p className="text-white/90 text-sm mt-1">
+                Resumo e atalhos dos módulos a que tem acesso
+              </p>
+              <p className="text-white/80 text-xs mt-2 capitalize">{getCurrentDatePT()}</p>
+            </div>
+          </div>
+
+          {kpiCount > 0 ? (
+            <div
+              className={cn(
+                'grid gap-4 grid-cols-1',
+                kpiCount >= 2 && 'sm:grid-cols-2',
+                !hasTopBannerColumn && kpiCount >= 3 && 'lg:grid-cols-3',
+                !hasTopBannerColumn && kpiCount >= 4 && 'lg:grid-cols-4',
+              )}
+            >
+              {canContabilidade ? (
+                <KpiCard
+                  title="Receita"
+                  value={formatKz(receita)}
+                  icon={<TrendingUp className="h-5 w-5" />}
+                  description="Pagamentos recebidos"
+                />
+              ) : null}
+              {canFinancas ? (
+                <KpiCard
+                  title="Despesas"
+                  value={formatKz(despesas)}
+                  icon={<Receipt className="h-5 w-5" />}
+                  description="Requisições pagas"
+                />
+              ) : null}
+              {canCapitalHumano ? (
+                <KpiCard
+                  title="Colaboradores"
+                  value={activeClients}
+                  icon={<UsersRound className="h-5 w-5" />}
+                  description="Colaboradores ativos"
+                />
+              ) : null}
+              {canJuridico ? (
+                <KpiCard
+                  title="Retenção"
+                  value={retencao}
+                  icon={<ShieldCheck className="h-5 w-5" />}
+                  description="Contratos com mais de 90 dias"
+                  className={retencao <= 0 ? 'border-destructive/30' : ''}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
+
+        {hasTopBannerColumn ? (
+          <DashboardTopBanners
+            holidayImageSrc={dashboardBannerSrc}
+            birthdayPeople={birthdaysToday}
+            includeBirthdayBanners={canComunicacao && !birthdaysLoading && birthdaysToday.length > 0}
+            colaboradores={colaboradores}
+            organizationName={organizationDisplayName}
+            onBirthdayBannerClick={() => navigate('/comunicacao-interna/aniversarios')}
+          />
+        ) : null}
       </div>
 
       {/* Destaque: aniversariantes (módulo Comunicação interna) */}
@@ -558,52 +682,6 @@ export default function Dashboard() {
         >
           <p className="font-medium">Aniversários</p>
           <p className="mt-1 text-[13px] leading-snug opacity-90">{birthdaysError}</p>
-        </div>
-      ) : null}
-
-      {/* KPIs por módulo: contabilidade / finanças / capital humano / jurídico */}
-      {kpiCount > 0 ? (
-        <div
-          className={cn(
-            'grid gap-4 grid-cols-1',
-            kpiCount >= 2 && 'sm:grid-cols-2',
-            kpiCount >= 3 && 'lg:grid-cols-3',
-            kpiCount >= 4 && 'lg:grid-cols-4',
-          )}
-        >
-          {canContabilidade ? (
-            <KpiCard
-              title="Receita"
-              value={formatKz(receita)}
-              icon={<TrendingUp className="h-5 w-5" />}
-              description="Pagamentos recebidos"
-            />
-          ) : null}
-          {canFinancas ? (
-            <KpiCard
-              title="Despesas"
-              value={formatKz(despesas)}
-              icon={<Receipt className="h-5 w-5" />}
-              description="Requisições pagas"
-            />
-          ) : null}
-          {canCapitalHumano ? (
-            <KpiCard
-              title="Colaboradores"
-              value={activeClients}
-              icon={<UsersRound className="h-5 w-5" />}
-              description="Colaboradores ativos"
-            />
-          ) : null}
-          {canJuridico ? (
-            <KpiCard
-              title="Retenção"
-              value={retencao}
-              icon={<ShieldCheck className="h-5 w-5" />}
-              description="Contratos com mais de 90 dias"
-              className={retencao <= 0 ? 'border-destructive/30' : ''}
-            />
-          ) : null}
         </div>
       ) : null}
 
