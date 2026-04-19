@@ -55,7 +55,14 @@ export default function PlaneamentoRelatoriosPage() {
   const [mesAnoFilter, setMesAnoFilter] = useState(() => mesAnoEmLuanda());
   const [statusFilter, setStatusFilter] = useState<StatusRelatorioPlaneamento | 'todos'>('todos');
 
-  const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
+  /** Director só cria/edita relatórios da própria empresa (nunca outra unidade). */
+  const directorEmpresaScope = user?.perfil === 'Director' && user?.empresaId != null ? user.empresaId : null;
+  const empresaIdForNew =
+    directorEmpresaScope != null
+      ? directorEmpresaScope
+      : currentEmpresaId === 'consolidado'
+        ? (empresas.find(e => e.activo)?.id ?? 1)
+        : currentEmpresaId;
   const isGroupLevel = user?.empresaId == null && (user?.perfil === 'Admin' || user?.perfil === 'PCA' || user?.perfil === 'Planeamento');
   const isDirectorDaEmpresa = user?.perfil === 'Director' && user?.empresaId != null && currentEmpresaId !== 'consolidado' && user.empresaId === currentEmpresaId;
   const canEdit = isGroupLevel || isDirectorDaEmpresa;
@@ -74,6 +81,7 @@ export default function PlaneamentoRelatoriosPage() {
         : 'Este mês já tem relatório submetido. Não é possível criar outro.';
 
   const filtered = relatoriosPlaneamento.filter(r => {
+    if (directorEmpresaScope != null && r.empresaId !== directorEmpresaScope) return false;
     const matchMes = !mesAnoFilter || r.mesAno === mesAnoFilter;
     const matchStatus = statusFilter === 'todos' || r.status === statusFilter;
     return matchMes && matchStatus;

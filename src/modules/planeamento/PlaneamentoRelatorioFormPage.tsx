@@ -370,7 +370,14 @@ export default function PlaneamentoRelatorioFormPage() {
   const location = useLocation();
   const isNew = !id || id === 'novo';
   const editMode = isNew || location.pathname.endsWith('/editar');
-  const empresaIdParam = Number(searchParams.get('empresaId')) || empresas.find(e => e.activo)?.id || 1;
+  const directorEmpresaId = user?.perfil === 'Director' && user?.empresaId != null ? user.empresaId : null;
+  const empresaIdFromQuery = Number(searchParams.get('empresaId'));
+  const empresaIdParam =
+    directorEmpresaId != null
+      ? directorEmpresaId
+      : (Number.isFinite(empresaIdFromQuery) && empresaIdFromQuery > 0
+          ? empresaIdFromQuery
+          : empresas.find(e => e.activo)?.id ?? 1);
   const mesAnoParam = searchParams.get('mesAno') || new Date().toISOString().slice(0, 7);
 
   const existing = id && id !== 'novo' ? relatoriosPlaneamento.find(r => r.id === Number(id)) : null;
@@ -395,6 +402,14 @@ export default function PlaneamentoRelatorioFormPage() {
     toast.error('Já existe relatório para este mês. Não é possível criar outro após a submissão.');
     navigate('/planeamento/relatorios', { replace: true });
   }, [isNew, empresaIdParam, mesAnoParam, relatoriosPlaneamento, navigate]);
+
+  useEffect(() => {
+    if (!existing || directorEmpresaId == null) return;
+    if (existing.empresaId !== directorEmpresaId) {
+      toast.error('Sem permissão para aceder a este relatório.');
+      navigate('/planeamento/relatorios', { replace: true });
+    }
+  }, [existing, directorEmpresaId, navigate]);
 
   if (form == null) return <div className="p-6">A carregar...</div>;
 

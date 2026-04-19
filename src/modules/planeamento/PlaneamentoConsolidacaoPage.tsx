@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { useTenant } from '@/context/TenantContext';
@@ -14,14 +15,27 @@ function mesAnoLabel(mesAno: string): string {
 }
 
 export default function PlaneamentoConsolidacaoPage() {
+  const { user } = useAuth();
   const { relatoriosPlaneamento, empresas } = useData();
   const { currentEmpresaId } = useTenant();
   const [mesAnoFilter, setMesAnoFilter] = useState('');
 
   const isConsolidado = currentEmpresaId === 'consolidado';
+  /** Director vê consolidação só da empresa onde está (sem visão Grupo). */
+  const directorEmpresaScope =
+    user?.perfil === 'Director' && user?.empresaId != null && typeof currentEmpresaId === 'number'
+      ? user.empresaId
+      : null;
+  const consolidacaoSoEmpresaDirector =
+    directorEmpresaScope != null && currentEmpresaId === directorEmpresaScope;
+
   const mesesDisponiveis = Array.from(new Set(relatoriosPlaneamento.map(r => r.mesAno))).sort().reverse();
   const mesSelecionado = mesAnoFilter || mesesDisponiveis[0];
-  const relatoriosMes = relatoriosPlaneamento.filter(r => r.mesAno === mesSelecionado);
+  const relatoriosMes = relatoriosPlaneamento.filter(r => {
+    if (r.mesAno !== mesSelecionado) return false;
+    if (consolidacaoSoEmpresaDirector) return r.empresaId === directorEmpresaScope;
+    return true;
+  });
   const pagination = useClientSidePagination({ items: relatoriosMes, pageSize: 25 });
 
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
@@ -32,7 +46,7 @@ export default function PlaneamentoConsolidacaoPage() {
   }, 0);
   const totalEbitdaConsolidado = relatoriosMes.reduce((s, r) => s + (r.ebitda ?? 0), 0);
 
-  if (!isConsolidado) {
+  if (!isConsolidado && !consolidacaoSoEmpresaDirector) {
     return (
       <div className="space-y-6">
         <h1 className="page-header">Consolidação</h1>
@@ -44,8 +58,14 @@ export default function PlaneamentoConsolidacaoPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="page-header">Consolidação do Grupo</h1>
-        <p className="text-sm text-muted-foreground mt-1">Consolidação automática das informações mensais das empresas para o Conselho de Administração.</p>
+        <h1 className="page-header">
+          {consolidacaoSoEmpresaDirector ? `Consolidação — ${empresaNome(directorEmpresaScope)}` : 'Consolidação do Grupo'}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {consolidacaoSoEmpresaDirector
+            ? 'Resumo mensal dos relatórios submetidos pela sua unidade de negócio.'
+            : 'Consolidação automática das informações mensais das empresas para o Conselho de Administração.'}
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -67,11 +87,19 @@ export default function PlaneamentoConsolidacaoPage() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Card>
-              <CardHeader><CardTitle className="text-sm">Total vendas (consolidado) — {mesAnoLabel(mesSelecionado)}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-sm">
+                  Total vendas {consolidacaoSoEmpresaDirector ? '(unidade)' : '(consolidado)'} — {mesAnoLabel(mesSelecionado)}
+                </CardTitle>
+              </CardHeader>
               <CardContent><p className="text-2xl font-semibold">{formatKz(totalVendasConsolidado)}</p></CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="text-sm">EBITDA consolidado — {mesAnoLabel(mesSelecionado)}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-sm">
+                  EBITDA {consolidacaoSoEmpresaDirector ? '(unidade)' : 'consolidado'} — {mesAnoLabel(mesSelecionado)}
+                </CardTitle>
+              </CardHeader>
               <CardContent><p className="text-2xl font-semibold">{formatKz(totalEbitdaConsolidado)}</p></CardContent>
             </Card>
           </div>

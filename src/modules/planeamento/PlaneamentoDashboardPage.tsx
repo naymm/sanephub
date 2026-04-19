@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
+import { useAuth } from '@/context/AuthContext';
 import { formatKz } from '@/utils/formatters';
 import {
   calcularEbitda,
@@ -134,15 +135,26 @@ const MES_AUTO = '__auto__';
 const MES_COMP_NENHUM = '__comp_nenhum__';
 
 export default function PlaneamentoDashboardPage() {
+  const { user } = useAuth();
   const { relatoriosPlaneamento, empresas } = useData();
   const { currentEmpresaId } = useTenant();
+
+  /** Director: indicadores apenas da própria unidade (não visão Grupo). */
+  const directorEmpresaScope = useMemo(
+    () => (user?.perfil === 'Director' && user?.empresaId != null ? user.empresaId : null),
+    [user?.perfil, user?.empresaId],
+  );
   const [mesFiltro, setMesFiltro] = useState<string>(MES_AUTO);
   const [mesComparacao, setMesComparacao] = useState<string>(MES_COMP_NENHUM);
 
   const isConsolidado = currentEmpresaId === 'consolidado';
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
 
-  const submetidos = relatoriosPlaneamento.filter(r => r.status !== 'Rascunho');
+  const submetidosBase = relatoriosPlaneamento.filter(r => r.status !== 'Rascunho');
+  const submetidos =
+    directorEmpresaScope != null
+      ? submetidosBase.filter(r => r.empresaId === directorEmpresaScope)
+      : submetidosBase;
   const mesActualLuanda = mesAnoEmLuanda();
   const mesesComDados = Array.from(new Set(submetidos.map(r => r.mesAno))).sort().reverse();
 
@@ -195,11 +207,27 @@ export default function PlaneamentoDashboardPage() {
   const comMargemNegativa = relatoriosRef.filter(r => (r.margemEbitda ?? 0) < 0);
   const porEbitda = [...relatoriosRef].sort((a, b) => (b.ebitda ?? 0) - (a.ebitda ?? 0));
 
-  if (!isConsolidado) {
+  if (!isConsolidado && directorEmpresaScope == null) {
     return (
       <div className="space-y-6">
         <h1 className="page-header">Dashboard Planeamento</h1>
         <p className="text-muted-foreground text-sm">Seleccione a visão consolidada (Grupo) para ver o dashboard de planeamento estratégico.</p>
+      </div>
+    );
+  }
+
+  if (
+    directorEmpresaScope != null &&
+    typeof currentEmpresaId === 'number' &&
+    currentEmpresaId !== directorEmpresaScope
+  ) {
+    return (
+      <div className="space-y-6">
+        <h1 className="page-header">Dashboard Planeamento</h1>
+        <p className="text-muted-foreground text-sm">
+          O dashboard da sua empresa está disponível no contexto da unidade{' '}
+          <span className="font-medium text-foreground">{empresaNome(directorEmpresaScope)}</span>.
+        </p>
       </div>
     );
   }
@@ -209,7 +237,11 @@ export default function PlaneamentoDashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="page-header">Dashboard Planeamento</h1>
-          <p className="text-sm text-muted-foreground mt-1">Indicadores de desempenho financeiro, crescimento e evolução das unidades de negócio.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {directorEmpresaScope != null
+              ? `Indicadores da sua unidade (${empresaNome(directorEmpresaScope)}).`
+              : 'Indicadores de desempenho financeiro, crescimento e evolução das unidades de negócio.'}
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end shrink-0">
           <div className="space-y-1.5">
