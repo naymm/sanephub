@@ -23,6 +23,7 @@ import FaltasPage from "@/modules/capital-humano/FaltasPage";
 import RecibosPage from "@/modules/capital-humano/RecibosPage";
 import DeclaracoesPage from "@/modules/capital-humano/DeclaracoesPage";
 import ProcessamentoSalarialPage from "@/modules/capital-humano/ProcessamentoSalarialPage";
+import AssiduidadePage from "@/modules/capital-humano/AssiduidadePage";
 const TimePunchesPage = lazy(() => import("@/modules/capital-humano/TimePunchesPage"));
 import GeofencesPage from "@/modules/capital-humano/GeofencesPage";
 import RequisicoesPage from "@/modules/financas/RequisicoesPage";
@@ -55,6 +56,7 @@ import PortalRecibosPage from "@/modules/portal/PortalRecibosPage";
 import PortalDeclaracoesPage from "@/modules/portal/PortalDeclaracoesPage";
 import PortalFeriasPage from "@/modules/portal/PortalFeriasPage";
 import PortalRequisicoesPage from "@/modules/portal/PortalRequisicoesPage";
+import PortalAssiduidadePage from "@/modules/portal/PortalAssiduidadePage";
 import PortalDadosPage from "@/modules/portal/PortalDadosPage";
 import ChatPage from "@/modules/chat/ChatPage";
 import ConselhoDashboardPage from "@/modules/conselho-administracao/ConselhoDashboardPage";
@@ -75,6 +77,7 @@ import AniversariosPage from "@/modules/comunicacao-interna/AniversariosPage";
 import ComunicadosPage from "@/modules/comunicacao-interna/ComunicadosPage";
 import ComunicadoDetalhePage from "@/modules/comunicacao-interna/ComunicadoDetalhePage";
 import PatrimonioPage from "@/modules/patrimonio/PatrimonioPage";
+import FacturacaoPage from "@/modules/facturacao/FacturacaoPage";
 
 const queryClient = new QueryClient();
 
@@ -128,6 +131,7 @@ const App = () => (
                   <Route path="/capital-humano/declaracoes" element={<DeclaracoesPage />} />
                   <Route path="/capital-humano/declaracoes/novo" element={<DeclaracoesPage />} />
                   <Route path="/capital-humano/processamento-salarial" element={<ProcessamentoSalarialPage />} />
+                  <Route path="/capital-humano/assiduidade" element={<AssiduidadePage />} />
                   <Route path="/capital-humano/marcacoes-ponto" element={<TimePunchesPage />} />
                   <Route path="/capital-humano/zonas-trabalho" element={<GeofencesPage />} />
                   <Route path="/capital-humano/zonas-trabalho/novo" element={<GeofencesPage />} />
@@ -145,6 +149,8 @@ const App = () => (
                   <Route path="/financas/projectos" element={<ProjectosPage />} />
                   <Route path="/financas/projectos/novo" element={<ProjectosPage />} />
                   <Route path="/financas/relatorios" element={<RelatoriosPage />} />
+
+                  <Route path="/facturacao" element={<FacturacaoPage />} />
                   {/* Contabilidade */}
                   <Route path="/contabilidade/pagamentos" element={<PagamentosPage />} />
                   <Route path="/contabilidade/pendencias" element={<PendenciasPage />} />
@@ -182,6 +188,7 @@ const App = () => (
                   <Route path="/portal/ferias" element={<PortalFeriasPage />} />
                   <Route path="/portal/ferias/novo" element={<PortalFeriasPage />} />
                   <Route path="/portal/faltas" element={<GenericModulePage title="As Minhas Faltas" module="portal" />} />
+                  <Route path="/portal/assiduidade" element={<PortalAssiduidadePage />} />
                   <Route path="/portal/recibos" element={<PortalRecibosPage />} />
                   <Route path="/portal/declaracoes" element={<PortalDeclaracoesPage />} />
                   <Route path="/portal/requisicoes" element={<PortalRequisicoesPage />} />

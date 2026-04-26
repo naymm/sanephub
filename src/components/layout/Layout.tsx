@@ -23,6 +23,7 @@ const PATH_TO_MODULE: Record<string, string> = {
   '/portal': 'portal-colaborador',
   '/capital-humano': 'capital-humano',
   '/financas': 'financas',
+  '/facturacao': 'facturacao',
   '/contabilidade': 'contabilidade',
   '/secretaria': 'secretaria',
   '/gestao-documentos': 'gestao-documentos',

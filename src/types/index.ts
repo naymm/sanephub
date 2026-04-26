@@ -10,6 +10,10 @@ export interface Empresa {
   activo: boolean;
   /** Módulos activos nesta empresa. Se indefinido, todos os módulos permitidos pelo perfil estão disponíveis. */
   modulosAtivos?: string[];
+  /** Se true, a empresa emite facturas (vende produtos/serviços) no módulo de facturação. */
+  facturacaoActiva?: boolean;
+  /** Zona/filial/unidade de facturação (ex.: referência do ERP). */
+  zonaFacturacao?: string | null;
 }
 
 /** Flags globais (tabela `organizacao_settings`): escondem módulos e rotas em toda a intranet. */
@@ -176,6 +180,32 @@ export interface Falta {
   registadoPor: string;
   /** YYYY-MM para faltas geradas pelo sistema por acumulado de atrasos. */
   referenciaMesAtrasos?: string | null;
+}
+
+/** Licença de assiduidade (ex.: maternidade) — integração com salário. */
+export type LicencaAssiduidadeTipo = 'maternidade' | 'outro';
+
+export interface LicencaAssiduidade {
+  id: number;
+  colaboradorId: number;
+  empresaId: number;
+  tipo: LicencaAssiduidadeTipo;
+  dataInicio: string;
+  dataFim: string;
+  observacoes?: string | null;
+}
+
+/** Atraso registado por dia; justificação só no mesmo dia civil. */
+export interface AtrasoAssiduidade {
+  id: number;
+  colaboradorId: number;
+  empresaId: number;
+  dataRef: string;
+  minutosAtraso: number;
+  justificado: boolean;
+  justificacao?: string | null;
+  justificadoEm?: string | null;
+  registadoPor: string;
 }
 
 /** Marcação de ponto legada (`time_punches`). */

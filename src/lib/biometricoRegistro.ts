@@ -183,10 +183,15 @@ export function normalizeBiometricoRegistro(camel: Record<string, unknown>): Nor
     'empresa_texto',
   ]);
 
+  const numeroMecRaw = camel['numeroMec'];
+  const numeroMecStr =
+    pickString(camel, ['numeroMec']) ??
+    (numeroMecRaw != null && numeroMecRaw !== '' ? String(numeroMecRaw).trim() : null);
+
   return {
     id,
     rawCamel: camel,
-    numeroMec: pickString(camel, ['numeroMec']),
+    numeroMec: numeroMecStr,
     occurredAtIso,
     dataIso: dataIso ?? '',
     dataTexto,

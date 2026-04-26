@@ -1,7 +1,7 @@
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { PORTAL_MENU_ITEMS, labelPortalMenuItem } from '@/navigation/portalMenu';
 import { PORTAL_PATH_ICONS } from '@/navigation/portalMenuIcons';
-import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemFacturacaoActiva, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
@@ -32,6 +32,7 @@ const routeTitles: Record<string, string> = {
   '/capital-humano/colaboradores': 'Colaboradores',
   '/capital-humano/ferias': 'Gestão de Férias',
   '/capital-humano/faltas': 'Faltas & Efectividade',
+  '/capital-humano/assiduidade': 'Assiduidade',
   '/capital-humano/recibos': 'Recibos de Salário',
   '/capital-humano/processamento-salarial': 'Processamento Salarial',
   '/capital-humano/declaracoes': 'Declarações',
@@ -61,6 +62,7 @@ const routeTitles: Record<string, string> = {
   '/portal/dados': 'Os Meus Dados',
   '/portal/ferias': 'As Minhas Férias',
   '/portal/faltas': 'As Minhas Faltas',
+  '/portal/assiduidade': 'Assiduidade (atrasos)',
   '/portal/recibos': 'Os Meus Recibos',
   '/portal/declaracoes': 'As Minhas Declarações',
   '/portal/requisicoes': 'Requisição à Área Financeira',
@@ -89,8 +91,10 @@ export function Topbar() {
   const headerAvatarFallback = userAvatarFallbackLabel(user);
 
   const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
+  const facturacaoActiva = empresaTemFacturacaoActiva(currentEmpresaId, empresas);
   const canShowModule = (moduleId?: string) => {
     if (!moduleId) return true;
+    if (moduleId === 'facturacao' && !facturacaoActiva) return false;
     if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     if (!hasModuleAccess(user, moduleId)) return false;
     if (user.perfil === 'Colaborador') return true;

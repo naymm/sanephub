@@ -77,6 +77,8 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   contas_bancarias: ['id', 'empresaId', 'bancoId', 'saldoActual'],
   ferias: ['id', 'colaboradorId', 'dias'],
   faltas: ['id', 'colaboradorId'],
+  assiduidade_licencas: ['id', 'colaboradorId', 'empresaId'],
+  assiduidade_atrasos: ['id', 'colaboradorId', 'empresaId', 'minutosAtraso'],
   time_punches: [
     'id',
     'colaboradorId',
@@ -89,6 +91,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   ],
   /** Campos numéricos frequentes; chaves em falta na linha são ignoradas por `ensureNumbers`. `id` omitido (pode ser uuid). */
   biometrico_registros: [
+    'numeroMec',
     'empresaId',
     'colaboradorId',
     'faceConfidence',
@@ -161,6 +164,8 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   patrimonio_movimentos: ['id', 'activoId', 'empresaId', 'actorPerfilId'],
   patrimonio_verificacoes: ['id', 'empresaId', 'createdBy'],
   patrimonio_verificacao_itens: ['id', 'verificacaoId', 'activoId'],
+  factura: ['id', 'empresaId', 'numFactura', 'serie'],
+  produto: ['id', 'numLinha'],
 };
 
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {

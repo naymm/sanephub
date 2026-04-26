@@ -54,6 +54,8 @@ export default function EmpresasPage() {
     morada: '',
     activo: true,
     modulosAtivos: undefined,
+    facturacaoActiva: false,
+    zonaFacturacao: null,
   });
 
   const prepareCreate = useCallback(() => {
@@ -65,6 +67,8 @@ export default function EmpresasPage() {
       morada: '',
       activo: true,
       modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO],
+      facturacaoActiva: false,
+      zonaFacturacao: null,
     });
   }, []);
 
@@ -77,6 +81,8 @@ export default function EmpresasPage() {
       morada: '',
       activo: true,
       modulosAtivos: [...MODULOS_ATIVOS_PADRAO_GRUPO],
+      facturacaoActiva: false,
+      zonaFacturacao: null,
     });
   }, []);
 
@@ -116,6 +122,8 @@ export default function EmpresasPage() {
       morada: empresa.morada ?? '',
       activo: empresa.activo,
       modulosAtivos: empresa.modulosAtivos ? [...empresa.modulosAtivos] : undefined,
+      facturacaoActiva: empresa.facturacaoActiva ?? false,
+      zonaFacturacao: empresa.zonaFacturacao ?? null,
     });
     setDialogOpen(true);
   };
@@ -130,13 +138,23 @@ export default function EmpresasPage() {
 
   const save = async () => {
     if (!form.codigo.trim() || !form.nome.trim()) return;
+    const modulosSync = (() => {
+      const raw = form.modulosAtivos ? [...form.modulosAtivos] : [];
+      const set = new Set(raw);
+      if (form.facturacaoActiva === true) set.add('facturacao');
+      else set.delete('facturacao');
+      const next = [...set];
+      return next.length ? next : undefined;
+    })();
     const payload = {
       codigo: form.codigo.trim(),
       nome: form.nome.trim(),
       nif: form.nif?.trim() || undefined,
       morada: form.morada?.trim() || undefined,
       activo: form.activo,
-      modulosAtivos: form.modulosAtivos?.length ? form.modulosAtivos : undefined,
+      modulosAtivos: modulosSync,
+      facturacaoActiva: form.facturacaoActiva === true,
+      zonaFacturacao: form.zonaFacturacao ? form.zonaFacturacao.trim() : null,
     };
     try {
       if (editing) await updateEmpresa(editing.id, payload);
@@ -193,6 +211,35 @@ export default function EmpresasPage() {
         <Checkbox id="activo" checked={form.activo} onCheckedChange={c => setForm(f => ({ ...f, activo: c === true }))} />
         <Label htmlFor="activo" className="cursor-pointer">Empresa activa (visível no login e no selector)</Label>
       </div>
+
+      <div className="space-y-2 border-t border-border/80 pt-4">
+        <Label className="text-sm font-medium">Facturação</Label>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="facturacao"
+            checked={form.facturacaoActiva === true}
+            onCheckedChange={c => setForm(f => ({ ...f, facturacaoActiva: c === true }))}
+          />
+          <Label htmlFor="facturacao" className="cursor-pointer">
+            Esta empresa vende / emite facturas (activar módulo de facturação)
+          </Label>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2 col-span-2 sm:col-span-1">
+            <Label>Zona de facturação</Label>
+            <Input
+              value={form.zonaFacturacao ?? ''}
+              onChange={e => setForm(f => ({ ...f, zonaFacturacao: e.target.value }))}
+              placeholder="ex: LUANDA / FILIAL 01"
+              disabled={!form.facturacaoActiva}
+            />
+            <p className="text-xs text-muted-foreground">
+              Opcional. Use para alinhar com o ERP (Primavera) ou a organização interna.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-2 border-t border-border/80 pt-4">
         <Label>Módulos permitidos</Label>
         <div className="flex flex-wrap items-center justify-between gap-2">

@@ -45,7 +45,7 @@ import { formatRelative } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
 import { userAvatarFallbackLabel, userAvatarImageSrc } from '@/utils/userAvatar';
 import type { NotificationAudienceOptions } from '@/context/NotificationContext';
-import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemFacturacaoActiva, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { useMemo, useState } from 'react';
 
@@ -79,9 +79,14 @@ export function IntranetTopbar() {
   const modulosAtivos = useMemo(() => {
     return getModulosAtivosForContext(currentEmpresaId, empresas);
   }, [currentEmpresaId, empresas]);
+  const facturacaoActiva = useMemo(
+    () => empresaTemFacturacaoActiva(currentEmpresaId, empresas),
+    [currentEmpresaId, empresas],
+  );
 
   const canShowModule = (moduleId?: string) => {
     if (!moduleId) return true;
+    if (moduleId === 'facturacao' && !facturacaoActiva) return false;
     if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     if (!hasModuleAccess(user, moduleId)) return false;
     if (user.perfil === 'Colaborador') return true;
@@ -131,6 +136,7 @@ export function IntranetTopbar() {
       'capital-humano': [
         { key: 'capital-humano-colaboradores', label: 'Colaboradores', path: '/capital-humano/colaboradores' },
         { key: 'capital-humano-faltas', label: 'Faltas', path: '/capital-humano/faltas' },
+        { key: 'capital-humano-assiduidade', label: 'Assiduidade', path: '/capital-humano/assiduidade' },
         { key: 'capital-humano-ferias', label: 'Férias', path: '/capital-humano/ferias' },
         { key: 'capital-humano-recibos', label: 'Recibos', path: '/capital-humano/recibos' },
         { key: 'capital-humano-processamento-salarial', label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial' },

@@ -4,7 +4,7 @@ import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
 const BUCKET = 'comprovativos' as const;
 const PREFIX = 'capital-humano-preview';
 
-export type PdfPreviewKind = 'recibo' | 'declaracao';
+export type PdfPreviewKind = 'recibo' | 'declaracao' | 'factura';
 
 /** `crypto.randomUUID()` não existe ou rebenta em contextos não seguros (ex.: HTTP no telemóvel). */
 function randomPreviewFileId(): string {

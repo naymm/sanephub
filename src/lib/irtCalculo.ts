@@ -1,4 +1,8 @@
-import type { IRTEscalao } from '@/types';
+import type { Colaborador, IRTEscalao, Falta, LicencaAssiduidade } from '@/types';
+import {
+  calculateAttendanceImpact,
+  type AttendancePayrollImpactDetalhe,
+} from '@/services/assiduidade/attendanceImpact';
 
 const LIMITE_SUBSIDIO_TRIBUTAVEL = 30000;
 const TAXA_SEGURANCA_SOCIAL = 0.03;
@@ -224,6 +228,152 @@ export function calcularInssIrtLiquido(
     escalonIrt: escalon,
     descontoFaltas: apos.totalDescontoFaltas,
     diasFaltaDesconto: diasFalta,
+  };
+}
+
+/** Linhas de pré-visualização alinhadas a um «processamento individual» (ex.: Primavera). */
+export interface ResumoProcessamentoIndividual {
+  periodoLabel: string;
+  diasUteisReferencia: number;
+  /** Vencimento base efectivo ÷ (dias úteis ref. × 8 h) — indicativo. */
+  salarioHoraAprox: number;
+  materiaColetavel: number;
+  componentes: {
+    salarioBaseNominal: number;
+    salarioBaseEfetivo: number;
+    subsidioAlimentacaoNominal: number;
+    subsidioAlimentacaoEfetivo: number;
+    subsidioTransporteNominal: number;
+    subsidioTransporteEfetivo: number;
+    outrosSubsidiosAgregadoNominal: number;
+    outrosSubsidiosEfetivo: number;
+    subsidioRiscoNominal: number;
+    subsidioDisponibilidadeNominal: number;
+  };
+}
+
+export type ProcessamentoSalarialComAssiduidadeResultado = ProcessamentoSalarialResultado & {
+  detalheAssiduidade: AttendancePayrollImpactDetalhe;
+  resumoIndividual: ResumoProcessamentoIndividual;
+};
+
+/**
+ * Processamento salarial com regras de assiduidade (faltas justificadas/injustificadas, licença de maternidade).
+ * Subsídios risco e disponibilidade entram no montante «outros» para matéria colectável (alinhado ao modelo actual do recibo).
+ */
+function labelPeriodoMesAno(mesAno: string): string {
+  const p = mesAno.trim().slice(0, 7);
+  const m = p.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return mesAno;
+  return `${m[2]}-${m[1]}`;
+}
+
+export function calcularInssIrtLiquidoComAssiduidade(
+  colaborador: Colaborador,
+  mesAno: string,
+  faltas: Falta[],
+  licencas: LicencaAssiduidade[],
+  irtEscalaes: IRTEscalao[],
+  extra?: { outrasDeducoes?: number },
+): ProcessamentoSalarialComAssiduidadeResultado {
+  const outrasDeducoes = extra?.outrasDeducoes ?? 0;
+  const detalhe = calculateAttendanceImpact(colaborador, { mesAno, faltas, licencas });
+  const periodoLabel = labelPeriodoMesAno(mesAno);
+  const horasMesRef = Math.max(1, DIAS_UTEIS_MES_NORMA_TRABALHO * 8);
+
+  if (detalhe.modo === 'licenca_maternidade') {
+    const salarioBase = Math.max(0, colaborador.salarioBase ?? 0);
+    const segurancaSocial = arredondar2(salarioBase * TAXA_SEGURANCA_SOCIAL);
+    const materiaColetavel = salarioBase - segurancaSocial;
+    const { irt, escalon } = calcularIrt(materiaColetavel, salarioBase, irtEscalaes);
+    const liquido = Math.max(0, arredondar2(salarioBase - segurancaSocial - irt - outrasDeducoes));
+    const salarioHoraAprox = arredondar2(salarioBase / horasMesRef);
+    return {
+      salarioBruto: salarioBase,
+      inss: segurancaSocial,
+      irt,
+      liquido,
+      escalonIrt: escalon,
+      descontoFaltas: 0,
+      diasFaltaDesconto: 0,
+      detalheAssiduidade: detalhe,
+      resumoIndividual: {
+        periodoLabel,
+        diasUteisReferencia: DIAS_UTEIS_MES_NORMA_TRABALHO,
+        salarioHoraAprox,
+        materiaColetavel,
+        componentes: {
+          salarioBaseNominal: salarioBase,
+          salarioBaseEfetivo: salarioBase,
+          subsidioAlimentacaoNominal: 0,
+          subsidioAlimentacaoEfetivo: 0,
+          subsidioTransporteNominal: 0,
+          subsidioTransporteEfetivo: 0,
+          outrosSubsidiosAgregadoNominal: 0,
+          outrosSubsidiosEfetivo: 0,
+          subsidioRiscoNominal: 0,
+          subsidioDisponibilidadeNominal: 0,
+        },
+      },
+    };
+  }
+
+  const salarioBaseNominal = Math.max(0, colaborador.salarioBase ?? 0);
+  const alimNominal = Math.max(0, colaborador.subsidioAlimentacao ?? 0);
+  const transpNominal = Math.max(0, colaborador.subsidioTransporte ?? 0);
+  const outrosAgregado =
+    Math.max(0, colaborador.outrosSubsidios ?? 0) +
+    Math.max(0, colaborador.subsidioRisco ?? 0) +
+    Math.max(0, colaborador.subsidioDisponibilidade ?? 0);
+
+  const salarioBaseEfetivo = Math.max(0, arredondar2(salarioBaseNominal - detalhe.descontoSalarioBase));
+  const alimEfetivo = Math.max(0, arredondar2(alimNominal - detalhe.descontoAlimentacao));
+  const transpEfetivo = Math.max(0, arredondar2(transpNominal - detalhe.descontoTransporte));
+  const outrosEfetivo = Math.max(
+    0,
+    arredondar2(
+      outrosAgregado - detalhe.descontoOutrosSubsidios - detalhe.descontoRisco - detalhe.descontoDisponibilidade,
+    ),
+  );
+
+  const { salarioBruto, segurancaSocialRounded, materiaColetavel } = calcularMateriaColetavel({
+    salarioBase: salarioBaseEfetivo,
+    subsidioAlimentacao: alimEfetivo,
+    subsidioTransporte: transpEfetivo,
+    outrosSubsidios: outrosEfetivo,
+  });
+
+  const { irt, escalon } = calcularIrt(materiaColetavel, salarioBaseEfetivo, irtEscalaes);
+  const liquido = Math.max(0, arredondar2(salarioBruto - segurancaSocialRounded - irt - outrasDeducoes));
+  const salarioHoraAprox = arredondar2(salarioBaseEfetivo / horasMesRef);
+
+  return {
+    salarioBruto,
+    inss: segurancaSocialRounded,
+    irt,
+    liquido,
+    escalonIrt: escalon,
+    descontoFaltas: detalhe.totalDescontoBruto,
+    diasFaltaDesconto: detalhe.diasInjustificados,
+    detalheAssiduidade: detalhe,
+    resumoIndividual: {
+      periodoLabel,
+      diasUteisReferencia: DIAS_UTEIS_MES_NORMA_TRABALHO,
+      salarioHoraAprox,
+      materiaColetavel,
+      componentes: {
+        salarioBaseNominal: salarioBaseNominal,
+        salarioBaseEfetivo: salarioBaseEfetivo,
+        subsidioAlimentacaoNominal: alimNominal,
+        subsidioAlimentacaoEfetivo: alimEfetivo,
+        subsidioTransporteNominal: transpNominal,
+        subsidioTransporteEfetivo: transpEfetivo,
+        outrosSubsidiosAgregadoNominal: outrosAgregado,
+        outrosSubsidiosEfetivo: outrosEfetivo,
+        subsidioRiscoNominal: Math.max(0, colaborador.subsidioRisco ?? 0),
+        subsidioDisponibilidadeNominal: Math.max(0, colaborador.subsidioDisponibilidade ?? 0),
+      },
+    },
   };
 }
 

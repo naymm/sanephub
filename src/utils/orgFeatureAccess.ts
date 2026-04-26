@@ -31,6 +31,7 @@ export function tenantPodeUsarModulo(
 export const MODULOS_DESACTIVAVEIS_PELA_ORG: { id: string; label: string }[] = [
   { id: 'capital-humano', label: 'Capital Humano' },
   { id: 'financas', label: 'Finanças' },
+  { id: 'facturacao', label: 'Facturação' },
   { id: 'contabilidade', label: 'Contabilidade' },
   { id: 'planeamento', label: 'Planeamento' },
   { id: 'secretaria', label: 'Secretaria Geral' },

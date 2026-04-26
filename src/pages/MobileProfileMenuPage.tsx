@@ -21,7 +21,7 @@ import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { PORTAL_MENU_ITEMS, labelPortalMenuItem } from '@/navigation/portalMenu';
 import { PORTAL_PATH_ICONS } from '@/navigation/portalMenuIcons';
-import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemFacturacaoActiva, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { cn } from '@/lib/utils';
 import { useMobileSessionLock } from '@/context/MobileSessionLockContext';
@@ -67,18 +67,23 @@ export default function MobileProfileMenuPage() {
     () => getModulosAtivosForContext(currentEmpresaId, empresas),
     [currentEmpresaId, empresas],
   );
+  const facturacaoActiva = useMemo(
+    () => empresaTemFacturacaoActiva(currentEmpresaId, empresas),
+    [currentEmpresaId, empresas],
+  );
 
   const canShowModule = useCallback(
     (moduleId?: string) => {
       if (!user) return false;
       if (!moduleId) return true;
+      if (moduleId === 'facturacao' && !facturacaoActiva) return false;
       if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
       if (!hasModuleAccess(user, moduleId)) return false;
       if (user.perfil === 'Colaborador') return true;
       if (modulosAtivos == null) return true;
       return empresaTemModuloActivado(modulosAtivos, moduleId);
     },
-    [user, organizacaoSettings, modulosAtivos],
+    [user, organizacaoSettings, modulosAtivos, facturacaoActiva],
   );
 
   if (!user) return null;

@@ -12,12 +12,14 @@ import {
   Cake,
   FolderArchive,
   Calculator,
+  Clock,
   Fingerprint,
   MapPin,
   Bell,
   MessageCircle,
   Package,
   ScrollText,
+  Receipt,
 } from 'lucide-react';
 
 /** Ícones partilhados entre menu horizontal e drawer mobile (evita duplicar JSX). */
@@ -27,12 +29,14 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/notificacoes': <Bell className="h-4 w-4 shrink-0" />,
     '/portal/ferias': <Palmtree className="h-4 w-4 shrink-0" />,
     '/portal/faltas': <Target className="h-4 w-4 shrink-0" />,
+    '/portal/assiduidade': <Clock className="h-4 w-4 shrink-0" />,
     '/portal/recibos': <FileText className="h-4 w-4 shrink-0" />,
     '/portal/declaracoes': <FileText className="h-4 w-4 shrink-0" />,
     '/portal/requisicoes': <DollarSign className="h-4 w-4 shrink-0" />,
     '/capital-humano/colaboradores': <Users className="h-4 w-4 shrink-0" />,
     '/capital-humano/ferias': <Palmtree className="h-4 w-4 shrink-0" />,
     '/capital-humano/faltas': <Target className="h-4 w-4 shrink-0" />,
+    '/capital-humano/assiduidade': <Clock className="h-4 w-4 shrink-0" />,
     '/capital-humano/recibos': <FileText className="h-4 w-4 shrink-0" />,
     '/capital-humano/processamento-salarial': <Calculator className="h-4 w-4 shrink-0" />,
     '/capital-humano/declaracoes': <FileText className="h-4 w-4 shrink-0" />,
@@ -68,6 +72,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/comunicacao-interna/eventos': <CalendarDays className="h-4 w-4 shrink-0" />,
     '/comunicacao-interna/comunicados': <ScrollText className="h-4 w-4 shrink-0" />,
     '/comunicacao-interna/aniversarios': <Cake className="h-4 w-4 shrink-0" />,
+    '/facturacao': <Receipt className="h-4 w-4 shrink-0" />,
   };
   return map[path] ?? null;
 }

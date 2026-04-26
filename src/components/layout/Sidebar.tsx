@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
-import { getModulosAtivosForContext, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import { getModulosAtivosForContext, empresaTemFacturacaoActiva, empresaTemModuloActivado } from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { cn } from '@/lib/utils';
 import {
@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Colaboradores', path: '/capital-humano/colaboradores' },
       { label: 'Férias', path: '/capital-humano/ferias' },
       { label: 'Faltas', path: '/capital-humano/faltas' },
+      { label: 'Assiduidade', path: '/capital-humano/assiduidade' },
       { label: 'Recibos de Salário', path: '/capital-humano/recibos' },
       { label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial' },
       { label: 'Declarações', path: '/capital-humano/declaracoes' },
@@ -48,6 +49,12 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Projectos', path: '/financas/projectos' },
       { label: 'Relatórios', path: '/financas/relatorios' },
     ]
+  },
+  {
+    label: 'Facturação',
+    icon: Receipt,
+    module: 'facturacao',
+    children: [{ label: 'Facturas', path: '/facturacao' }],
   },
   {
     label: 'Contabilidade', icon: BarChart3, module: 'contabilidade',
@@ -118,6 +125,7 @@ const COLABORADOR_ITEMS: NavItem[] = [
   { label: 'Os Meus Dados', icon: UserCircle, path: '/portal/dados', module: 'portal-colaborador' },
   { label: 'As Minhas Férias', icon: Palmtree, path: '/portal/ferias', module: 'portal-colaborador' },
   { label: 'As Minhas Faltas', icon: CalendarX, path: '/portal/faltas', module: 'portal-colaborador' },
+  { label: 'Assiduidade (atrasos)', icon: Clock, path: '/portal/assiduidade', module: 'portal-colaborador' },
   { label: 'Os Meus Recibos', icon: Receipt, path: '/portal/recibos', module: 'portal-colaborador' },
   { label: 'As Minhas Declarações', icon: FileText, path: '/portal/declaracoes', module: 'portal-colaborador' },
   { label: 'Requisição à Área Financeira', icon: Send, path: '/portal/requisicoes', module: 'portal-colaborador' },
@@ -133,6 +141,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const modulosAtivos = getModulosAtivosForContext(currentEmpresaId, empresas);
+  const facturacaoActiva = empresaTemFacturacaoActiva(currentEmpresaId, empresas);
 
   // Ao sair da secção, limpar "colapsado pelo utilizador" para o submenu reabrir quando voltar
   useEffect(() => {
@@ -154,6 +163,7 @@ export function Sidebar() {
 
   const canShowModule = (moduleId: string | undefined) => {
     if (!moduleId) return true;
+    if (moduleId === 'facturacao' && !facturacaoActiva) return false;
     if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     if (!hasModuleAccess(user, moduleId)) return false;
     // Alinhar ao HorizontalMenu: colaborador com módulos atribuídos não fica bloqueado por `modulos_ativos` incompleto na empresa.

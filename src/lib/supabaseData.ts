@@ -23,6 +23,8 @@ import type {
   MovimentoTesouraria,
   Ferias,
   Falta,
+  LicencaAssiduidade,
+  AtrasoAssiduidade,
   ReciboSalario,
   Declaracao,
   Correspondencia,
@@ -58,6 +60,8 @@ const TABLE_NAMES = {
   movimentos_tesouraria: 'movimentos_tesouraria',
   ferias: 'ferias',
   faltas: 'faltas',
+  assiduidade_licencas: 'assiduidade_licencas',
+  assiduidade_atrasos: 'assiduidade_atrasos',
   recibos_salario: 'recibos_salario',
   declaracoes: 'declaracoes',
   processos_judiciais: 'processos_judiciais',
@@ -166,6 +170,18 @@ function erroColaboradorGeofencesIndisponivel(origem: string): Error {
 }
 
 function isProvavelTabelaGeofencesInexistente(err: { message?: string; code?: string; details?: string }): boolean {
+  const blob = `${err.message ?? ''} ${err.details ?? ''} ${err.code ?? ''}`.toLowerCase();
+  return (
+    blob.includes('404') ||
+    blob.includes('not found') ||
+    blob.includes('does not exist') ||
+    blob.includes('schema cache') ||
+    err.code === '42P01' ||
+    err.code === 'PGRST205'
+  );
+}
+
+function isProvavelTabelaAssiduidadeInexistente(err: { message?: string; code?: string; details?: string }): boolean {
   const blob = `${err.message ?? ''} ${err.details ?? ''} ${err.code ?? ''}`.toLowerCase();
   return (
     blob.includes('404') ||
@@ -328,6 +344,20 @@ export async function loadAllTables(supabase: SupabaseClient) {
 
   const patrimonio = await loadPatrimonioSafe(supabase);
 
+  const licRes = await supabase.from('assiduidade_licencas').select('*');
+  const assiduidadeLicencasRaw =
+    licRes.error && isProvavelTabelaAssiduidadeInexistente(licRes.error)
+      ? ([] as Record<string, unknown>[])
+      : licRes.data ?? [];
+  if (licRes.error && !isProvavelTabelaAssiduidadeInexistente(licRes.error)) throw licRes.error;
+
+  const atrRes = await supabase.from('assiduidade_atrasos').select('*');
+  const assiduidadeAtrasosRaw =
+    atrRes.error && isProvavelTabelaAssiduidadeInexistente(atrRes.error)
+      ? ([] as Record<string, unknown>[])
+      : atrRes.data ?? [];
+  if (atrRes.error && !isProvavelTabelaAssiduidadeInexistente(atrRes.error)) throw atrRes.error;
+
   return {
     empresas: mapRowsFromDb<Empresa>('empresas', empresas ?? []),
     departamentos: mapRowsFromDb<Departamento>('departamentos', departamentos ?? []),
@@ -342,6 +372,14 @@ export async function loadAllTables(supabase: SupabaseClient) {
     movimentosTesouraria: mapRowsFromDb<MovimentoTesouraria>('movimentos_tesouraria', movimentosTesouraria ?? []),
     ferias: mapRowsFromDb<Ferias>('ferias', ferias ?? []),
     faltas: mapRowsFromDb<Falta>('faltas', faltas ?? []),
+    assiduidadeLicencas: mapRowsFromDb<LicencaAssiduidade>(
+      'assiduidade_licencas',
+      assiduidadeLicencasRaw as Record<string, unknown>[],
+    ),
+    assiduidadeAtrasos: mapRowsFromDb<AtrasoAssiduidade>(
+      'assiduidade_atrasos',
+      assiduidadeAtrasosRaw as Record<string, unknown>[],
+    ),
     recibos: mapRowsFromDb<ReciboSalario>('recibos_salario', recibos ?? []),
     declaracoes: mapRowsFromDb<Declaracao>('declaracoes', declaracoes ?? []),
     processos: mapRowsFromDb<ProcessoJudicial>('processos_judiciais', processos ?? []),
@@ -687,6 +725,20 @@ export const db = {
     insert: (s: SupabaseClient, p: Partial<Falta>) => insertOne<Falta>(s, 'faltas', p as Record<string, unknown>, 'faltas'),
     update: (s: SupabaseClient, id: number, p: Partial<Falta>) => updateOne<Falta>(s, 'faltas', id, p as Record<string, unknown>, 'faltas'),
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'faltas', id),
+  },
+  assiduidade_licencas: {
+    insert: (s: SupabaseClient, p: Partial<LicencaAssiduidade>) =>
+      insertOne<LicencaAssiduidade>(s, 'assiduidade_licencas', p as Record<string, unknown>, 'assiduidade_licencas'),
+    update: (s: SupabaseClient, id: number, p: Partial<LicencaAssiduidade>) =>
+      updateOne<LicencaAssiduidade>(s, 'assiduidade_licencas', id, p as Record<string, unknown>, 'assiduidade_licencas'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'assiduidade_licencas', id),
+  },
+  assiduidade_atrasos: {
+    insert: (s: SupabaseClient, p: Partial<AtrasoAssiduidade>) =>
+      insertOne<AtrasoAssiduidade>(s, 'assiduidade_atrasos', p as Record<string, unknown>, 'assiduidade_atrasos'),
+    update: (s: SupabaseClient, id: number, p: Partial<AtrasoAssiduidade>) =>
+      updateOne<AtrasoAssiduidade>(s, 'assiduidade_atrasos', id, p as Record<string, unknown>, 'assiduidade_atrasos'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'assiduidade_atrasos', id),
   },
   recibos_salario: {
     insert: (s: SupabaseClient, p: Partial<ReciboSalario>) => insertOne<ReciboSalario>(s, 'recibos_salario', p as Record<string, unknown>, 'recibos_salario'),

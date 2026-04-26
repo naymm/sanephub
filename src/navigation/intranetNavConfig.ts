@@ -16,6 +16,7 @@ import {
   Fingerprint,
   MapPin,
   Package,
+  Receipt,
 } from 'lucide-react';
 import { PORTAL_MENU_ITEMS } from '@/navigation/portalMenu';
 
@@ -47,6 +48,7 @@ export const MODULE_GROUPS: MenuGroup[] = [
       { label: 'Colaboradores', path: '/capital-humano/colaboradores', module: 'capital-humano' },
       { label: 'Férias', path: '/capital-humano/ferias', module: 'capital-humano' },
       { label: 'Faltas', path: '/capital-humano/faltas', module: 'capital-humano' },
+      { label: 'Assiduidade', path: '/capital-humano/assiduidade', module: 'capital-humano' },
       { label: 'Recibos', path: '/capital-humano/recibos', module: 'capital-humano' },
       { label: 'Processamento Salarial', path: '/capital-humano/processamento-salarial', module: 'capital-humano' },
       { label: 'Declarações', path: '/capital-humano/declaracoes', module: 'capital-humano' },
@@ -67,6 +69,12 @@ export const MODULE_GROUPS: MenuGroup[] = [
       { label: 'Projectos', path: '/financas/projectos', module: 'financas' },
       { label: 'Relatórios', path: '/financas/relatorios', module: 'financas' },
     ],
+  },
+  {
+    label: 'Facturação',
+    module: 'facturacao',
+    icon: Receipt,
+    children: [{ label: 'Facturas', path: '/facturacao', module: 'facturacao' }],
   },
   {
     label: 'Contabilidade',

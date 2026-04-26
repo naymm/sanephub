@@ -452,6 +452,8 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (user.perfil === 'Admin') return true;
   /** Jurídico: apenas Admin (não conceder via `modulos` nem PCA/Director/Juridico). */
   if (module === 'juridico') return false;
+  // Facturação: segue as mesmas permissões de Finanças (módulo é um sub-domínio).
+  if (module === 'facturacao') return hasModuleAccess(user, 'financas');
   // Dashboard no menu agrupa Chat + Notificações (+ link ao painel): sempre acessível a quem tem sessão.
   if (module === 'dashboard') return true;
   if (user.perfil === 'Colaborador') {

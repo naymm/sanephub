@@ -6,6 +6,8 @@ import type {
   ColaboradorGeofenceLink,
   Ferias,
   Falta,
+  LicencaAssiduidade,
+  AtrasoAssiduidade,
   ReciboSalario,
   Declaracao,
   Requisicao,
@@ -181,6 +183,16 @@ interface DataContextType {
   addFalta: (p: Partial<Falta>) => Promise<Falta>;
   updateFalta: (id: number, p: Partial<Falta>) => Promise<Falta>;
   deleteFalta: (id: number) => Promise<void>;
+  assiduidadeLicencas: LicencaAssiduidade[];
+  setAssiduidadeLicencas: React.Dispatch<React.SetStateAction<LicencaAssiduidade[]>>;
+  assiduidadeAtrasos: AtrasoAssiduidade[];
+  setAssiduidadeAtrasos: React.Dispatch<React.SetStateAction<AtrasoAssiduidade[]>>;
+  addAssiduidadeLicenca: (p: Partial<LicencaAssiduidade>) => Promise<LicencaAssiduidade>;
+  updateAssiduidadeLicenca: (id: number, p: Partial<LicencaAssiduidade>) => Promise<LicencaAssiduidade>;
+  deleteAssiduidadeLicenca: (id: number) => Promise<void>;
+  addAssiduidadeAtraso: (p: Partial<AtrasoAssiduidade>) => Promise<AtrasoAssiduidade>;
+  updateAssiduidadeAtraso: (id: number, p: Partial<AtrasoAssiduidade>) => Promise<AtrasoAssiduidade>;
+  deleteAssiduidadeAtraso: (id: number) => Promise<void>;
   addRecibo: (p: Partial<ReciboSalario>) => Promise<ReciboSalario>;
   updateRecibo: (id: number, p: Partial<ReciboSalario>) => Promise<ReciboSalario>;
   deleteRecibo: (id: number) => Promise<void>;
@@ -274,6 +286,8 @@ const emptyArrays = {
   colaboradores: [] as Colaborador[],
   ferias: [] as Ferias[],
   faltas: [] as Falta[],
+  assiduidadeLicencas: [] as LicencaAssiduidade[],
+  assiduidadeAtrasos: [] as AtrasoAssiduidade[],
   recibos: [] as ReciboSalario[],
   declaracoes: [] as Declaracao[],
   requisicoes: [] as Requisicao[],
@@ -318,6 +332,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>(emptyArrays.colaboradores);
   const [ferias, setFerias] = useState<Ferias[]>(emptyArrays.ferias);
   const [faltas, setFaltas] = useState<Falta[]>(emptyArrays.faltas);
+  const [assiduidadeLicencas, setAssiduidadeLicencas] = useState<LicencaAssiduidade[]>(emptyArrays.assiduidadeLicencas);
+  const [assiduidadeAtrasos, setAssiduidadeAtrasos] = useState<AtrasoAssiduidade[]>(emptyArrays.assiduidadeAtrasos);
   const [recibos, setRecibos] = useState<ReciboSalario[]>(emptyArrays.recibos);
   const [declaracoes, setDeclaracoes] = useState<Declaracao[]>(emptyArrays.declaracoes);
   const [requisicoes, setRequisicoes] = useState<Requisicao[]>(emptyArrays.requisicoes);
@@ -506,6 +522,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setColaboradores(data.colaboradores);
       setFerias(data.ferias);
       setFaltas(data.faltas);
+      setAssiduidadeLicencas(data.assiduidadeLicencas);
+      setAssiduidadeAtrasos(data.assiduidadeAtrasos);
       setRecibos(data.recibos);
       setDeclaracoes(data.declaracoes);
       setRequisicoes(data.requisicoes);
@@ -563,6 +581,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       projectos: isConsolidado ? projectos : projectos.filter(p => p.empresaId === currentEmpresaId),
       ferias: isConsolidado ? ferias : ferias.filter(f => colabIds.has(f.colaboradorId)),
       faltas: isConsolidado ? faltas : faltas.filter(f => colabIds.has(f.colaboradorId)),
+      assiduidadeLicencas: isConsolidado
+        ? assiduidadeLicencas
+        : assiduidadeLicencas.filter(l => colabIds.has(l.colaboradorId)),
+      assiduidadeAtrasos: isConsolidado
+        ? assiduidadeAtrasos
+        : assiduidadeAtrasos.filter(a => colabIds.has(a.colaboradorId)),
       recibos: isConsolidado ? recibos : recibos.filter(r => colabIds.has(r.colaboradorId)),
       declaracoes: isConsolidado ? declaracoes : declaracoes.filter(d => colabIds.has(d.colaboradorId)),
       pagamentos: isConsolidado ? pagamentos : pagamentos.filter(p => reqIds.has(p.requisicaoId)),
@@ -601,6 +625,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     projectos,
     ferias,
     faltas,
+    assiduidadeLicencas,
+    assiduidadeAtrasos,
     recibos,
     declaracoes,
     pagamentos,
@@ -816,6 +842,50 @@ export function DataProvider({ children }: { children: ReactNode }) {
     (id: number) =>
       runMutation(() => (db.faltas.delete(supabase!, id) as Promise<void>), () => setFaltas(prev => prev.filter(f => f.id !== id))),
     [runMutation]
+  );
+
+  const addAssiduidadeLicenca = useCallback(
+    (p: Partial<LicencaAssiduidade>) =>
+      runMutation(() => db.assiduidade_licencas.insert(supabase!, p), row =>
+        setAssiduidadeLicencas(prev => [...prev, row]),
+      ),
+    [runMutation],
+  );
+  const updateAssiduidadeLicenca = useCallback(
+    (id: number, p: Partial<LicencaAssiduidade>) =>
+      runMutation(() => db.assiduidade_licencas.update(supabase!, id, p), row =>
+        setAssiduidadeLicencas(prev => prev.map(x => (x.id === id ? row : x))),
+      ),
+    [runMutation],
+  );
+  const deleteAssiduidadeLicenca = useCallback(
+    (id: number) =>
+      runMutation(() => (db.assiduidade_licencas.delete(supabase!, id) as Promise<void>), () =>
+        setAssiduidadeLicencas(prev => prev.filter(x => x.id !== id)),
+      ),
+    [runMutation],
+  );
+
+  const addAssiduidadeAtraso = useCallback(
+    (p: Partial<AtrasoAssiduidade>) =>
+      runMutation(() => db.assiduidade_atrasos.insert(supabase!, p), row =>
+        setAssiduidadeAtrasos(prev => [...prev, row]),
+      ),
+    [runMutation],
+  );
+  const updateAssiduidadeAtraso = useCallback(
+    (id: number, p: Partial<AtrasoAssiduidade>) =>
+      runMutation(() => db.assiduidade_atrasos.update(supabase!, id, p), row =>
+        setAssiduidadeAtrasos(prev => prev.map(x => (x.id === id ? row : x))),
+      ),
+    [runMutation],
+  );
+  const deleteAssiduidadeAtraso = useCallback(
+    (id: number) =>
+      runMutation(() => (db.assiduidade_atrasos.delete(supabase!, id) as Promise<void>), () =>
+        setAssiduidadeAtrasos(prev => prev.filter(x => x.id !== id)),
+      ),
+    [runMutation],
   );
 
   const addRecibo = useCallback(
@@ -1274,6 +1344,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setFerias,
       faltas: filtered.faltas,
       setFaltas,
+      assiduidadeLicencas: filtered.assiduidadeLicencas,
+      setAssiduidadeLicencas,
+      assiduidadeAtrasos: filtered.assiduidadeAtrasos,
+      setAssiduidadeAtrasos,
       recibos: filtered.recibos,
       setRecibos,
       declaracoes: filtered.declaracoes,
@@ -1361,6 +1435,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addFalta,
       updateFalta,
       deleteFalta,
+      addAssiduidadeLicenca,
+      updateAssiduidadeLicenca,
+      deleteAssiduidadeLicenca,
+      addAssiduidadeAtraso,
+      updateAssiduidadeAtraso,
+      deleteAssiduidadeAtraso,
       addRecibo,
       updateRecibo,
       deleteRecibo,
@@ -1496,6 +1576,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addFalta,
       updateFalta,
       deleteFalta,
+      addAssiduidadeLicenca,
+      updateAssiduidadeLicenca,
+      deleteAssiduidadeLicenca,
+      addAssiduidadeAtraso,
+      updateAssiduidadeAtraso,
+      deleteAssiduidadeAtraso,
       addRecibo,
       updateRecibo,
       deleteRecibo,

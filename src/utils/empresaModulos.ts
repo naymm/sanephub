@@ -47,3 +47,13 @@ export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleI
   if (moduleId === 'patrimonio' && modulosAtivos.includes('secretaria')) return true;
   return false;
 }
+
+/** Facturação depende do flag específico da empresa (não é universal no grupo). */
+export function empresaTemFacturacaoActiva(
+  currentEmpresaId: 'consolidado' | number,
+  empresas: { id: number; facturacaoActiva?: boolean | null }[],
+): boolean {
+  if (currentEmpresaId === 'consolidado' || typeof currentEmpresaId !== 'number') return false;
+  const emp = empresas.find(e => e.id === currentEmpresaId);
+  return emp?.facturacaoActiva === true;
+}
