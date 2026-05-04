@@ -111,6 +111,7 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
             <div className="mt-8 w-full">
               <PontoPinOtpFields
                 variant="dark"
+                maskCharacters
                 value={digits}
                 onChange={setDigits}
                 disabled={busy}
@@ -154,8 +155,6 @@ export function MobilePinUnlockOverlay({ onSuccess }: Props) {
             className="pointer-events-none absolute bottom-0 right-0 h-32 w-48 rounded-full bg-white/[0.04]"
             aria-hidden
           />
-          <p className="text-transparent">PIN</p>
-          <p className="text-transparent">PIN</p>
           <div className="flex flex-col items-center text-center">
             <img
               src="/logo-white.png"

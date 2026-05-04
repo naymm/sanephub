@@ -4,15 +4,18 @@ import { InputOTP, InputOTPGroup } from '@/components/ui/input-otp';
 import { cn } from '@/lib/utils';
 
 const OtpFieldsVariantContext = React.createContext<'default' | 'dark'>('default');
+const OtpFieldsMaskContext = React.createContext(false);
 
 const PinSlot = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<'div'> & { index: number }
 >(({ index, className, ...props }, ref) => {
   const variant = React.useContext(OtpFieldsVariantContext);
+  const maskCharacters = React.useContext(OtpFieldsMaskContext);
   const ctx = React.useContext(OTPInputContext);
   const { char, hasFakeCaret, isActive } = ctx.slots[index];
   const isDark = variant === 'dark';
+  const displayChar = char && maskCharacters ? '\u2022' : char;
 
   return (
     <div
@@ -30,7 +33,7 @@ const PinSlot = React.forwardRef<
       )}
       {...props}
     >
-      {char}
+      {displayChar}
       {hasFakeCaret && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div
@@ -51,6 +54,8 @@ export type PontoPinOtpFieldsProps = Omit<
   'maxLength' | 'pattern' | 'inputMode' | 'children'
 > & {
   variant?: 'default' | 'dark';
+  /** Se true, mostra «•» em vez do dígito (PIN não visível). */
+  maskCharacters?: boolean;
 };
 
 /** Quatro dígitos, estilo OTP (referência intranet), foco com anel azul primário. */
@@ -58,25 +63,28 @@ export function PontoPinOtpFields({
   className,
   containerClassName,
   variant = 'default',
+  maskCharacters = false,
   ...props
 }: PontoPinOtpFieldsProps) {
   return (
     <OtpFieldsVariantContext.Provider value={variant}>
-      <InputOTP
-        maxLength={4}
-        pattern="^[0-9]*$"
-        inputMode="numeric"
-        className={className}
-        containerClassName={cn('justify-center', containerClassName)}
-        {...props}
-      >
-        <InputOTPGroup className="gap-2 sm:gap-3">
-          <PinSlot index={0} />
-          <PinSlot index={1} />
-          <PinSlot index={2} />
-          <PinSlot index={3} />
-        </InputOTPGroup>
-      </InputOTP>
+      <OtpFieldsMaskContext.Provider value={maskCharacters}>
+        <InputOTP
+          maxLength={4}
+          pattern="^[0-9]*$"
+          inputMode="numeric"
+          className={className}
+          containerClassName={cn('justify-center', containerClassName)}
+          {...props}
+        >
+          <InputOTPGroup className="gap-2 sm:gap-3">
+            <PinSlot index={0} />
+            <PinSlot index={1} />
+            <PinSlot index={2} />
+            <PinSlot index={3} />
+          </InputOTPGroup>
+        </InputOTP>
+      </OtpFieldsMaskContext.Provider>
     </OtpFieldsVariantContext.Provider>
   );
 }
