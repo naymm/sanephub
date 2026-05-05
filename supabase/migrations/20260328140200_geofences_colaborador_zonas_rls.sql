@@ -1,5 +1,22 @@
 -- Liga colaboradores às zonas (geofences) permitidas para marcação de ponto.
 -- Políticas RLS alinhadas ao Capital Humano (Admin/RH/PCA) por empresa; leitura de geofences para colaboradores da mesma empresa (app de ponto).
+-- Versão 20260328140200: evita colisão de versão com 20260328140000_contratos_contraparte_campos.sql no histórico Supabase.
+
+create table if not exists public.geofences (
+  id bigserial primary key,
+  empresa_id bigint not null references public.empresas (id) on delete cascade,
+  nome text not null default '',
+  center_lat double precision not null default 0,
+  center_lng double precision not null default 0,
+  radius_meters double precision not null default 100,
+  activo boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_geofences_empresa_id on public.geofences using btree (empresa_id);
+
+comment on table public.geofences is 'Zonas de marcação de ponto (círculo centro + raio) por empresa.';
 
 create table if not exists public.colaborador_geofences (
   id bigserial not null,

@@ -1,9 +1,11 @@
+import { supabaseBrowserUrl } from '@/lib/supabase';
+
 /**
  * Normaliza URLs de ficheiros públicos (ex.: Supabase Storage) para o ambiente actual.
  * Em PWA / produção, caminhos do proxy de dev (`/__supabase`) ou origins locais
  * deixam de ser válidos — o browser não consegue carregar as imagens.
  */
-const supabaseBase = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+const supabaseBase = supabaseBrowserUrl.replace(/\/$/, '');
 
 export function normalizePublicMediaUrl(url: string | null | undefined): string | undefined {
   if (url == null) return undefined;

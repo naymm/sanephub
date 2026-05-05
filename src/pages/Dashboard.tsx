@@ -116,8 +116,8 @@ export default function Dashboard() {
 
         const { data: invokeData, error } = await supabase.functions.invoke('birthdays', {
           body: { company_id, nowISO: new Date().toISOString() },
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-        } as any);
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
         if (error) {
           const msg = await getSupabaseFunctionsInvokeErrorMessage(
             error,

@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { format, parseISO } from 'date-fns';
 import { pt } from 'date-fns/locale';
 import type { Declaracao, Colaborador, Usuario } from '@/types';
+import { supabaseBrowserUrl } from '@/lib/supabase';
 
 function dataDeclaracao(dateStr: string): string {
   try {
@@ -230,9 +231,7 @@ function resolvePublicImageUrl(url: string): string {
   if (!u) return u;
 
   const base =
-    typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL
-      ? String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, '')
-      : '';
+    typeof import.meta !== 'undefined' ? supabaseBrowserUrl.replace(/\/$/, '') : '';
   const dev = typeof import.meta !== 'undefined' && import.meta.env.DEV;
 
   if (base && /^https?:\/\//i.test(u) && u.startsWith(base)) {

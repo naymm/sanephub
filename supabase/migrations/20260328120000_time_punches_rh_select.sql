@@ -1,10 +1,22 @@
 -- Leitura de marcações de ponto por Capital Humano / Admin no âmbito da empresa.
--- A tabela `time_punches` já existe no projecto; esta migração só adiciona política de SELECT.
-
-alter table public.time_punches enable row level security;
+-- A tabela `time_punches` é criada em 20260419130000; esta migração corre antes na ordem
+-- cronológica dos ficheiros — só aplica políticas quando a tabela já existir (ex.: bases legadas).
 
 do $$
 begin
+  if not exists (
+    select 1
+    from pg_catalog.pg_class c
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'time_punches'
+      and c.relkind = 'r'
+  ) then
+    return;
+  end if;
+
+  execute 'alter table public.time_punches enable row level security';
+
   if not exists (
     select 1
     from pg_policies

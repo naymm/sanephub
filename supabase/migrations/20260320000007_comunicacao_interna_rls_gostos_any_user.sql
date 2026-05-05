@@ -34,7 +34,8 @@ begin
     from pg_constraint c
     where c.conrelid = t_oid
       and c.contype = 'u'
-      and c.conkey @> array[a_noticia, a_colab]
+      -- conkey é smallint[]; int4[] não tem operador @> com smallint[]
+      and c.conkey @> array[a_noticia::smallint, a_colab::smallint]
   loop
     execute format('alter table public.noticias_gostos drop constraint %I', conrec.conname);
   end loop;

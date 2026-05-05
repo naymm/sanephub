@@ -1,9 +1,5 @@
--- Atrasos e faltas «Por atrasos» passam a considerar marcações em `biometrico_registros`
--- (`data_hora` sem TZ = relógio local Luanda; `numero_mec` bigint alinhado a `colaboradores.numero_mec` em texto).
--- Mantém compatibilidade com `time_punches` (união: usa a primeira entrada mais cedo do dia entre as duas fontes).
-
-create index if not exists idx_biometrico_registros_numero_mec_data_hora
-  on public.biometrico_registros (numero_mec, data_hora);
+-- PG 15+: variável `mes_ano` colidia com a coluna `mes_ano` em `ON CONFLICT (colaborador_id, mes_ano)`.
+-- Idempotente: substitui a função criada em 20260419125000 (bases que já aplicaram 250 sem este fix).
 
 create or replace function public.recompute_colaborador_atrasos_mes(
   p_colaborador_id bigint,
@@ -141,53 +137,3 @@ begin
   end loop;
 end;
 $body$;
-
-create or replace function public.trg_biometrico_registros_recompute_atrasos()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $body$
-declare
-  v_day date;
-  v_cid bigint;
-begin
-  if new.numero_mec is null then
-    return new;
-  end if;
-
-  v_day := (new.data_hora at time zone 'Africa/Luanda')::date;
-
-  select c.id
-  into v_cid
-  from public.colaboradores c
-  inner join public.empresas e on e.id = c.empresa_id
-  where trim(c.numero_mec) <> ''
-    and new.numero_mec::text = trim(c.numero_mec)
-    and (
-      new.empresa is null
-      or trim(new.empresa) = ''
-      or lower(trim(coalesce(e.nome, ''))) = lower(trim(new.empresa))
-      or lower(trim(coalesce(e.codigo, ''))) = lower(trim(new.empresa))
-    )
-  order by c.id
-  limit 1;
-
-  if v_cid is not null then
-    perform public.recompute_colaborador_atrasos_mes(v_cid, v_day);
-  end if;
-
-  return new;
-end;
-$body$;
-
-drop trigger if exists biometrico_registros_recompute_atrasos on public.biometrico_registros;
-
-create trigger biometrico_registros_recompute_atrasos
-  after insert or update of data_hora, tipo, numero_mec, empresa
-  on public.biometrico_registros
-  for each row
-  execute function public.trg_biometrico_registros_recompute_atrasos();
-
-comment on function public.trg_biometrico_registros_recompute_atrasos() is
-  'Recalcula atrasos mensais e faltas «Por atrasos» após marcação biométrica (nº mec. + empresa).';

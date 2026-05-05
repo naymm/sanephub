@@ -353,7 +353,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const createUserInSupabase = useCallback(
     async (payload: CreateUserSupabasePayload): Promise<Usuario> => {
       if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase não configurado');
-      const { data, error } = await supabase.functions.invoke('create-user', { body: payload });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error('Sessão expirada ou em falta. Faça login novamente antes de criar utilizadores.');
+      }
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: payload,
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (error) {
         const msg = await getSupabaseFunctionsInvokeErrorMessage(
           error,

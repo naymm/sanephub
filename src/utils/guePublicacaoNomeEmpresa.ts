@@ -16,8 +16,16 @@ export async function fetchNomeEmpresaPorNifGue(
   }
 
   try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+      return { nome: null, error: 'Inicie sessão para consultar o GUE.' };
+    }
     const { data, error } = await supabase.functions.invoke('gue-publicacao-nome', {
       body: { nif },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (error) {

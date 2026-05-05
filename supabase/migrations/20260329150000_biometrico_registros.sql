@@ -1,13 +1,20 @@
--- Tabela `biometrico_registros`: o CREATE TABLE e colunas devem seguir **exactamente** o esquema que indicou.
--- Não versionamos aqui definição de colunas para não divergir da sua BD.
---
--- Antes de aplicar esta migração:
---   1) Crie a tabela no Supabase (SQL Editor) com o seu esquema, ou
---   2) Acrescente no **início** deste ficheiro (acima do `alter table`) o `create table public.biometrico_registros (...)` completo.
---
--- A política abaixo usa a coluna `numero_mec` em `biometrico_registros`, comparada com
--- `public.colaboradores.numero_mec` + `colaboradores.empresa_id` para isolamento por tenant
--- (sem `colaborador_id` na tabela biométrica).
+-- Marcações biométricas / ERP: `numero_mec` + `empresa` (nome ou vazio) alinhados a `colaboradores` / `empresas`.
+-- Colunas extra (GPS, geofence) em migrações posteriores.
+
+create table if not exists public.biometrico_registros (
+  id bigserial primary key,
+  numero_mec bigint not null,
+  data_hora timestamp not null,
+  tipo text not null,
+  empresa text null,
+  via text null
+);
+
+create index if not exists idx_biometrico_registros_numero_mec on public.biometrico_registros (numero_mec);
+create index if not exists idx_biometrico_registros_data_hora on public.biometrico_registros (data_hora desc);
+
+comment on table public.biometrico_registros is
+  'Registos de ponto (biométrico ou ERP). `data_hora` = relógio local da marcação; `empresa` opcional (nome da empresa para RLS).';
 
 alter table public.biometrico_registros enable row level security;
 

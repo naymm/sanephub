@@ -45,6 +45,57 @@ create index if not exists idx_time_punches_colaborador_occurred
 comment on table public.time_punches is
   'Marcações de ponto (entrada/saída). O trigger `time_punches_recompute_atrasos` recalcula atrasos e faltas «Por atrasos».';
 
+-- RLS: mesma política que `20260328120000_time_punches_rh_select.sql` (essa migração corre antes na ordem
+-- alfabética/cronológica e no-op se a tabela ainda não existir).
+alter table public.time_punches enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'time_punches'
+      and policyname = 'time_punches_select_rh_tenant'
+  ) then
+    create policy "time_punches_select_rh_tenant"
+      on public.time_punches
+      for select
+      to authenticated
+      using (
+        exists (
+          select 1
+          from public.profiles p
+          where p.auth_user_id = auth.uid()
+            and (
+              (p.perfil in ('Admin', 'PCA') and p.empresa_id is null)
+              or (
+                p.perfil in ('Admin', 'RH', 'PCA')
+                and p.empresa_id is not null
+                and (
+                  public.time_punches.empresa_id = p.empresa_id
+                  or exists (
+                    select 1
+                    from public.colaboradores c
+                    where c.id = public.time_punches.colaborador_id
+                      and c.empresa_id = p.empresa_id
+                  )
+                )
+              )
+            )
+        )
+      );
+  end if;
+end $$;
+
+-- Trigger definido em `20260328150000_colaborador_horario_atrasos_faltas.sql` (só anexa se a tabela já existir lá).
+drop trigger if exists time_punches_recompute_atrasos on public.time_punches;
+create trigger time_punches_recompute_atrasos
+  after insert or update of occurred_at, kind, colaborador_id
+  on public.time_punches
+  for each row
+  execute function public.trg_time_punches_recompute_atrasos();
+
 -- ---------------------------------------------------------------------------
 -- 2) Seed: empresa + 5 colaboradores + marcações + faltas + licenças + atrasos RH
 -- ---------------------------------------------------------------------------

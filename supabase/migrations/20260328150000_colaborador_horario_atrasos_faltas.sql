@@ -88,7 +88,7 @@ set search_path = public
 as $body$
 declare
   c record;
-  mes_ano text;
+  v_mes_ano text;
   v_day date;
   v_first timestamptz;
   v_expected timestamptz;
@@ -117,13 +117,13 @@ begin
     return;
   end if;
 
-  mes_ano := to_char(p_ref_date, 'YYYY-MM');
+  v_mes_ano := to_char(p_ref_date, 'YYYY-MM');
   v_start := date_trunc('month', p_ref_date::timestamp)::date;
   v_end := (date_trunc('month', p_ref_date::timestamp) + interval '1 month - 1 day')::date;
 
   if coalesce(c.isencao_horario, false) then
     insert into public.colaborador_mes_atraso (colaborador_id, mes_ano, total_segundos_atraso, updated_at)
-    values (p_colaborador_id, mes_ano, 0, now())
+    values (p_colaborador_id, v_mes_ano, 0, now())
     on conflict (colaborador_id, mes_ano) do update set
       total_segundos_atraso = excluded.total_segundos_atraso,
       updated_at = now();
@@ -158,7 +158,7 @@ begin
   v_blocks := total_delay_sec / 28800;
 
   insert into public.colaborador_mes_atraso (colaborador_id, mes_ano, total_segundos_atraso, updated_at)
-  values (p_colaborador_id, mes_ano, total_delay_sec, now())
+  values (p_colaborador_id, v_mes_ano, total_delay_sec, now())
   on conflict (colaborador_id, mes_ano) do update set
     total_segundos_atraso = excluded.total_segundos_atraso,
     updated_at = now();
@@ -168,7 +168,7 @@ begin
   from public.faltas f
   where f.colaborador_id = p_colaborador_id
     and f.tipo = 'Por atrasos'
-    and f.referencia_mes_atrasos = mes_ano;
+    and f.referencia_mes_atrasos = v_mes_ano;
 
   v_new := greatest(0, v_blocks - v_have);
 
@@ -180,10 +180,10 @@ begin
       'Por atrasos',
       format(
         'Falta automática: acumulado de atrasos no mês %s atingiu pelo menos mais 8 h (após tolerância de 15 min).',
-        mes_ano
+        v_mes_ano
       ),
       'Sistema',
-      mes_ano
+      v_mes_ano
     );
   end loop;
 end;
@@ -209,13 +209,27 @@ begin
 end;
 $body$;
 
-drop trigger if exists time_punches_recompute_atrasos on public.time_punches;
-
-create trigger time_punches_recompute_atrasos
-  after insert or update of occurred_at, kind, colaborador_id
-  on public.time_punches
-  for each row
-  execute function public.trg_time_punches_recompute_atrasos();
+-- `time_punches` pode ser criada só em 20260419130000; evita erro em bases novas.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_class c
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'time_punches'
+      and c.relkind = 'r'
+  ) then
+    execute 'drop trigger if exists time_punches_recompute_atrasos on public.time_punches';
+    execute $ddl$
+      create trigger time_punches_recompute_atrasos
+        after insert or update of occurred_at, kind, colaborador_id
+        on public.time_punches
+        for each row
+        execute function public.trg_time_punches_recompute_atrasos()
+    $ddl$;
+  end if;
+end $$;
 
 -- Recalcular um mês após migração (ajuste id e data dentro do mês):
 -- select public.recompute_colaborador_atrasos_mes(<colaborador_id>, '<qualquer-dia-do-mês>'::date);
