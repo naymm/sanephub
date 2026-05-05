@@ -20,11 +20,39 @@ function fetchFailureDetail(err: unknown): string | null {
     return null;
   }
   const c = e?.cause;
-  if (c instanceof Error && c.message) return c.message;
+  if (c instanceof Error && c.message) return withContext(c.message);
   if (typeof c === 'object' && c !== null && 'message' in c && typeof (c as { message: unknown }).message === 'string') {
-    return (c as { message: string }).message;
+    return withContext((c as { message: string }).message);
   }
-  return 'Falha de rede ao contactar a Edge Function (ver rede, CORS, URL do projecto e se a função está deployada).';
+  return withContext(
+    'Falha de rede ao contactar a Edge Function (ver rede, CORS, URL do projecto e se a função está deployada).',
+  );
+}
+
+function cMessage(v: unknown): string {
+  const t = typeof v === 'string' ? v.trim() : '';
+  return t || 'Erro desconhecido';
+}
+
+function cWindowContext(): string {
+  try {
+    if (typeof window === 'undefined') return '';
+    const origin = typeof window.location?.origin === 'string' ? window.location.origin : '';
+    const online = typeof navigator !== 'undefined' && 'onLine' in navigator ? String((navigator as any).onLine) : '';
+    const parts: string[] = [];
+    if (origin) parts.push(`origin=${origin}`);
+    if (online) parts.push(`online=${online}`);
+    return parts.length ? ` (${parts.join(', ')})` : '';
+  } catch {
+    return '';
+  }
+}
+
+function withContext(base: string): string {
+  // Tentativa de dar pistas para produção: "blocked by client", "Failed to fetch", etc.
+  // Mantém o texto curto (vai para UI).
+  const msg = cMessage(base);
+  return `${msg}${cWindowContext()}`;
 }
 
 export async function getSupabaseFunctionsInvokeErrorMessage(
