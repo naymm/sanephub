@@ -12,7 +12,11 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "::",
       port: 8080,
-      allowedHosts: ['bore.pub'],
+      allowedHosts: [
+      'app.sanephub.com',
+      'api.sanephub.com',
+      'studio.sanephub.com'
+    ],
       hmr: {
         overlay: false,
       },

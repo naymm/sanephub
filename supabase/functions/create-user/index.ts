@@ -1,9 +1,10 @@
-// Edge Function: cria utilizador no Supabase Auth e perfil em public.profiles.
-// Chamada pelo Admin ao adicionar um novo utilizador na app.
-// Requer: SUPABASE_SERVICE_ROLE_KEY nas secrets do projeto.
+import { serve } from "https://deno.land/std/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.99.1";
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-import { corsHeaders } from '../_shared/cors.ts';
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 interface CreateUserBody {
   email: string;
@@ -18,179 +19,154 @@ interface CreateUserBody {
   modulos?: string[] | null;
   empresa_id?: number | null;
   colaborador_id?: number | null;
-  /** Se omitido e existir colaborador_id, obtém-se de public.colaboradores.numero_mec */
   numero_mec?: string | null;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!serviceRoleKey) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !serviceRoleKey) {
       return new Response(
-        JSON.stringify({ error: 'SUPABASE_SERVICE_ROLE_KEY não configurada' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Variáveis de ambiente não configuradas" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Verificar que o caller está autenticado e é Admin (verify_jwt está false no config).
-    const authHeader = req.headers.get('Authorization');
+    // 🔐 Verificar se é Admin
+    const authHeader = req.headers.get("Authorization");
     if (anonKey && authHeader) {
       const clientAnon = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader } },
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        auth: { persistSession: false },
       });
+
       const { data: { user: caller } } = await clientAnon.auth.getUser();
+
       if (!caller?.id) {
-        return new Response(
-          JSON.stringify({ error: 'Não autenticado' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: "Não autenticado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      });
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
       const { data: callerProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('perfil')
-        .eq('auth_user_id', caller.id)
+        .from("profiles")
+        .select("perfil")
+        .eq("auth_user_id", caller.id)
         .maybeSingle();
-      const perfil = (callerProfile as { perfil?: string } | null)?.perfil;
-      if (perfil !== 'Admin') {
-        return new Response(
-          JSON.stringify({ error: 'Apenas utilizadores Admin podem criar utilizadores' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+
+      if ((callerProfile as any)?.perfil !== "Admin") {
+        return new Response(JSON.stringify({ error: "Apenas Admin pode criar utilizadores" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
     const body = (await req.json()) as CreateUserBody;
-    const {
-      email,
-      username: rawUsername,
-      password,
-      nome,
-      perfil,
-      cargo = '',
-      departamento = '',
-      avatar = '',
-      permissoes = [],
-      modulos = null,
-      empresa_id = null,
-      colaborador_id = null,
-      numero_mec: numeroMecBody = null,
-    } = body;
 
-    const username = (rawUsername ?? '')
+    const username = (body.username ?? "")
       .trim()
       .toLowerCase()
-      .replace(/\s+/g, '');
-    const emailLocal = email?.trim()
-      ? email.trim().split('@')[0]?.toLowerCase().replace(/\s+/g, '') ?? '';
+      .replace(/\s+/g, "");
+
+    const emailLocal = body.email?.trim()
+      ? body.email.split("@")[0].toLowerCase()
+      : "";
+
     const finalUsername = username || emailLocal;
 
-    if (!email?.trim() || !password || !nome?.trim() || !perfil?.trim() || !finalUsername) {
-      return new Response(
-        JSON.stringify({ error: 'email, nome de utilizador (ou email válido), password, nome e perfil são obrigatórios' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!body.email || !body.password || !body.nome || !body.perfil || !finalUsername) {
+      return new Response(JSON.stringify({ error: "Campos obrigatórios em falta" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    let numero_mec =
-      typeof numeroMecBody === 'string' && numeroMecBody.trim() !== ''
-        ? numeroMecBody.trim()
-        : null;
-    if (!numero_mec && colaborador_id != null) {
-      const { data: colabRow } = await supabase
-        .from('colaboradores')
-        .select('numero_mec')
-        .eq('id', colaborador_id)
+    let numero_mec = body.numero_mec ?? null;
+
+    if (!numero_mec && body.colaborador_id) {
+      const { data } = await supabase
+        .from("colaboradores")
+        .select("numero_mec")
+        .eq("id", body.colaborador_id)
         .maybeSingle();
-      const raw = (colabRow as { numero_mec?: string | null } | null)?.numero_mec;
-      if (typeof raw === 'string' && raw.trim() !== '') numero_mec = raw.trim();
+
+      numero_mec = (data as any)?.numero_mec ?? null;
     }
 
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: email.trim(),
-      password,
-      email_confirm: true,
-    });
+    // 👤 Criar no Auth
+    const { data: authData, error: authError } =
+      await supabase.auth.admin.createUser({
+        email: body.email,
+        password: body.password,
+        email_confirm: true,
+      });
 
     if (authError) {
-      const msg = authError.message || '';
-      if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
-        return new Response(
-          JSON.stringify({ error: 'Já existe um utilizador com este email.' }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      return new Response(
-        JSON.stringify({ error: msg || 'Erro ao criar utilizador no Auth' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: authError.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const authUserId = authData?.user?.id;
-    if (!authUserId) {
-      return new Response(
-        JSON.stringify({ error: 'Resposta inesperada do Auth' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
-    const perfilTrim = perfil.trim();
+    // 📄 Criar profile
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
+      .from("profiles")
       .insert({
         auth_user_id: authUserId,
-        nome: nome.trim(),
-        email: email.trim(),
+        nome: body.nome,
+        email: body.email,
         username: finalUsername,
-        perfil: perfilTrim,
-        cargo: (cargo || '').trim(),
-        departamento: (departamento || '').trim(),
-        avatar: (avatar || '').trim() || nome.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase(),
-        permissoes: Array.isArray(permissoes) ? permissoes : [],
-        modulos: Array.isArray(modulos) ? modulos : null,
-        empresa_id: empresa_id ?? null,
-        colaborador_id: colaborador_id ?? null,
+        perfil: body.perfil,
+        cargo: body.cargo ?? "",
+        departamento: body.departamento ?? "",
+        avatar:
+          body.avatar ||
+          body.nome
+            .split(" ")
+            .map((w) => w[0])
+            .slice(0, 2)
+            .join("")
+            .toUpperCase(),
+        permissoes: body.permissoes ?? [],
+        modulos: body.modulos ?? null,
+        empresa_id: body.empresa_id ?? null,
+        colaborador_id: body.colaborador_id ?? null,
         numero_mec,
-        primeiro_acesso_pendente: perfilTrim === 'Colaborador',
+        primeiro_acesso_pendente: body.perfil === "Colaborador",
       })
       .select()
       .single();
 
     if (profileError) {
-      const dup =
-        profileError.code === '23505' ||
-        (profileError.message ?? '').toLowerCase().includes('unique') ||
-        (profileError.message ?? '').toLowerCase().includes('duplicate');
-      const msg = dup
-        ? 'Já existe um utilizador com este nome de utilizador.'
-        : profileError.message || 'Erro ao criar perfil';
-      return new Response(JSON.stringify({ error: msg }), {
-        status: dup ? 409 : 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({ error: profileError.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify(profile), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : 'Erro interno' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: e instanceof Error ? e.message : "Erro interno" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
