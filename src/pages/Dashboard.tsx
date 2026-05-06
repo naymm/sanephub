@@ -4,7 +4,7 @@ import { useTenant } from '@/context/TenantContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { getCurrentDatePT, formatKz, formatDate, diasRestantes, getGreeting } from '@/utils/formatters';
+import { getCurrentDatePT, formatKz, formatDate, diasRestantes, getGreeting, parseMonetaryAmount } from '@/utils/formatters';
 import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Download, Star, Heart, MessageCircle, MapPin, Clock, Cake, ScrollText, Paperclip } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -100,6 +100,8 @@ export default function Dashboard() {
   const [birthdaysMonth, setBirthdaysMonth] = useState<BirthdayPerson[]>([]);
   const [birthdaysLoading, setBirthdaysLoading] = useState(false);
   const [birthdaysError, setBirthdaysError] = useState<string | null>(null);
+  const [receitaFacturacao, setReceitaFacturacao] = useState<number>(0);
+  const [receitaFacturacaoLoading, setReceitaFacturacaoLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,9 +209,37 @@ export default function Dashboard() {
 
   const activeClients = colaboradores.filter(c => c.status === 'Activo').length;
 
-  const receita = pagamentos
-    .filter(p => p.status !== 'Devolvido')
-    .reduce((s, p) => s + p.valor, 0);
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!isSupabaseConfigured() || !supabase) {
+        setReceitaFacturacao(0);
+        return;
+      }
+      setReceitaFacturacaoLoading(true);
+      try {
+        let q = supabase.from('factura').select('total_factura, empresa_id').limit(2000);
+        if (currentEmpresaId !== 'consolidado') q = q.eq('empresa_id', currentEmpresaId);
+        const { data, error } = await q;
+        if (error) throw error;
+        const total = (Array.isArray(data) ? data : []).reduce((s, r) => {
+          const v = (r as { total_factura?: unknown })?.total_factura;
+          if (typeof v === 'number') return s + v;
+          if (typeof v === 'string') return s + parseMonetaryAmount(v);
+          return s;
+        }, 0);
+        if (!cancelled) setReceitaFacturacao(total);
+      } catch {
+        if (!cancelled) setReceitaFacturacao(0);
+      } finally {
+        if (!cancelled) setReceitaFacturacaoLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentEmpresaId]);
 
   const despesas = requisicoes
     .filter(r => r.status === 'Pago')
@@ -577,9 +607,9 @@ export default function Dashboard() {
               {canContabilidade ? (
                 <KpiCard
                   title="Receita"
-                  value={formatKz(receita)}
+                  value={receitaFacturacaoLoading ? 'A carregar…' : formatKz(receitaFacturacao)}
                   icon={<TrendingUp className="h-5 w-5" />}
-                  description="Pagamentos recebidos"
+                  description="Facturação"
                 />
               ) : null}
               {canFinancas ? (
