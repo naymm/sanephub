@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import type { Usuario, Perfil } from '@/types';
 import { USUARIOS_SEED } from '@/data/seed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -159,6 +159,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthSessionRevision((n) => n + 1);
   }, []);
 
+  /** `onAuthStateChange` usa referência actual; evita `user === null` stale e “A carregar…” em todo o `SIGNED_IN`. */
+  const userRef = useRef(user);
+  userRef.current = user;
+
   const fetchProfileAndSetUser = useCallback(async (authUserId: string) => {
     if (!supabase) return;
     const { data, error } = await supabase
@@ -229,11 +233,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, session) => {
       // Se houver eventos mas `getSession()` ficou preso, desbloqueia o layout.
       setAuthReady(true);
+      // `TOKEN_REFRESHED` ao voltar à aba não deve incrementar revisão: cada bump recria todas as subscrições
+      // realtime (`useRealtimeTable`) e volta a correr um fetch inicial de cada tabela.
+      if (event === 'TOKEN_REFRESHED') {
+        if (session?.user)
+          void (async () => {
+            try {
+              await fetchProfileAndSetUser(session.user.id);
+            } catch {
+              /* mantém estado */
+            }
+          })();
+        return;
+      }
+
       bumpAuthSessionRevision();
+
       if (session?.user) {
-        // Ao voltar à aba, o Supabase pode emitir eventos como TOKEN_REFRESHED.
-        // Não queremos bloquear a UI (parece "refresh"); apenas atualizar o perfil em background.
-        const shouldBlockUi = event === 'SIGNED_IN' && user == null;
+        const shouldBlockUi = event === 'SIGNED_IN' && userRef.current == null;
         if (shouldBlockUi) setRestoringSession(true);
         void (async () => {
           try {
