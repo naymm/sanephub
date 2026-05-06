@@ -226,17 +226,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       // Se houver eventos mas `getSession()` ficou preso, desbloqueia o layout.
       setAuthReady(true);
       bumpAuthSessionRevision();
       if (session?.user) {
-        setRestoringSession(true);
+        // Ao voltar à aba, o Supabase pode emitir eventos como TOKEN_REFRESHED.
+        // Não queremos bloquear a UI (parece "refresh"); apenas atualizar o perfil em background.
+        const shouldBlockUi = event === 'SIGNED_IN' && user == null;
+        if (shouldBlockUi) setRestoringSession(true);
         void (async () => {
           try {
             await fetchProfileAndSetUser(session.user.id);
           } finally {
-            setRestoringSession(false);
+            if (shouldBlockUi) setRestoringSession(false);
           }
         })();
       } else {

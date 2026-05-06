@@ -21,6 +21,14 @@ function isDesktopViewport(): boolean {
   if (typeof window === 'undefined') return true;
   return window.matchMedia('(min-width: 768px)').matches;
 }
+
+function isStandaloneDisplayMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  // PWA/instalado: Chrome/Edge/Android
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) return true;
+  // iOS Safari “Add to Home Screen”
+  return (navigator as unknown as { standalone?: boolean } | undefined)?.standalone === true;
+}
 /** Verificação periódica do tempo sem atividade (não depende só de `setTimeout` único). */
 const IDLE_CHECK_INTERVAL_MS = 15_000;
 /** `pointermove` / `touchmove` disparam muito; atualizamos o “último movimento” com este intervalo. */
@@ -253,6 +261,12 @@ export function MobileSessionLockProvider({ children }: { children: ReactNode })
       if (document.visibilityState === 'hidden') {
         if (isDesktopViewport()) {
           // Desktop: trocar de separador não conta como “sair da app”; o PIN fica só pelos 10 min de inatividade.
+          return;
+        }
+        // Em browser normal (não instalado como PWA), mudar de aba/janela não deve bloquear por PIN.
+        // Isto evita a sensação de "refresh/reload" ao regressar à aplicação.
+        if (!isStandaloneDisplayMode()) {
+          clearBackgroundLockTimers();
           return;
         }
         // Alguns fluxos (ex.: abrir PDF em nova aba) não devem disparar lock imediato ao regressar.

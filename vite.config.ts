@@ -37,7 +37,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: "autoUpdate",
+        // `autoUpdate` recarrega a página quando há nova versão do SW — frequentemente ao voltar à aba
+        // (revalidação + activação). `prompt` regista updates em background sem reload forçado.
+        registerType: "prompt",
         strategies: "injectManifest",
         srcDir: "src",
         filename: "sw.ts",
@@ -80,11 +82,9 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
-        // Sem isto, em `npm run dev` não há SW/manifest — a opção “Instalar” não aparece
+        // SW em dev causa navegações/reloads estranhos ao trocar de aba; testar PWA com `vite preview`/build.
         devOptions: {
-          enabled: true,
-          navigateFallback: "index.html",
-          type: "module",
+          enabled: false,
         },
       }),
     ].filter(Boolean),
