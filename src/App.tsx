@@ -33,6 +33,7 @@ import ContasBancariasPage from "@/modules/financas/ContasBancariasPage";
 import CentrosCustoPage from "@/modules/financas/CentrosCustoPage";
 import ProjectosPage from "@/modules/financas/ProjectosPage";
 import RelatoriosPage from "@/modules/financas/RelatoriosPage";
+import DespesasPage from "@/modules/financas/DespesasPage";
 import PagamentosPage from "@/modules/contabilidade/PagamentosPage";
 import PendenciasPage from "@/modules/contabilidade/PendenciasPage";
 import ContratosPage from "@/modules/juridico/ContratosPage";
@@ -78,6 +79,7 @@ import ComunicadosPage from "@/modules/comunicacao-interna/ComunicadosPage";
 import ComunicadoDetalhePage from "@/modules/comunicacao-interna/ComunicadoDetalhePage";
 import PatrimonioPage from "@/modules/patrimonio/PatrimonioPage";
 import FacturacaoPage from "@/modules/facturacao/FacturacaoPage";
+import ReceitaPage from "@/modules/facturacao/ReceitaPage";
 
 const queryClient = new QueryClient();
 
@@ -138,6 +140,7 @@ const App = () => (
                   {/* Finanças */}
                   <Route path="/financas/requisicoes" element={<RequisicoesPage />} />
                   <Route path="/financas/requisicoes/novo" element={<RequisicoesPage />} />
+                  <Route path="/financas/despesas" element={<DespesasPage />} />
                   <Route path="/financas/bancos" element={<BancosPage />} />
                   <Route path="/financas/bancos/novo" element={<BancosPage />} />
                   <Route path="/financas/contas-bancarias" element={<ContasBancariasPage />} />
@@ -151,6 +154,7 @@ const App = () => (
                   <Route path="/financas/relatorios" element={<RelatoriosPage />} />
 
                   <Route path="/facturacao" element={<FacturacaoPage />} />
+                  <Route path="/facturacao/receita" element={<ReceitaPage />} />
                   {/* Contabilidade */}
                   <Route path="/contabilidade/pagamentos" element={<PagamentosPage />} />
                   <Route path="/contabilidade/pendencias" element={<PendenciasPage />} />

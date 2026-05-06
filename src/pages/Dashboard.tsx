@@ -605,28 +605,46 @@ export default function Dashboard() {
               )}
             >
               {canContabilidade ? (
-                <KpiCard
-                  title="Receita"
-                  value={receitaFacturacaoLoading ? 'A carregar…' : formatKz(receitaFacturacao)}
-                  icon={<TrendingUp className="h-5 w-5" />}
-                  description="Facturação"
-                />
+                <button
+                  type="button"
+                  className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  onClick={() => navigate('/facturacao/receita')}
+                >
+                  <KpiCard
+                    title="Receita"
+                    value={receitaFacturacaoLoading ? 'A carregar…' : formatKz(receitaFacturacao)}
+                    icon={<TrendingUp className="h-5 w-5" />}
+                    description="Facturação"
+                  />
+                </button>
               ) : null}
               {canFinancas ? (
-                <KpiCard
-                  title="Despesas"
-                  value={formatKz(despesas)}
-                  icon={<Receipt className="h-5 w-5" />}
-                  description="Requisições pagas"
-                />
+                <button
+                  type="button"
+                  className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  onClick={() => navigate('/financas/despesas')}
+                >
+                  <KpiCard
+                    title="Despesas"
+                    value={formatKz(despesas)}
+                    icon={<Receipt className="h-5 w-5" />}
+                    description="Requisições pagas"
+                  />
+                </button>
               ) : null}
               {canCapitalHumano ? (
-                <KpiCard
-                  title="Colaboradores"
-                  value={activeClients}
-                  icon={<UsersRound className="h-5 w-5" />}
-                  description="Colaboradores ativos"
-                />
+                <button
+                  type="button"
+                  className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  onClick={() => navigate('/capital-humano/colaboradores')}
+                >
+                  <KpiCard
+                    title="Colaboradores"
+                    value={activeClients}
+                    icon={<UsersRound className="h-5 w-5" />}
+                    description="Colaboradores ativos"
+                  />
+                </button>
               ) : null}
               {canJuridico ? (
                 <KpiCard

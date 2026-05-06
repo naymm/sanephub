@@ -62,6 +62,7 @@ export const MODULE_GROUPS: MenuGroup[] = [
     icon: DollarSign,
     children: [
       { label: 'Requisições', path: '/financas/requisicoes', module: 'financas' },
+      { label: 'Despesas', path: '/financas/despesas', module: 'financas' },
       { label: 'Bancos', path: '/financas/bancos', module: 'financas', adminOnly: true },
       { label: 'Contas bancárias', path: '/financas/contas-bancarias', module: 'financas' },
       { label: 'Tesouraria', path: '/financas/tesouraria', module: 'financas' },
@@ -74,7 +75,10 @@ export const MODULE_GROUPS: MenuGroup[] = [
     label: 'Facturação',
     module: 'facturacao',
     icon: Receipt,
-    children: [{ label: 'Facturas', path: '/facturacao', module: 'facturacao' }],
+    children: [
+      { label: 'Facturas', path: '/facturacao', module: 'facturacao' },
+      { label: 'Receita', path: '/facturacao/receita', module: 'facturacao' },
+    ],
   },
   {
     label: 'Contabilidade',

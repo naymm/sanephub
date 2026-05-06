@@ -43,6 +43,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/capital-humano/marcacoes-ponto': <Fingerprint className="h-4 w-4 shrink-0" />,
     '/capital-humano/zonas-trabalho': <MapPin className="h-4 w-4 shrink-0" />,
     '/financas/requisicoes': <DollarSign className="h-4 w-4 shrink-0" />,
+    '/financas/despesas': <DollarSign className="h-4 w-4 shrink-0" />,
     '/financas/bancos': <DollarSign className="h-4 w-4 shrink-0" />,
     '/financas/contas-bancarias': <DollarSign className="h-4 w-4 shrink-0" />,
     '/financas/tesouraria': <DollarSign className="h-4 w-4 shrink-0" />,
@@ -73,6 +74,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/comunicacao-interna/comunicados': <ScrollText className="h-4 w-4 shrink-0" />,
     '/comunicacao-interna/aniversarios': <Cake className="h-4 w-4 shrink-0" />,
     '/facturacao': <Receipt className="h-4 w-4 shrink-0" />,
+    '/facturacao/receita': <Receipt className="h-4 w-4 shrink-0" />,
   };
   return map[path] ?? null;
 }
