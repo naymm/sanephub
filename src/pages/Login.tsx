@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Lock, AlertCircle, Eye, EyeOff, Mail } from 'lucide-react';
+import { Lock, AlertCircle, Eye, EyeOff, Mail, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const REMEMBER_KEY = 'sanep_login_remember_username';
@@ -15,6 +15,7 @@ export default function Login() {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, isAuthenticated, isAuthReady } = useAuth();
   const navigate = useNavigate();
 
@@ -37,21 +38,29 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (isSubmitting) return;
     if (!username || !senha) {
       setError('Preencha todos os campos.');
       return;
     }
-    const success = await login(username, senha);
-    if (success) {
-      try {
-        if (rememberMe) localStorage.setItem(REMEMBER_KEY, username.trim());
-        else localStorage.removeItem(REMEMBER_KEY);
-      } catch {
-        /* ignore */
+    setIsSubmitting(true);
+    try {
+      const success = await login(username, senha);
+      if (success) {
+        try {
+          if (rememberMe) localStorage.setItem(REMEMBER_KEY, username.trim());
+          else localStorage.removeItem(REMEMBER_KEY);
+        } catch {
+          /* ignore */
+        }
+        navigate('/dashboard');
+      } else {
+        setError('Credenciais inválidas. Verifique o nome de utilizador e a senha.');
       }
-      navigate('/dashboard');
-    } else {
-      setError('Credenciais inválidas. Verifique o nome de utilizador e a senha.');
+    } catch {
+      setError('Não foi possível iniciar sessão. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -88,6 +97,7 @@ export default function Login() {
             placeholder="Nome de utilizador ou email"
             value={username}
             onChange={e => setUsername(e.target.value)}
+            disabled={isSubmitting}
             className="h-12 rounded-full border-border/80 bg-background pl-12 pr-4 text-base shadow-sm placeholder:text-muted-foreground/70"
           />
         </div>
@@ -109,6 +119,7 @@ export default function Login() {
             placeholder="Senha"
             value={senha}
             onChange={e => setSenha(e.target.value)}
+            disabled={isSubmitting}
             className="h-12 rounded-full border-border/80 bg-background pl-12 pr-12 text-base shadow-sm placeholder:text-muted-foreground/70"
           />
           <button
@@ -116,6 +127,7 @@ export default function Login() {
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
             onClick={() => setMostrarSenha(v => !v)}
             aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+            disabled={isSubmitting}
           >
             {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
@@ -127,6 +139,7 @@ export default function Login() {
           <Checkbox
             checked={rememberMe}
             onCheckedChange={v => setRememberMe(v === true)}
+            disabled={isSubmitting}
             className="border-primary/50 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
           />
           <span className="font-medium text-primary">Lembrar-me</span>
@@ -139,6 +152,7 @@ export default function Login() {
               description: 'Contacte o administrador do sistema ou a equipa de TI.',
             })
           }
+          disabled={isSubmitting}
         >
           Esqueceu a senha?
         </button>
@@ -146,9 +160,16 @@ export default function Login() {
 
       <Button
         type="submit"
+        disabled={isSubmitting}
         className="h-12 w-full rounded-full bg-primary text-base font-semibold text-primary-foreground shadow-md hover:bg-primary/90"
       >
-        Entrar
+        {isSubmitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" /> A entrar…
+          </>
+        ) : (
+          'Entrar'
+        )}
       </Button>
     </>
   );
@@ -237,6 +258,7 @@ export default function Login() {
                     placeholder="ex.: naym"
                     value={username}
                     onChange={e => setUsername(e.target.value)}
+                    disabled={isSubmitting}
                     className="pl-10 h-10 rounded-lg border-border/80 bg-background"
                   />
                 </div>
@@ -255,6 +277,7 @@ export default function Login() {
                     placeholder="••••••••"
                     value={senha}
                     onChange={e => setSenha(e.target.value)}
+                    disabled={isSubmitting}
                     className="pl-10 pr-10 h-10 rounded-lg border-border/80 bg-background"
                   />
                   <button
@@ -262,6 +285,7 @@ export default function Login() {
                     className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
                     onClick={() => setMostrarSenha(v => !v)}
                     aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                    disabled={isSubmitting}
                   >
                     {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -270,7 +294,11 @@ export default function Login() {
 
               <div className="flex items-center justify-between gap-3">
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                  <Checkbox checked={rememberMe} onCheckedChange={v => setRememberMe(v === true)} />
+                  <Checkbox
+                    checked={rememberMe}
+                    onCheckedChange={v => setRememberMe(v === true)}
+                    disabled={isSubmitting}
+                  />
                   Lembrar-me
                 </label>
                 <button
@@ -281,13 +309,20 @@ export default function Login() {
                       description: 'Contacte o administrador do sistema ou a equipa de TI.',
                     })
                   }
+                  disabled={isSubmitting}
                 >
                   Esqueceu a senha?
                 </button>
               </div>
 
-              <Button type="submit" className="w-full h-10 rounded-lg font-medium">
-                Entrar
+              <Button type="submit" className="w-full h-10 rounded-lg font-medium" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> A entrar…
+                  </>
+                ) : (
+                  'Entrar'
+                )}
               </Button>
             </form>
           </div>
