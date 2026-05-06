@@ -75,6 +75,8 @@ function patchContaBancariaSaldo(
 
 interface DataContextType {
   dataLoading: boolean;
+  /** True depois da primeira carga completa (evita "recarregar" ao voltar de outra aba). */
+  initialDataReady: boolean;
   dataError: string | null;
   refetch: () => Promise<void>;
   departamentos: Departamento[];
@@ -326,6 +328,7 @@ const emptyArrays = {
 export function DataProvider({ children }: { children: ReactNode }) {
   const { currentEmpresaId } = useTenant();
   const [dataLoading, setDataLoading] = useState(true);
+  const [initialDataReady, setInitialDataReady] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>(emptyArrays.empresas);
   const [departamentos, setDepartamentos] = useState<Departamento[]>(emptyArrays.departamentos);
@@ -449,7 +452,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setDataLoading(realtimeLoading);
-    if (!realtimeLoading) setDataError(null);
+    if (!realtimeLoading) {
+      setDataError(null);
+      setInitialDataReady(true);
+    }
   }, [realtimeLoading]);
 
   useEffect(() => setEmpresas(empresasRT.rows), [empresasRT.rows]);
@@ -1331,6 +1337,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<DataContextType>(
     () => ({
       dataLoading,
+      initialDataReady,
       dataError,
       refetch,
       departamentos,
@@ -1526,6 +1533,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }),
     [
       dataLoading,
+      initialDataReady,
       dataError,
       refetch,
       organizacaoSettings,

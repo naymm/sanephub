@@ -37,12 +37,13 @@ const PATH_TO_MODULE: Record<string, string> = {
 
 export function Layout() {
   const { user, isAuthenticated, isAuthReady, isRestoringSession } = useAuth();
-  const { empresas, organizacaoSettings, dataLoading } = useData();
+  const { empresas, organizacaoSettings, initialDataReady } = useData();
   const { currentEmpresaId } = useTenant();
   const location = useLocation();
   const pathname = location.pathname;
 
-  const shouldShowLoading = !isAuthReady || isRestoringSession || dataLoading;
+  // Só bloquear a app no primeiro carregamento (evita "recarregar" ao regressar de outra aba).
+  const shouldShowLoading = !isAuthReady || isRestoringSession || !initialDataReady;
   if (shouldShowLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
