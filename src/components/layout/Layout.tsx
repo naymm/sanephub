@@ -36,13 +36,14 @@ const PATH_TO_MODULE: Record<string, string> = {
 };
 
 export function Layout() {
-  const { user, isAuthenticated, isAuthReady } = useAuth();
-  const { empresas, organizacaoSettings } = useData();
+  const { user, isAuthenticated, isAuthReady, isRestoringSession } = useAuth();
+  const { empresas, organizacaoSettings, dataLoading } = useData();
   const { currentEmpresaId } = useTenant();
   const location = useLocation();
   const pathname = location.pathname;
 
-  if (!isAuthReady) {
+  const shouldShowLoading = !isAuthReady || isRestoringSession || dataLoading;
+  if (shouldShowLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-muted-foreground text-sm">A carregar...</div>
@@ -51,6 +52,12 @@ export function Layout() {
   }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
+  /**
+   * IMPORTANTE: em refresh, o Router entra na rota correcta, mas o `DataProvider`
+   * ainda pode estar a (re)carregar `empresas`/`organizacaoSettings` via realtime.
+   * Se avaliarmos permissões/whitelists antes de ter dados, acabamos por redireccionar
+   * indevidamente para `/dashboard`.
+   */
   // Bloqueio específico: “Empresas do Grupo” apenas para Admin (não PCA).
   if (user?.perfil !== 'Admin' && pathname.startsWith('/conselho-administracao/empresas')) {
     return <Navigate to="/dashboard" replace />;

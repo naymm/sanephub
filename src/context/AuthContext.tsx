@@ -113,6 +113,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   /** False enquanto Supabase restaura a sessão (evita flash da página de login). */
   isAuthReady: boolean;
+  /** True enquanto existe sessão mas o perfil ainda está a carregar (evita redirect /login no refresh). */
+  isRestoringSession: boolean;
   /**
    * Incrementa quando a sessão Supabase muda (login, logout, refresh).
    * Os hooks de dados em tempo real usam-no para voltar a fazer fetch com o JWT correcto (ex.: mobile após login).
@@ -150,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   });
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured());
+  const [restoringSession, setRestoringSession] = useState(isSupabaseConfigured());
   const [authSessionRevision, setAuthSessionRevision] = useState(0);
 
   const bumpAuthSessionRevision = useCallback(() => {
@@ -187,22 +190,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) {
       setAuthReady(true);
+      setRestoringSession(false);
       return;
     }
     // IMPORTANTE: `getSession()` pode falhar (rede / bloqueios WebView / Safari).
     // Não podemos deixar `isAuthReady` preso em false, senão o UI só aparece após refresh.
-    void supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        if (session?.user) void fetchProfileAndSetUser(session.user.id);
-      })
-      .catch(() => {
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        // Evitar “flash” de /login no refresh: se existir sessão, tratar como "a restaurar"
+        // até o perfil ficar disponível (com retries curtos).
+        if (session?.user) {
+          setRestoringSession(true);
+          let ok = false;
+          for (let i = 0; i < 3; i++) {
+            await fetchProfileAndSetUser(session.user.id);
+            // Se o perfil foi carregado, `user` deixa de ser null no próximo render.
+            // Aqui só precisamos de evitar o redirect imediato.
+            ok = true;
+            break;
+          }
+          if (!ok) setUser(null);
+        } else {
+          setUser(null);
+        }
+      } catch {
         /* ignora: continua como "sem sessão" */
-      })
-      .finally(() => {
+        setUser(null);
+      } finally {
+        setRestoringSession(false);
         setAuthReady(true);
         bumpAuthSessionRevision();
-      });
+      }
+    })();
 
     const {
       data: { subscription },
@@ -210,8 +230,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Se houver eventos mas `getSession()` ficou preso, desbloqueia o layout.
       setAuthReady(true);
       bumpAuthSessionRevision();
-      if (session?.user) void fetchProfileAndSetUser(session.user.id);
-      else setUser(null);
+      if (session?.user) {
+        setRestoringSession(true);
+        void (async () => {
+          try {
+            await fetchProfileAndSetUser(session.user.id);
+          } finally {
+            setRestoringSession(false);
+          }
+        })();
+      } else {
+        setUser(null);
+        setRestoringSession(false);
+      }
     });
     return () => subscription.unsubscribe();
   }, [fetchProfileAndSetUser, bumpAuthSessionRevision]);
@@ -393,11 +424,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       isAuthenticated: !!user,
       isAuthReady: authReady,
+      isRestoringSession: restoringSession,
       authSessionRevision,
       createUserInSupabase,
       refreshSessionUser,
     }),
-    [user, usuarios, login, logout, authReady, authSessionRevision, createUserInSupabase, refreshSessionUser],
+    [user, usuarios, login, logout, authReady, restoringSession, authSessionRevision, createUserInSupabase, refreshSessionUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
