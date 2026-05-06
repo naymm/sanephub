@@ -1,0 +1,26 @@
+# App estática (Vite build) + Nginx com fallback SPA (mesma ideia do vercel.json).
+#
+# Supabase em Docker: na pasta do projecto, com Docker a correr, use a stack oficial do CLI:
+#   supabase start
+# Isto levanta Kong, Postgres, Auth, Storage, etc. (ver `supabase status` para URLs e keys).
+# O browser precisa de alcançar o URL que passar em VITE_SUPABASE_URL (IP/DNS do host, :54321).
+#
+# Exemplo no Ubuntu (host):
+#   export VITE_SUPABASE_URL=http://SEU_IP_LAN:54321
+#   export VITE_SUPABASE_ANON_KEY="$(supabase status -o env 2>/dev/null | sed -n 's/^ANON_KEY=//p' | head -1)"
+#   export VITE_SUPABASE_ALLOW_HTTP=1
+#   docker compose build --no-cache web && docker compose up -d web
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?defina VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:?defina VITE_SUPABASE_ANON_KEY}
+        VITE_SUPABASE_ALLOW_HTTP: ${VITE_SUPABASE_ALLOW_HTTP:-1}
+        VITE_VAPID_PUBLIC_KEY: ${VITE_VAPID_PUBLIC_KEY:-}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped

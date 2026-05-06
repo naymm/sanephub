@@ -167,3 +167,26 @@ Para anexos (ex.: PDFs do processo disciplinar), pode usar **Supabase Storage**:
 | Ficheiros        | Nome em texto       | Pode usar Storage      |
 
 Com **VITE_SUPABASE_URL** e **VITE_SUPABASE_ANON_KEY** definidos, o login passa a ser feito contra o Supabase; sem estas variáveis, o comportamento é o anterior (contas de demonstração e seed).
+
+## 7. Ubuntu + Docker (app + Supabase local)
+
+1. **Docker Engine** e plugin Compose no Ubuntu; clone do repositório.
+2. **Supabase (vários contentores)** — na raiz do projecto:
+   ```bash
+   ./scripts/docker-supabase-start.sh
+   ```
+   (requer [Supabase CLI](https://supabase.com/docs/guides/cli); `supabase start` usa Docker por baixo.)
+3. Anote o **Project URL** e a **anon key** que o CLI mostra (`supabase status`).
+4. **Frontend em contentor** — defina variáveis no *shell* (ou ficheiro `.env` lido pelo Compose) e construa:
+   - `VITE_SUPABASE_URL`: URL que o **browser** consegue abrir (ex.: `http://IP-DO-SERVIDOR:54321`, não `127.0.0.1` se acederes de outra máquina).
+   - `VITE_SUPABASE_ANON_KEY`: anon key do passo 3.
+   - `VITE_SUPABASE_ALLOW_HTTP=1` se o URL for `http://` (rede interna / self-hosted).
+   ```bash
+   export VITE_SUPABASE_URL=http://SEU_IP:54321
+   export VITE_SUPABASE_ANON_KEY=eyJ...
+   export VITE_SUPABASE_ALLOW_HTTP=1
+   docker compose build web && docker compose up -d web
+   ```
+5. Ficheiros na raiz: `Dockerfile`, `docker-compose.yml`, `docker/nginx.conf`. Detalhes da imagem da app: comentários no `docker-compose.yml`.
+
+Para **Supabase totalmente self-hosted** fora do CLI (compose oficial do projecto Supabase), consulte a [documentação self-host Docker](https://supabase.com/docs/guides/self-hosting/docker); as migrações deste repositório continuam em `supabase/migrations/` e aplicam-se com `supabase db push` / `psql` conforme o teu fluxo.

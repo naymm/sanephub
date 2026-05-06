@@ -1,14 +1,18 @@
 /**
  * Resolve VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para o browser.
- * Em produção rejeita URLs locais / porta API local e HTTP (evita mixed content no Vercel).
+ * Em produção rejeita loopback (evita build de cloud a apontar para máquina local).
+ * HTTP só em produção se VITE_SUPABASE_ALLOW_HTTP=1 (ex.: Supabase self-hosted em Docker na LAN).
  */
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]']);
 
-function isLocalSupabaseApiUrl(hostname: string, port: string): boolean {
-  if (LOOPBACK.has(hostname)) return true;
-  if (port === '54321') return true;
-  return false;
+function isForbiddenLoopback(hostname: string): boolean {
+  return LOOPBACK.has(hostname);
+}
+
+function allowHttpInProd(): boolean {
+  const v = import.meta.env.VITE_SUPABASE_ALLOW_HTTP as string | undefined;
+  return v === '1' || v === 'true';
 }
 
 export interface ResolvedSupabaseBrowserEnv {
@@ -31,19 +35,18 @@ export function resolveSupabaseBrowserEnv(): ResolvedSupabaseBrowserEnv | null {
 
   const prod = import.meta.env.PROD;
   const hostname = parsed.hostname.toLowerCase();
-  const port = parsed.port || (parsed.protocol === 'https:' ? '443' : parsed.protocol === 'http:' ? '80' : '');
 
   if (prod) {
-    if (isLocalSupabaseApiUrl(hostname, port)) {
+    if (isForbiddenLoopback(hostname)) {
       console.error(
-        '[Sanep Hub] Em produção VITE_SUPABASE_URL não pode apontar para localhost nem para a API local (porta 54321). ' +
-          'No Vercel, defina o URL HTTPS do projecto (ex.: https://xxxx.supabase.co) em Environment Variables e faça um novo deploy.',
+        '[Sanep Hub] Em produção VITE_SUPABASE_URL não pode usar localhost/127.0.0.1 (o browser dos utilizadores não alcança o teu PC). ' +
+          'Use o URL público do Supabase (cloud ou host/DNS na rede) e faça rebuild da imagem.',
       );
       return null;
     }
-    if (parsed.protocol !== 'https:') {
+    if (parsed.protocol !== 'https:' && !allowHttpInProd()) {
       console.error(
-        '[Sanep Hub] Em produção use VITE_SUPABASE_URL com https:// (evita mixed content no browser).',
+        '[Sanep Hub] Em produção use VITE_SUPABASE_URL com https://, ou defina VITE_SUPABASE_ALLOW_HTTP=1 para Supabase em HTTP na rede interna.',
       );
       return null;
     }
