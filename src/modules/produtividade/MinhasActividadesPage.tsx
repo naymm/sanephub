@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag, User, Users } from 'lucide-react';
+import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag, User, Users, Loader2, Download, FileText, FileImage, File, Paperclip } from 'lucide-react';
 import {
   DndContext,
   DragEndEvent,
@@ -43,13 +43,217 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { EmployeeMultiSelect } from '@/components/shared/EmployeeMultiSelect';
+import { EmployeeSelect } from '@/components/shared/EmployeeSelect';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-const STATUS_KANBAN: Array<Extract<ProdutividadeStatus, 'Pendente' | 'Em Progresso' | 'Concluída'>> = [
-  'Pendente',
-  'Em Progresso',
-  'Concluída',
-];
+function isAllowedDeliverableFile(f: File): boolean {
+  const name = f.name.toLowerCase();
+  const ext = name.split('.').pop() || '';
+  const allowedExt = new Set(['pdf', 'docx', 'xlsx', 'png', 'jpg', 'jpeg', 'webp']);
+  return allowedExt.has(ext);
+}
+
+const ENTREGAVEL_INPUT_ACCEPT = '.pdf,.docx,.xlsx,.png,.jpg,.jpeg,.webp,image/*';
+
+function DeliverableFileDropZone({
+  disabled,
+  uploading,
+  uploadingHint,
+  selectedFile,
+  onFileSelected,
+  dropZoneClassName,
+  ariaLabel = 'Área para largar ou escolher ficheiro do entregável',
+  idleTitle,
+  idleSub,
+}: {
+  disabled?: boolean;
+  /** Enviar ficheiro ao armazenamento (mostra estado na zona). */
+  uploading?: boolean;
+  /** Texto curto durante o envio (ex.: destino do estado). */
+  uploadingHint?: string;
+  selectedFile: File | null;
+  onFileSelected: (file: File | null) => void;
+  dropZoneClassName?: string;
+  ariaLabel?: string;
+  idleTitle?: string;
+  idleSub?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragDepthRef = useRef(0);
+
+  const applyChosenFile = useCallback(
+    (file: File | null) => {
+      if (!file) {
+        onFileSelected(null);
+        return;
+      }
+      if (!isAllowedDeliverableFile(file)) {
+        toast.error('Tipo de ficheiro não aceite. Use PDF, DOCX, XLSX ou imagem (PNG, JPG, JPEG, WebP).');
+        return;
+      }
+      onFileSelected(file);
+    },
+    [onFileSelected],
+  );
+
+  function handleDragEnter(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled || uploading) return;
+    dragDepthRef.current += 1;
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled || uploading) return;
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0;
+      setIsDragging(false);
+    }
+  }
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled && !uploading) {
+      try {
+        e.dataTransfer.dropEffect = 'copy';
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDragging(false);
+    if (disabled || uploading) return;
+    const f = e.dataTransfer.files?.[0];
+    applyChosenFile(f ?? null);
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={inputRef}
+        type="file"
+        className="sr-only"
+        accept={ENTREGAVEL_INPUT_ACCEPT}
+        disabled={disabled || uploading}
+        onChange={(ev: ChangeEvent<HTMLInputElement>) => {
+          applyChosenFile(ev.target.files?.[0] ?? null);
+          ev.target.value = '';
+        }}
+      />
+      <div
+        role="button"
+        tabIndex={disabled || uploading ? -1 : 0}
+        aria-disabled={disabled || uploading}
+        aria-label={ariaLabel}
+        className={cn(
+          'w-full rounded-xl border-2 border-dashed text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'p-6 min-h-[140px] flex flex-col items-center justify-center gap-2',
+          dropZoneClassName,
+          !(disabled || uploading) && 'cursor-pointer',
+          (disabled || uploading) && 'pointer-events-none opacity-70',
+          isDragging && !disabled && !uploading ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 bg-muted/20 hover:bg-muted/35',
+        )}
+        onClick={() => {
+          if (!disabled && !uploading) inputRef.current?.click();
+        }}
+        onKeyDown={(e) => {
+          if (disabled || uploading) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {uploading ? (
+          <>
+            <Loader2 className="h-9 w-9 animate-spin text-primary" aria-hidden />
+            <div className="text-sm font-medium text-center">A enviar o ficheiro…</div>
+            <div className="text-xs text-muted-foreground text-center max-w-[280px]">
+              {uploadingHint ?? 'A actualizar o estado da actividade…'}
+            </div>
+            {selectedFile ? (
+              <div className="mt-1 text-xs font-medium text-foreground truncate max-w-full px-1 text-center">
+                {selectedFile.name}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <UploadCloud className={cn('h-9 w-9', isDragging ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
+            <div className="text-sm font-medium text-center">
+              {isDragging ? 'Largue o ficheiro aqui' : (idleTitle ?? 'Arraste o ficheiro para aqui')}
+            </div>
+            <div className="text-xs text-muted-foreground text-center max-w-[280px]">
+              {idleSub ??
+                'ou clique para escolher — o envio e a mudança de estado são automáticos (PDF, DOCX, XLSX, imagens)'}
+            </div>
+            {selectedFile ? (
+              <div className="mt-1 text-xs font-medium text-foreground truncate max-w-full px-1 text-center">
+                {selectedFile.name}
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatEntregavelSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function entregavelLinkedToDeliverableEvent(ev: ProdutividadeEvento, list: ProdutividadeEntregavel[]): ProdutividadeEntregavel | null {
+  const p = ev.payload ?? {} as Record<string, unknown>;
+  const rid = p['entregavel_id'];
+  if (rid != null) {
+    const id = Number(rid);
+    if (Number.isFinite(id)) {
+      const hit = list.find((x) => x.id === id);
+      if (hit) return hit;
+    }
+  }
+  const sp = typeof p['storage_path'] === 'string' ? (p['storage_path'] as string) : null;
+  if (sp) {
+    const hit = list.find((x) => x.storagePath === sp);
+    if (hit) return hit;
+  }
+  const nome = typeof p['nome'] === 'string' ? p['nome'] : null;
+  if (!nome) return null;
+  const sameName = list.filter((x) => x.nomeFicheiro === nome);
+  if (sameName.length === 0) return null;
+  return sameName.sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))[0] ?? null;
+}
+
+function EntregavelFileVisual({ mimeType }: { mimeType: string }) {
+  const m = (mimeType || '').toLowerCase();
+  const box = 'h-10 w-10 shrink-0 rounded-lg border bg-background flex items-center justify-center';
+  if (m.includes('pdf')) return <FileText className={cn(box, 'text-red-600')} aria-hidden />;
+  if (m.startsWith('image/')) return <FileImage className={cn(box, 'text-sky-600')} aria-hidden />;
+  if (m.includes('sheet') || m.includes('spreadsheet') || mimeType.includes('excel')) return <FileText className={cn(box, 'text-emerald-600')} aria-hidden />;
+  return <File className={cn(box, 'text-muted-foreground')} aria-hidden />;
+}
+
+const STATUS_KANBAN = ['Pendente', 'Em Progresso', 'Em aprovação', 'Concluída'] as const;
+type KanbanColumnId = (typeof STATUS_KANBAN)[number];
 
 const DND_COL_PREFIX = 'col:' as const;
 const DND_ITEM_PREFIX = 'act:' as const;
@@ -64,8 +268,46 @@ function parseDndItemId(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function isColumnId(value: string): value is `${typeof DND_COL_PREFIX}${(typeof STATUS_KANBAN)[number]}` {
-  return value.startsWith(DND_COL_PREFIX) && STATUS_KANBAN.includes(value.slice(DND_COL_PREFIX.length) as any);
+function isColumnId(value: string): value is `${typeof DND_COL_PREFIX}${KanbanColumnId}` {
+  return value.startsWith(DND_COL_PREFIX) && (STATUS_KANBAN as readonly string[]).includes(value.slice(DND_COL_PREFIX.length));
+}
+
+function kanbanColumnForActivity(a: ProdutividadeActividade): KanbanColumnId | null {
+  if (a.status === 'Cancelada') return null;
+  if (a.status === 'Concluída') return 'Concluída';
+  if (a.status === 'Em aprovação') return 'Em aprovação';
+  if (a.status === 'Pendente') return 'Pendente';
+  return 'Em Progresso';
+}
+
+/** Actividades com aprovação obrigatória só podem chegar a «Concluída» a partir de «Em aprovação». */
+function mustCompleteViaApprovalFlow(a: ProdutividadeActividade | undefined): boolean {
+  if (!a) return false;
+  return Boolean(a.requerAprovacao) && a.status !== 'Em aprovação' && a.status !== 'Concluída' && a.status !== 'Cancelada';
+}
+
+function missingObrigatorioEntregavel(a: ProdutividadeActividade | undefined, entregaCount: number): boolean {
+  if (!a?.possuiEntregavel) return false;
+  return entregaCount <= 0;
+}
+
+function pendingApprovalCompletionStatus(a: ProdutividadeActividade): 'Em aprovação' | 'Concluída' {
+  if (Boolean(a.requerAprovacao) && a.aprovadorColaboradorId != null) return 'Em aprovação';
+  return 'Concluída';
+}
+
+function canManageApprovalTransition(
+  a: ProdutividadeActividade,
+  colabId: number | undefined | null,
+  perfil: string | null | undefined,
+  governanceEmpresaId: number | null,
+): boolean {
+  if (!colabId || !a.aprovadorColaboradorId) return false;
+  if (a.aprovadorColaboradorId === colabId) return true;
+  const p = perfil ?? '';
+  if (!(p === 'Admin' || p === 'PCA' || p === 'Director')) return false;
+  if (governanceEmpresaId == null) return false;
+  return Number(a.empresaId) === Number(governanceEmpresaId);
 }
 
 function isOverdue(a: ProdutividadeActividade): boolean {
@@ -77,6 +319,8 @@ function isOverdue(a: ProdutividadeActividade): boolean {
 }
 
 function effectiveStatus(a: ProdutividadeActividade): ProdutividadeStatus {
+  // «Em aprovação» tem prioridade na UI mesmo com prazo vencido — o fluxo decisório vem primeiro.
+  if (a.status === 'Em aprovação') return 'Em aprovação';
   // UI-friendly: se o prazo venceu e não foi concluída, mostrar como atrasada (DB também tenta manter isso por trigger).
   return isOverdue(a) ? 'Atrasada' : a.status;
 }
@@ -84,6 +328,7 @@ function effectiveStatus(a: ProdutividadeActividade): ProdutividadeStatus {
 function statusBadgeVariant(s: ProdutividadeStatus): React.ComponentProps<typeof Badge>['variant'] {
   if (s === 'Concluída') return 'default';
   if (s === 'Em Progresso') return 'secondary';
+  if (s === 'Em aprovação') return 'secondary';
   if (s === 'Atrasada') return 'destructive';
   if (s === 'Cancelada') return 'outline';
   return 'outline';
@@ -140,8 +385,8 @@ function TaskCard({
   );
 }
 
-function SortableCard({ id, a }: { id: string; a: ProdutividadeActividade }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+function SortableCard({ id, a, disabled }: { id: string; a: ProdutividadeActividade; disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -216,6 +461,8 @@ export default function MinhasActividadesPage({
   const [completeTargetId, setCompleteTargetId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [detailsReplyUploading, setDetailsReplyUploading] = useState(false);
+  const [detailsReplyPick, setDetailsReplyPick] = useState<File | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsId, setDetailsId] = useState<number | null>(null);
@@ -231,11 +478,18 @@ export default function MinhasActividadesPage({
   const [comments, setComments] = useState<ProdutividadeComentario[]>([]);
   const [newComment, setNewComment] = useState('');
   const [postingComment, setPostingComment] = useState(false);
-  const [kanbanUi, setKanbanUi] = useState<Record<(typeof STATUS_KANBAN)[number], string[]>>({
+  const [kanbanUi, setKanbanUi] = useState<Record<KanbanColumnId, string[]>>({
     Pendente: [],
     'Em Progresso': [],
+    'Em aprovação': [],
     Concluída: [],
   });
+
+  const governanceEmpresaId = useMemo(() => {
+    if (typeof currentEmpresaId === 'number') return currentEmpresaId;
+    if (typeof user?.empresaId === 'number') return user.empresaId;
+    return null;
+  }, [currentEmpresaId, user?.empresaId]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -294,7 +548,9 @@ export default function MinhasActividadesPage({
       return base.filter(r => {
         if (r.colaboradorId === user.colaboradorId) return true;
         const parts = participantesByActividade.get(r.id) ?? [];
-        return parts.some(p => p.colaboradorId === user.colaboradorId);
+        if (parts.some(p => p.colaboradorId === user.colaboradorId)) return true;
+        if (r.status === 'Em aprovação' && r.aprovadorColaboradorId === user.colaboradorId) return true;
+        return false;
       });
     }
 
@@ -325,7 +581,10 @@ export default function MinhasActividadesPage({
     return base.filter(r => {
       if (areaIds.has(r.colaboradorId)) return true;
       const parts = participantesByActividade.get(r.id) ?? [];
-      return parts.some(p => areaIds.has(p.colaboradorId));
+      if (parts.some(p => areaIds.has(p.colaboradorId))) return true;
+      if (user.colaboradorId && r.status === 'Em aprovação' && r.aprovadorColaboradorId === user.colaboradorId)
+        return true;
+      return false;
     });
   }, [
     allRows,
@@ -462,13 +721,18 @@ export default function MinhasActividadesPage({
   }, [myRows]);
 
   const kanbanColumns = useMemo(() => {
-    const cols: Record<string, ProdutividadeActividade[]> = { Pendente: [], 'Em Progresso': [], 'Concluída': [] };
+    const cols: Record<KanbanColumnId, ProdutividadeActividade[]> = {
+      Pendente: [],
+      'Em Progresso': [],
+      'Em aprovação': [],
+      Concluída: [],
+    };
     for (const a of filtered) {
-      const s = effectiveStatus(a);
-      if (s === 'Pendente' || s === 'Em Progresso' || s === 'Concluída') cols[s].push(a);
+      const col = kanbanColumnForActivity(a);
+      if (col) cols[col].push(a);
     }
-    for (const k of Object.keys(cols)) cols[k] = cols[k].slice().sort((a, b) => (a.kanbanOrder ?? 0) - (b.kanbanOrder ?? 0));
-    return cols as Record<(typeof STATUS_KANBAN)[number], ProdutividadeActividade[]>;
+    for (const k of STATUS_KANBAN) cols[k] = cols[k].slice().sort((a, b) => (a.kanbanOrder ?? 0) - (b.kanbanOrder ?? 0));
+    return cols;
   }, [filtered]);
 
   // Mantém um estado local de IDs por coluna para animação/drag "tipo Jira".
@@ -476,9 +740,10 @@ export default function MinhasActividadesPage({
     setKanbanUi({
       Pendente: kanbanColumns.Pendente.map(a => dndItemId(a.id)),
       'Em Progresso': kanbanColumns['Em Progresso'].map(a => dndItemId(a.id)),
+      'Em aprovação': kanbanColumns['Em aprovação'].map(a => dndItemId(a.id)),
       Concluída: kanbanColumns.Concluída.map(a => dndItemId(a.id)),
     });
-  }, [kanbanColumns.Pendente, kanbanColumns['Em Progresso'], kanbanColumns.Concluída]);
+  }, [kanbanColumns.Pendente, kanbanColumns['Em Progresso'], kanbanColumns['Em aprovação'], kanbanColumns.Concluída]);
 
   const activityById = useMemo(() => {
     const m = new Map<number, ProdutividadeActividade>();
@@ -502,6 +767,24 @@ export default function MinhasActividadesPage({
     if (!detailsActivity) return [];
     return (entregaveisByActividade.get(detailsActivity.id) ?? []).slice().sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
   }, [detailsActivity, entregaveisByActividade]);
+
+  const canAttachMoreDeliverables = useMemo(() => {
+    if (!detailsActivity || !user?.colaboradorId) return false;
+    if (!isSupabaseConfigured()) return false;
+    if (currentEmpresaId === 'consolidado') return false;
+    const s = detailsActivity.status;
+    return s !== 'Concluída' && s !== 'Cancelada';
+  }, [detailsActivity, user?.colaboradorId, currentEmpresaId]);
+
+  const blockManualEmAprovacaoPorEntregavel = useMemo(() => {
+    if (!detailsActivity || detailsActivity.status === 'Em aprovação') return false;
+    return missingObrigatorioEntregavel(detailsActivity, detailsEntregaveis.length);
+  }, [detailsActivity, detailsEntregaveis]);
+
+  const blockSeleccionarConcluidaPorEntregavel = useMemo(() => {
+    if (!detailsActivity || detailsActivity.status === 'Concluída') return false;
+    return missingObrigatorioEntregavel(detailsActivity, detailsEntregaveis.length);
+  }, [detailsActivity, detailsEntregaveis]);
 
   const colaboradorById = useMemo(() => {
     const m = new Map<number, { id: number; nome: string; fotoPerfilUrl?: string | null }>();
@@ -539,13 +822,38 @@ export default function MinhasActividadesPage({
     return `${parts[0]} ${parts[parts.length - 1]}`;
   }, []);
 
+  const downloadEntregavelFicheiro = useCallback(
+    (row: { storagePath: string; nomeFicheiro: string }) => {
+      if (!isSupabaseConfigured() || !supabase) {
+        toast.error('Serviço de ficheiros indisponível.');
+        return;
+      }
+      const { data } = supabase.storage.from('produtividade-entregaveis').getPublicUrl(row.storagePath);
+      const url = data?.publicUrl;
+      if (!url) {
+        toast.error('Não foi possível obter o link de descarga.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    },
+    [],
+  );
+
+  useEffect(() => {
+    setDetailsReplyPick(null);
+  }, [detailsId]);
+
+  useEffect(() => {
+    if (!detailsOpen) setDetailsReplyPick(null);
+  }, [detailsOpen]);
+
   const eventLabel = useCallback((e: ProdutividadeEvento): string => {
     const p = e.payload ?? {};
     if (e.tipo === 'created') return 'Criou a actividade';
     if (e.tipo === 'status_changed') return `Mudou o status: ${p.from ?? '—'} → ${p.to ?? '—'}`;
     if (e.tipo === 'priority_changed') return `Mudou a prioridade: ${p.from ?? '—'} → ${p.to ?? '—'}`;
     if (e.tipo === 'deadline_changed') return `Mudou o prazo: ${p.from ?? '—'} → ${p.to ?? '—'}`;
-    if (e.tipo === 'deliverable_uploaded') return `Anexou entregável: ${p.nome ?? 'ficheiro'}`;
+    if (e.tipo === 'deliverable_uploaded') return 'anexou um ficheiro';
     if (e.tipo === 'comment_added') return 'Adicionou um comentário';
     return e.tipo;
   }, []);
@@ -755,6 +1063,8 @@ export default function MinhasActividadesPage({
     prioridade: string;
     categoria: string;
     possuiEntregavel: boolean;
+    requerAprovacao: boolean;
+    aprovadorColaboradorId: number | null;
   }) {
     if (!isSupabaseConfigured() || !supabase) {
       toast.error('Produtividade requer Supabase configurado.');
@@ -786,6 +1096,8 @@ export default function MinhasActividadesPage({
         prioridade: form.prioridade,
         categoria: form.categoria,
         possui_entregavel: form.possuiEntregavel,
+        requer_aprovacao: form.requerAprovacao,
+        aprovador_colaborador_id: form.requerAprovacao ? form.aprovadorColaboradorId : null,
         status: 'Pendente',
         kanban_order: 0,
       };
@@ -827,20 +1139,50 @@ export default function MinhasActividadesPage({
     return list.length > 0;
   }, [completeTarget, entregaveisByActividade]);
 
-  async function setStatus(id: number, next: ProdutividadeStatus) {
-    if (!isSupabaseConfigured() || !supabase) return;
-    await (supabase.from('produtividade_actividades') as any).update({ status: next }).eq('id', id);
+  async function setStatus(
+    id: number,
+    next: ProdutividadeStatus,
+    opts?: { assumeEntregavelJustUploaded?: boolean },
+  ): Promise<boolean> {
+    if (!isSupabaseConfigured() || !supabase) return false;
+    const current = activityById.get(id);
+    if (next === 'Concluída' && mustCompleteViaApprovalFlow(current)) {
+      toast.error(
+        'Esta actividade exige aprovação: não pode passar directamente a «Concluída». Use «Concluir» ou arraste para a coluna «Concluída» no Kanban para submeter à aprovação.',
+      );
+      return false;
+    }
+    const entCount = entregaveisByActividade.get(id)?.length ?? 0;
+    if (!opts?.assumeEntregavelJustUploaded) {
+      if (next === 'Em aprovação' && missingObrigatorioEntregavel(current, entCount)) {
+        toast.error(
+          'Entregável obrigatório: anexe um ficheiro antes de submeter a actividade para aprovação (use «Concluir» ou envie primeiro no painel de detalhes).',
+        );
+        return false;
+      }
+      if (next === 'Concluída' && missingObrigatorioEntregavel(current, entCount)) {
+        toast.error('Entregável obrigatório: anexe um ficheiro antes de concluir a actividade.');
+        return false;
+      }
+    }
+    const { error } = await (supabase.from('produtividade_actividades') as any).update({ status: next }).eq('id', id);
+    if (error) {
+      toast.error(error.message ?? 'Erro ao actualizar o estado.');
+      return false;
+    }
+    return true;
   }
 
   function requestComplete(a: ProdutividadeActividade) {
-    const needsUpload = a.possuiEntregavel && !(entregaveisByActividade.get(a.id)?.length);
-    if (needsUpload) {
+    const next = pendingApprovalCompletionStatus(a);
+    const entCount = entregaveisByActividade.get(a.id)?.length ?? 0;
+    if (missingObrigatorioEntregavel(a, entCount)) {
       setCompleteTargetId(a.id);
       setUploadFile(null);
       setCompleteDialogOpen(true);
       return;
     }
-    void setStatus(a.id, 'Concluída');
+    void setStatus(a.id, next);
   }
 
   function openDetails(id: number) {
@@ -849,53 +1191,98 @@ export default function MinhasActividadesPage({
     setDetailsTab('actividade');
   }
 
-  function isAllowedDeliverableFile(f: File): boolean {
-    const name = f.name.toLowerCase();
-    const ext = name.split('.').pop() || '';
-    const allowedExt = new Set(['pdf', 'docx', 'xlsx', 'png', 'jpg', 'jpeg', 'webp']);
-    if (!allowedExt.has(ext)) return false;
-    // Mime types variam; não confiar só no type.
-    return true;
-  }
-
-  async function uploadDeliverableAndComplete() {
+  async function uploadDeliverableAndComplete(fileFromPicker?: File | null) {
     if (!completeTarget) return;
-    if (!uploadFile) return;
+    const file = fileFromPicker ?? uploadFile;
+    if (!file) return;
     if (!isSupabaseConfigured() || !supabase) return;
     if (!user?.colaboradorId) return;
     if (currentEmpresaId === 'consolidado') return;
 
-    if (!isAllowedDeliverableFile(uploadFile)) return;
+    if (!isAllowedDeliverableFile(file)) return;
     setUploading(true);
     try {
-      const ext = uploadFile.name.split('.').pop() || 'bin';
-      const safeName = uploadFile.name.replace(/[^\w.\-() ]+/g, '_').slice(0, 90);
+      const ext = file.name.split('.').pop() || 'bin';
+      const safeName = file.name.replace(/[^\w.\-() ]+/g, '_').slice(0, 90);
       const path = `empresa-${currentEmpresaId}/colab-${user.colaboradorId}/act-${completeTarget.id}/${Date.now()}-${safeName}`;
 
       const { data, error } = await supabase.storage
         .from('produtividade-entregaveis')
-        .upload(path, uploadFile, { upsert: true, contentType: uploadFile.type || undefined });
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
       if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar entregável');
 
       await (supabase.from('produtividade_entregaveis') as any).insert({
         actividade_id: completeTarget.id,
         storage_path: data.path,
-        nome_ficheiro: uploadFile.name,
-        mime_type: uploadFile.type || `application/${ext}`,
-        tamanho_bytes: uploadFile.size,
+        nome_ficheiro: file.name,
+        mime_type: file.type || `application/${ext}`,
+        tamanho_bytes: file.size,
         estado: 'Pendente',
         uploaded_by_colaborador_id: user.colaboradorId,
       });
 
-      await setStatus(completeTarget.id, 'Concluída');
-      setCompleteDialogOpen(false);
-      setCompleteTargetId(null);
+      const nextStatus = pendingApprovalCompletionStatus(completeTarget);
+      const statusOk = await setStatus(completeTarget.id, nextStatus, { assumeEntregavelJustUploaded: true });
+      if (statusOk) {
+        setCompleteDialogOpen(false);
+        setCompleteTargetId(null);
+        setUploadFile(null);
+        toast.success(
+          nextStatus === 'Em aprovação'
+            ? 'Entregável enviado. Actividade em aprovação.'
+            : 'Entregável enviado. Actividade concluída.',
+        );
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar o entregável.');
     } finally {
       setUploading(false);
     }
   }
 
-  function findContainerForItemId(itemId: string, state: Record<(typeof STATUS_KANBAN)[number], string[]>): (typeof STATUS_KANBAN)[number] | null {
+  async function uploadDetailsDeliverableAttachment(fileFromPicker?: File | null) {
+    const act = detailsActivity;
+    const file = fileFromPicker ?? detailsReplyPick;
+    if (!act || !file || !user?.colaboradorId) return;
+    if (!isSupabaseConfigured() || !supabase) return;
+    if (currentEmpresaId === 'consolidado') {
+      toast.error('Seleccione uma empresa específica (não «consolidado») para anexar ficheiros.');
+      return;
+    }
+    if (!isAllowedDeliverableFile(file)) return;
+
+    const ext = file.name.split('.').pop() || 'bin';
+    const safeName = file.name.replace(/[^\w.\-() ]+/g, '_').slice(0, 90);
+    const path = `empresa-${currentEmpresaId}/colab-${user.colaboradorId}/act-${act.id}/${Date.now()}-${safeName}`;
+
+    setDetailsReplyUploading(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from('produtividade-entregaveis')
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar ficheiro');
+
+      const { error: dbErr } = await (supabase.from('produtividade_entregaveis') as any).insert({
+        actividade_id: act.id,
+        storage_path: data.path,
+        nome_ficheiro: file.name,
+        mime_type: file.type || `application/${ext}`,
+        tamanho_bytes: file.size,
+        estado: 'Pendente',
+        uploaded_by_colaborador_id: user.colaboradorId,
+      });
+      if (dbErr) throw new Error(dbErr.message || 'Erro ao registar entregável');
+
+      toast.success('Anexo adicionado.');
+      setDetailsReplyPick(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao anexar');
+    } finally {
+      setDetailsReplyUploading(false);
+    }
+  }
+
+  function findContainerForItemId(itemId: string, state: Record<KanbanColumnId, string[]>): KanbanColumnId | null {
     for (const col of STATUS_KANBAN) {
       if (state[col].includes(itemId)) return col;
     }
@@ -930,15 +1317,38 @@ export default function MinhasActividadesPage({
     if (!fromCol) return;
 
     // target col
-    let toCol: (typeof STATUS_KANBAN)[number] | null = null;
+    let toCol: KanbanColumnId | null = null;
     let overItemId: string | null = null;
     if (isColumnId(overId)) {
-      toCol = overId.slice(DND_COL_PREFIX.length) as any;
+      toCol = overId.slice(DND_COL_PREFIX.length) as KanbanColumnId;
     } else if (overId.startsWith(DND_ITEM_PREFIX)) {
       overItemId = overId;
       toCol = findContainerForItemId(overId, kanbanUi);
     }
     if (!toCol) return;
+
+    if (fromCol !== toCol) {
+      if (toCol === 'Em aprovação' && fromCol !== 'Em aprovação') {
+        toast.error('Não pode arrastar para «Em aprovação». Use a coluna «Concluída» para submeter a aprovação.');
+        return;
+      }
+      if (toCol === 'Concluída') {
+        requestComplete(active);
+        return;
+      }
+      if (fromCol === 'Em aprovação') {
+        const ok = canManageApprovalTransition(
+          active,
+          user?.colaboradorId ?? null,
+          user?.perfil ?? null,
+          governanceEmpresaId,
+        );
+        if (!ok) {
+          toast.error('Só o aprovador designado (ou gestão) pode mover a actividade desde «Em aprovação».');
+          return;
+        }
+      }
+    }
 
     const nextUi = { ...kanbanUi, [fromCol]: [...kanbanUi[fromCol]], [toCol]: fromCol === toCol ? [...kanbanUi[toCol]] : [...kanbanUi[toCol]] };
     // remover do from
@@ -955,16 +1365,11 @@ export default function MinhasActividadesPage({
     if (!isSupabaseConfigured() || !supabase) return;
 
     if (fromCol !== toCol) {
-      if (toCol === 'Concluída') {
-        // se precisar de entregável, abre diálogo
-        requestComplete(active);
-        return;
-      }
       await setStatus(active.id, toCol);
     }
 
     // Regravar ordens (em ambas colunas se mudou, senão apenas na coluna)
-    const colsToPersist: Array<(typeof STATUS_KANBAN)[number]> = fromCol === toCol ? [toCol] : [fromCol, toCol];
+    const colsToPersist: KanbanColumnId[] = fromCol === toCol ? [toCol] : [fromCol, toCol];
     await Promise.all(
       colsToPersist.flatMap((col) =>
         nextUi[col].slice(0, 120).map((dndId, idx) => {
@@ -1114,6 +1519,7 @@ export default function MinhasActividadesPage({
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="Pendente">Pendente</SelectItem>
               <SelectItem value="Em Progresso">Em Progresso</SelectItem>
+              <SelectItem value="Em aprovação">Em aprovação</SelectItem>
               <SelectItem value="Concluída">Concluída</SelectItem>
               <SelectItem value="Atrasada">Atrasada</SelectItem>
               <SelectItem value="Cancelada">Cancelada</SelectItem>
@@ -1202,8 +1608,24 @@ export default function MinhasActividadesPage({
                           ) : null}
                         </div>
                       </div>
-                      <div className="shrink-0 flex items-center gap-2">
-                        {s !== 'Concluída' && s !== 'Cancelada' ? (
+                      <div className="shrink-0 flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                        {canManageApprovalTransition(
+                          a,
+                          user?.colaboradorId ?? null,
+                          user?.perfil ?? null,
+                          governanceEmpresaId,
+                        ) &&
+                        a.status === 'Em aprovação' ? (
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="default" onClick={() => void setStatus(a.id, 'Concluída')}>
+                              Aprovar
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => void setStatus(a.id, 'Em Progresso')}>
+                              Recusar
+                            </Button>
+                          </div>
+                        ) : null}
+                        {s !== 'Concluída' && s !== 'Cancelada' && a.status !== 'Em aprovação' ? (
                           <Button size="sm" variant="secondary" onClick={() => requestComplete(a)}>
                             Concluir
                           </Button>
@@ -1222,7 +1644,7 @@ export default function MinhasActividadesPage({
 
         <TabsContent value="kanban" className="mt-4">
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               {STATUS_KANBAN.map(col => (
                 <KanbanColumn key={col} columnId={`col:${col}`} title={col} count={kanbanColumns[col].length}>
                   <SortableContext items={kanbanUi[col]} strategy={rectSortingStrategy}>
@@ -1230,9 +1652,17 @@ export default function MinhasActividadesPage({
                       const id = parseDndItemId(dndId);
                       const a = id ? activityById.get(id) : null;
                       if (!a) return null;
+                      const blockDragFromApproval =
+                        a.status === 'Em aprovação' &&
+                        !canManageApprovalTransition(
+                          a,
+                          user?.colaboradorId ?? null,
+                          user?.perfil ?? null,
+                          governanceEmpresaId,
+                        );
                       return (
                         <div key={dndId} onClickCapture={() => openDetails(a.id)}>
-                          <SortableCard id={dndId} a={a} />
+                          <SortableCard id={dndId} a={a} disabled={blockDragFromApproval} />
                         </div>
                       );
                     })}
@@ -1547,7 +1977,11 @@ export default function MinhasActividadesPage({
       <Dialog open={completeDialogOpen} onOpenChange={(v) => setCompleteDialogOpen(v)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Concluir actividade</DialogTitle>
+            <DialogTitle>
+              {completeTarget && pendingApprovalCompletionStatus(completeTarget) === 'Em aprovação'
+                ? 'Submeter para aprovação'
+                : 'Concluir actividade'}
+            </DialogTitle>
           </DialogHeader>
 
           {completeTarget ? (
@@ -1561,28 +1995,25 @@ export default function MinhasActividadesPage({
                 <div className="space-y-2">
                   <div className="text-sm font-medium">Entregável obrigatório</div>
                   <div className="text-xs text-muted-foreground">
-                    Para concluir esta actividade, anexe um ficheiro (PDF, DOCX, XLSX ou imagem).
+                    {pendingApprovalCompletionStatus(completeTarget) === 'Em aprovação'
+                      ? 'Largue ou escolha um ficheiro — após o envio, a actividade passa automaticamente para «Em aprovação» (PDF, DOCX, XLSX ou imagem).'
+                      : 'Largue ou escolha um ficheiro — após o envio, a actividade fica automaticamente «Concluída».'}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="file"
-                      accept=".pdf,.docx,.xlsx,image/*"
-                      onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                    />
-                    <Button
-                      variant="secondary"
-                      onClick={uploadDeliverableAndComplete}
-                      disabled={!uploadFile || uploading}
-                      className="gap-2"
-                    >
-                      <UploadCloud className="h-4 w-4" />
-                      {uploading ? 'A enviar…' : 'Enviar e concluir'}
-                    </Button>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {uploadFile ? `Seleccionado: ${uploadFile.name}` : 'Nenhum ficheiro seleccionado.'}
-                  </div>
+                  <DeliverableFileDropZone
+                    disabled={uploading}
+                    uploading={uploading}
+                    uploadingHint={
+                      pendingApprovalCompletionStatus(completeTarget) === 'Em aprovação'
+                        ? 'A passar para «Em aprovação»…'
+                        : 'A passar para «Concluída»…'
+                    }
+                    selectedFile={uploadFile}
+                    onFileSelected={(f) => {
+                      setUploadFile(f);
+                      if (f) void uploadDeliverableAndComplete(f);
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="flex items-center justify-end gap-2">
@@ -1597,12 +2028,12 @@ export default function MinhasActividadesPage({
                   </Button>
                   <Button
                     onClick={async () => {
-                      await setStatus(completeTarget.id, 'Concluída');
+                      await setStatus(completeTarget.id, pendingApprovalCompletionStatus(completeTarget));
                       setCompleteDialogOpen(false);
                       setCompleteTargetId(null);
                     }}
                   >
-                    Concluir
+                    {pendingApprovalCompletionStatus(completeTarget) === 'Em aprovação' ? 'Submeter' : 'Concluir'}
                   </Button>
                 </div>
               )}
@@ -1678,30 +2109,85 @@ export default function MinhasActividadesPage({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
-                      <div className="text-muted-foreground flex items-center gap-2">
-                        <Tag className="h-4 w-4" />
-                        Status
+                    {Boolean(detailsActivity.requerAprovacao) && detailsActivity.aprovadorColaboradorId ? (
+                      <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                        <div className="text-muted-foreground flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          Aprovação
+                        </div>
+                        <div className="text-sm">
+                          <div>
+                            Estado: obrigatória — conclusão vai para «Em aprovação» antes de «Concluída».
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            Aprovador:{' '}
+                            <span className="text-foreground font-medium">
+                              {colaboradorById.get(detailsActivity.aprovadorColaboradorId)?.nome
+                                ? shortName(colaboradorById.get(detailsActivity.aprovadorColaboradorId)!.nome)
+                                : `#${detailsActivity.aprovadorColaboradorId}`}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={statusBadgeVariant(effectiveStatus(detailsActivity))}>
-                          {effectiveStatus(detailsActivity)}
-                        </Badge>
-                        <Select
-                          value={detailsActivity.status}
-                          onValueChange={(v: any) => void setStatus(detailsActivity.id, v)}
-                        >
-                          <SelectTrigger className="h-8 w-[170px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Pendente">Pendente</SelectItem>
-                            <SelectItem value="Em Progresso">Em Progresso</SelectItem>
-                            <SelectItem value="Concluída">Concluída</SelectItem>
-                            <SelectItem value="Cancelada">Cancelada</SelectItem>
-                          </SelectContent>
-                        </Select>
+                    ) : null}
+
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                        <div className="text-muted-foreground flex items-center gap-2">
+                          <Tag className="h-4 w-4" />
+                          Status
+                        </div>
+                        <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-2">
+                          <Badge variant={statusBadgeVariant(effectiveStatus(detailsActivity))}>
+                            {effectiveStatus(detailsActivity)}
+                          </Badge>
+                          <Select
+                            value={detailsActivity.status}
+                            onValueChange={(v: any) => void setStatus(detailsActivity.id, v)}
+                          >
+                            <SelectTrigger className="h-8 w-[170px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Pendente">Pendente</SelectItem>
+                              <SelectItem value="Em Progresso">Em Progresso</SelectItem>
+                              <SelectItem value="Em aprovação" disabled={blockManualEmAprovacaoPorEntregavel}>
+                                Em aprovação
+                              </SelectItem>
+                              <SelectItem value="Atrasada">Atrasada</SelectItem>
+                              <SelectItem
+                                value="Concluída"
+                                disabled={
+                                  mustCompleteViaApprovalFlow(detailsActivity) || blockSeleccionarConcluidaPorEntregavel
+                                }
+                                className={
+                                  mustCompleteViaApprovalFlow(detailsActivity) || blockSeleccionarConcluidaPorEntregavel
+                                    ? 'opacity-50'
+                                    : undefined
+                                }
+                              >
+                                Concluída
+                              </SelectItem>
+                              <SelectItem value="Cancelada">Cancelada</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
+                      {mustCompleteViaApprovalFlow(detailsActivity) ? (
+                        <p className="text-[11px] text-muted-foreground pl-0 md:pl-[152px]">
+                          Com aprovação activa, «Concluída» só fica disponível depois de «Em aprovação» (via Concluir ou coluna no Kanban).
+                        </p>
+                      ) : null}
+                      {blockSeleccionarConcluidaPorEntregavel ? (
+                        <p className="text-[11px] text-muted-foreground pl-0 md:pl-[152px]">
+                          Com entregável obrigatório, anexe primeiro um ficheiro na secção abaixo antes de escolher «Concluída».
+                        </p>
+                      ) : null}
+                      {blockManualEmAprovacaoPorEntregavel ? (
+                        <p className="text-[11px] text-muted-foreground pl-0 md:pl-[152px]">
+                          Com entregável obrigatório, anexe um ficheiro antes de passar a «Em aprovação» — use «Concluir» ou carregue aqui em Entregáveis.
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
@@ -1752,26 +2238,85 @@ export default function MinhasActividadesPage({
                     </div>
                   </div>
 
-                  <div className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="text-sm font-medium">Entregáveis</div>
-                      {detailsActivity.possuiEntregavel ? <Badge variant="secondary">Obrigatório</Badge> : <Badge variant="outline">Opcional</Badge>}
+                      {detailsActivity.possuiEntregavel ? (
+                        <Badge variant="secondary">Obrigatório</Badge>
+                      ) : (
+                        <Badge variant="outline">Opcional</Badge>
+                      )}
                     </div>
                     {detailsEntregaveis.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nenhum ficheiro anexado.</div>
                     ) : (
                       <div className="space-y-2">
-                        {detailsEntregaveis.map((e) => (
-                          <div key={e.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium truncate">{e.nomeFicheiro}</div>
-                              <div className="text-xs text-muted-foreground truncate">{e.mimeType}</div>
+                        {detailsEntregaveis.map((eRow) => (
+                          <div
+                            key={eRow.id}
+                            className="flex items-center gap-3 rounded-xl border bg-muted/10 px-3 py-2.5 text-left shadow-sm"
+                          >
+                            <EntregavelFileVisual mimeType={eRow.mimeType} />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium truncate">{eRow.nomeFicheiro}</div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {eRow.mimeType
+                                  ? `${eRow.mimeType} · ${formatEntregavelSize(eRow.tamanhoBytes)}`
+                                  : formatEntregavelSize(eRow.tamanhoBytes)}
+                              </div>
+                              <div className="mt-1">
+                                <Badge variant="outline" className="text-[10px] font-normal">
+                                  {eRow.estado}
+                                </Badge>
+                              </div>
                             </div>
-                            <Badge variant="outline">{e.estado}</Badge>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0"
+                              aria-label={`Descarregar ${eRow.nomeFicheiro}`}
+                              disabled={!eRow.storagePath}
+                              onClick={() => downloadEntregavelFicheiro(eRow)}
+                            >
+                              <Download className="h-5 w-5" />
+                            </Button>
                           </div>
                         ))}
                       </div>
                     )}
+                    {canAttachMoreDeliverables ? (
+                      <div className="rounded-lg border border-dashed bg-muted/15 p-3 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" aria-hidden />
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium">Adicionar novo anexo</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              O ficheiro fica registado nos entregáveis e na actividade sem alterar o estado (ex.: nova versão em «Em aprovação»).
+                            </div>
+                          </div>
+                        </div>
+                        <DeliverableFileDropZone
+                          disabled={detailsReplyUploading}
+                          uploading={detailsReplyUploading}
+                          uploadingHint="A registar anexo…"
+                          selectedFile={detailsReplyPick}
+                          dropZoneClassName="min-h-[100px] p-4 rounded-lg"
+                          ariaLabel="Área para anexar outro entregável"
+                          idleSub="ou clique para escolher — o envio é automático mas o estado não muda (PDF, DOCX, XLSX, imagens)"
+                          onFileSelected={(f) => {
+                            setDetailsReplyPick(f);
+                            if (f) void uploadDetailsDeliverableAttachment(f);
+                          }}
+                        />
+                      </div>
+                    ) : detailsActivity.status === 'Concluída' || detailsActivity.status === 'Cancelada' ? (
+                      <p className="text-[11px] text-muted-foreground">Não é possível anexar mais ficheiros neste estado.</p>
+                    ) : currentEmpresaId === 'consolidado' ? (
+                      <p className="text-[11px] text-muted-foreground">Seleccione uma empresa específica para anexar ficheiros aqui.</p>
+                    ) : !user?.colaboradorId ? (
+                      <p className="text-[11px] text-muted-foreground">Só utilizadores associados a um colaborador podem anexar ficheiros.</p>
+                    ) : null}
                   </div>
 
                   <Tabs value={detailsTab} onValueChange={(v: any) => setDetailsTab(v)} className="w-full">
@@ -1785,12 +2330,47 @@ export default function MinhasActividadesPage({
                       ) : events.length === 0 ? (
                         <div className="text-sm text-muted-foreground">Sem actividade recente.</div>
                       ) : (
-                        <div className="space-y-2">
-                          {events.map((e) => (
-                            <div key={e.id} className="rounded-md border px-3 py-2">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <Avatar className="h-7 w-7 ring-1 ring-border/60">
+                        <div className="space-y-0">
+                          {events.map((e, evIdx) => {
+                            const p = (e.payload ?? {}) as Record<string, unknown>;
+                            const linked =
+                              e.tipo === 'deliverable_uploaded'
+                                ? entregavelLinkedToDeliverableEvent(e, detailsEntregaveis)
+                                : null;
+                            const deliverableNome =
+                              (typeof p['nome'] === 'string' && p['nome']) || linked?.nomeFicheiro || null;
+                            const deliverablePath =
+                              (typeof p['storage_path'] === 'string' && p['storage_path']) ||
+                              linked?.storagePath ||
+                              '';
+                            const deliverableMime =
+                              (typeof p['mime'] === 'string' && p['mime']) || linked?.mimeType || '';
+                            const rawTb = p['tamanho_bytes'];
+                            const deliverableSizeBytes =
+                              typeof rawTb === 'number' && Number.isFinite(rawTb)
+                                ? rawTb
+                                : typeof rawTb === 'string'
+                                  ? Number(rawTb)
+                                  : linked?.tamanhoBytes;
+                            const mimeLabel =
+                              deliverableMime && deliverableMime.includes('/')
+                                ? (() => {
+                                    const part = deliverableMime.split('/')[1]!;
+                                    return part.length > 14 ? deliverableMime : part.toUpperCase();
+                                  })()
+                                : deliverableMime;
+                            const sizeLine =
+                              typeof deliverableSizeBytes === 'number' && Number.isFinite(deliverableSizeBytes)
+                                ? formatEntregavelSize(deliverableSizeBytes)
+                                : '—';
+
+                            const showDeliverableCard =
+                              e.tipo === 'deliverable_uploaded' && deliverableNome && Boolean(deliverablePath);
+
+                            return (
+                              <div key={e.id} className="relative flex gap-3">
+                                <div className="relative flex w-11 shrink-0 flex-col items-center pb-8">
+                                  <Avatar className="relative z-10 h-9 w-9 ring-2 ring-background ring-offset-0">
                                     {e.actorColaboradorId && colaboradorById.get(e.actorColaboradorId)?.fotoPerfilUrl ? (
                                       <AvatarImage
                                         src={colaboradorById.get(e.actorColaboradorId)!.fotoPerfilUrl!}
@@ -1804,23 +2384,63 @@ export default function MinhasActividadesPage({
                                         : '—'}
                                     </AvatarFallback>
                                   </Avatar>
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-medium truncate">
-                                      {e.actorColaboradorId
-                                        ? (colaboradorById.get(e.actorColaboradorId)?.nome
-                                          ? shortName(colaboradorById.get(e.actorColaboradorId)!.nome)
-                                          : '—')
-                                        : '—'}
+                                  {evIdx < events.length - 1 ? (
+                                    <div
+                                      aria-hidden
+                                      className="absolute left-1/2 top-9 bottom-0 w-0 -translate-x-1/2 border-l border-dashed border-muted-foreground/35"
+                                    />
+                                  ) : null}
+                                </div>
+                                <div className="min-w-0 flex-1 space-y-2 pb-8">
+                                  <div>
+                                    <div className="text-sm text-foreground">
+                                      <span className="font-medium">
+                                        {e.actorColaboradorId
+                                          ? colaboradorById.get(e.actorColaboradorId)?.nome
+                                            ? shortName(colaboradorById.get(e.actorColaboradorId)!.nome)
+                                            : '—'
+                                          : '—'}
+                                      </span>{' '}
+                                      <span className="text-muted-foreground font-normal">{eventLabel(e)}</span>
                                     </div>
-                                    <div className="text-sm text-muted-foreground">{eventLabel(e)}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                      {(e.createdAt ?? '').slice(0, 19).replace('T', ' ')}
+                                    </div>
                                   </div>
+                                  {showDeliverableCard ? (
+                                    <div className="flex items-center gap-3 rounded-xl border bg-muted/10 px-3 py-2.5 shadow-sm">
+                                      <EntregavelFileVisual mimeType={deliverableMime} />
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-sm font-medium truncate">{deliverableNome}</div>
+                                        <div className="text-xs text-muted-foreground truncate">
+                                          {mimeLabel ? `${mimeLabel} · ${sizeLine}` : sizeLine}
+                                        </div>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="shrink-0"
+                                        aria-label={`Descarregar ${deliverableNome}`}
+                                        onClick={() =>
+                                          downloadEntregavelFicheiro({
+                                            storagePath: deliverablePath,
+                                            nomeFicheiro: deliverableNome!,
+                                          })
+                                        }
+                                      >
+                                        <Download className="h-5 w-5" />
+                                      </Button>
+                                    </div>
+                                  ) : e.tipo === 'deliverable_uploaded' && deliverableNome && !deliverablePath ? (
+                                    <div className="rounded-lg border border-dashed bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+                                      Anexo «{deliverableNome}» (evento antigo — sem caminho de armazenamento para descarga).
+                                    </div>
+                                  ) : null}
                                 </div>
                               </div>
-                              <div className="text-xs text-muted-foreground mt-0.5">
-                                {(e.createdAt ?? '').slice(0, 19).replace('T', ' ')}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </TabsContent>
@@ -1924,6 +2544,8 @@ function CreateActivityForm({
     prioridade: string;
     categoria: string;
     possuiEntregavel: boolean;
+    requerAprovacao: boolean;
+    aprovadorColaboradorId: number | null;
   }) => Promise<void>;
 }) {
   const today = new Date();
@@ -1962,6 +2584,8 @@ function CreateActivityForm({
   const [prioridade, setPrioridade] = useState('Média');
   const [categoria, setCategoria] = useState('Técnica');
   const [possuiEntregavel, setPossuiEntregavel] = useState(false);
+  const [requerAprovacao, setRequerAprovacao] = useState(false);
+  const [aprovadorColaboradorId, setAprovadorColaboradorId] = useState<number | null>(null);
 
   const canSubmit =
     titulo.trim().length >= 3 &&
@@ -1972,6 +2596,7 @@ function CreateActivityForm({
     tipoActividade &&
     (tipoActividade !== 'Presencial' || Boolean(localizacao)) &&
     (tipoActividade !== 'Online' || Boolean(meioOnline)) &&
+    (!requerAprovacao || aprovadorColaboradorId != null) &&
     !disableSubmit;
 
   return (
@@ -1994,6 +2619,8 @@ function CreateActivityForm({
           prioridade,
           categoria,
           possuiEntregavel,
+          requerAprovacao,
+          aprovadorColaboradorId,
         });
       }}
     >
@@ -2155,6 +2782,42 @@ function CreateActivityForm({
           <Switch checked={possuiEntregavel} onCheckedChange={setPossuiEntregavel} aria-label="Possui entregável" />
         </div>
       </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">Exige aprovação para concluir?</div>
+          <div className="text-xs text-muted-foreground">
+            Se sim, ao arrastar para «Concluída» a actividade passa para «Em aprovação» até o colaborador seleccionado aprovar.
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-sm text-muted-foreground">{requerAprovacao ? 'Sim' : 'Não'}</span>
+          <Switch
+            checked={requerAprovacao}
+            onCheckedChange={(v) => {
+              setRequerAprovacao(v);
+              if (!v) setAprovadorColaboradorId(null);
+            }}
+            aria-label="Exige aprovação"
+          />
+        </div>
+      </div>
+
+      {requerAprovacao ? (
+        <div className="grid gap-2">
+          <Label>Quem deve aprovar?</Label>
+          <EmployeeSelect
+            valueId={aprovadorColaboradorId}
+            onChange={(id) => setAprovadorColaboradorId(id)}
+            empresaId={empresaIdForSearch}
+            disabled={disableSubmit}
+            placeholder="Pesquisar colaborador (mín. 4 letras)…"
+          />
+          {!aprovadorColaboradorId ? (
+            <div className="text-xs text-muted-foreground">Seleccione o aprovador para continuar.</div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex items-center justify-end gap-2">
         <Button type="submit" disabled={!canSubmit || creating}>

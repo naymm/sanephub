@@ -663,7 +663,13 @@ export type ProdutividadeCategoria =
   | 'Técnica'
   | 'Outra';
 
-export type ProdutividadeStatus = 'Pendente' | 'Em Progresso' | 'Concluída' | 'Atrasada' | 'Cancelada';
+export type ProdutividadeStatus =
+  | 'Pendente'
+  | 'Em Progresso'
+  | 'Concluída'
+  | 'Atrasada'
+  | 'Cancelada'
+  | 'Em aprovação';
 
 export interface ProdutividadeActividade {
   id: number;
@@ -685,6 +691,11 @@ export interface ProdutividadeActividade {
   categoria: ProdutividadeCategoria;
 
   possuiEntregavel: boolean;
+  /** Quando verdadeiro, concluir passa primeiro para «Em aprovação». */
+  requerAprovacao?: boolean;
+  /** Colaborador que deve aprovar a conclusão. */
+  aprovadorColaboradorId?: number | null;
+
   status: ProdutividadeStatus;
   kanbanOrder: number;
 

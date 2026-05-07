@@ -49,6 +49,7 @@ export const MODULE_GROUPS: MenuGroup[] = [
     icon: ListChecks,
     children: [
       { label: 'Minhas Actividades', path: '/produtividade/actividades', module: 'produtividade' },
+      { label: 'Aprovações', path: '/produtividade/aprovacoes', module: 'produtividade' },
       {
         label: 'Direcção',
         path: '/produtividade/direccao',

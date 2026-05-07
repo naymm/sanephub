@@ -81,6 +81,7 @@ import PatrimonioPage from "@/modules/patrimonio/PatrimonioPage";
 import FacturacaoPage from "@/modules/facturacao/FacturacaoPage";
 import ReceitaPage from "@/modules/facturacao/ReceitaPage";
 import MinhasActividadesPage from "@/modules/produtividade/MinhasActividadesPage";
+import ProdutividadeAprovacoesPage from "@/modules/produtividade/ProdutividadeAprovacoesPage";
 
 const queryClient = new QueryClient();
 
@@ -159,6 +160,7 @@ const App = () => (
                   {/* Produtividade */}
                   <Route path="/produtividade/actividades" element={<MinhasActividadesPage />} />
                   <Route path="/produtividade/direccao" element={<MinhasActividadesPage scope="area" />} />
+                  <Route path="/produtividade/aprovacoes" element={<ProdutividadeAprovacoesPage />} />
                   {/* Contabilidade */}
                   <Route path="/contabilidade/pagamentos" element={<PagamentosPage />} />
                   <Route path="/contabilidade/pendencias" element={<PendenciasPage />} />
