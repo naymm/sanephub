@@ -196,6 +196,14 @@ export default function MinhasActividadesPage({
   const canAssign = user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
   const cargoLower = (user?.cargo ?? '').toLowerCase();
   const isDireccaoCargo = cargoLower.includes('director') || cargoLower.includes('diretor') || cargoLower.includes('coordenador');
+  const myEmpresaId = useMemo(() => {
+    if (typeof currentEmpresaId === 'number') return currentEmpresaId;
+    if (typeof user?.empresaId === 'number') return user.empresaId;
+    if (user?.colaboradorId) return (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null;
+    return null;
+  }, [currentEmpresaId, user?.empresaId, user?.colaboradorId, colaboradoresTodos]);
+  const [areaFilter, setAreaFilter] = useState<string | 'all'>('all');
+  const [colaboradorFilter, setColaboradorFilter] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProdutividadeStatus | 'all'>('all');
   const [prioridadeFilter, setPrioridadeFilter] = useState<string | 'all'>('all');
@@ -293,7 +301,11 @@ export default function MinhasActividadesPage({
     // scope === 'area'
     if (!user?.colaboradorId || !isDireccaoCargo) return [];
     const empresaId =
-      typeof user?.empresaId === 'number' ? user.empresaId : (typeof currentEmpresaId === 'number' ? currentEmpresaId : null);
+      typeof currentEmpresaId === 'number'
+        ? currentEmpresaId
+        : typeof user?.empresaId === 'number'
+          ? user.empresaId
+          : (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null;
     if (!empresaId) return [];
     const normalize = (v: string) =>
       v
@@ -301,18 +313,12 @@ export default function MinhasActividadesPage({
         .toLowerCase()
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '');
-    // Em /produtividade/direccao queremos sempre o grupo "Direcção" (com variantes).
-    const deptTargets = new Set(['direccao', 'direcao', 'direcção', 'direção'].map(normalize));
     const areaIds = new Set<number>(
       (colaboradoresTodos ?? [])
         .filter(c => {
           if (Number(c.empresaId) !== Number(empresaId)) return false;
-          const deptOk = deptTargets.has(normalize(String(c.departamento ?? '')));
-          const cargoN = normalize(String((c as any).cargo ?? ''));
-          const cargoOk = cargoN.includes('director') || cargoN.includes('diretor') || cargoN.includes('coordenador');
-          // Inclui todos os da Direcção (por departamento) e também cargos de liderança
-          // que por vezes não vêm com o departamento preenchido/normalizado.
-          return deptOk || cargoOk;
+          if (areaFilter === 'all') return true;
+          return normalize(String(c.departamento ?? '')) === normalize(areaFilter);
         })
         .map(c => c.id),
     );
@@ -328,9 +334,77 @@ export default function MinhasActividadesPage({
     user?.colaboradorId,
     user?.empresaId,
     isDireccaoCargo,
+    areaFilter,
     colaboradoresTodos,
     participantesByActividade,
   ]);
+
+  const areaOptions = useMemo(() => {
+    if (scope !== 'area') return [];
+    const empresaId =
+      typeof currentEmpresaId === 'number'
+        ? currentEmpresaId
+        : typeof user?.empresaId === 'number'
+          ? user.empresaId
+          : user?.colaboradorId
+            ? (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null
+            : null;
+    if (!empresaId) return [];
+    const normalize = (v: string) =>
+      v
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '');
+    const m = new Map<string, string>();
+    for (const c of colaboradoresTodos ?? []) {
+      if (Number(c.empresaId) !== Number(empresaId)) continue;
+      const raw = String(c.departamento ?? '').trim();
+      if (!raw) continue;
+      const key = normalize(raw);
+      if (!m.has(key)) m.set(key, raw);
+    }
+    const list = [...m.entries()].map(([key, label]) => ({ key, label }));
+    list.sort((a, b) => a.label.localeCompare(b.label));
+    return list;
+  }, [scope, colaboradoresTodos, user?.empresaId, user?.colaboradorId, currentEmpresaId]);
+
+  const direccaoColaboradores = useMemo(() => {
+    if (scope !== 'area') return [];
+    const empresaId =
+      typeof currentEmpresaId === 'number'
+        ? currentEmpresaId
+        : typeof user?.empresaId === 'number'
+          ? user.empresaId
+          : user?.colaboradorId
+            ? (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null
+            : null;
+    if (!empresaId) return [];
+    const normalize = (v: string) =>
+      v
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '');
+    const list = (colaboradoresTodos ?? []).filter((c) => {
+      if (Number(c.empresaId) !== Number(empresaId)) return false;
+      if (areaFilter === 'all') return true;
+      return normalize(String(c.departamento ?? '')) === normalize(areaFilter);
+    });
+    list.sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+    return list;
+  }, [scope, colaboradoresTodos, user?.empresaId, user?.colaboradorId, currentEmpresaId, areaFilter]);
+
+  useEffect(() => {
+    if (scope !== 'area') return;
+    if (myEmpresaId !== 1) return;
+    if (!user?.colaboradorId) return;
+    const me = (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId);
+    const dept = String(me?.departamento ?? '').trim();
+    if (!dept) return;
+    // Em empresa 1, Director/Coordenador só vê a sua área: forçamos o filtro.
+    setAreaFilter(dept);
+  }, [scope, myEmpresaId, user?.colaboradorId, colaboradoresTodos]);
 
   if (scope === 'area' && user && !isDireccaoCargo) {
     return (
@@ -350,6 +424,11 @@ export default function MinhasActividadesPage({
     const q = search.trim().toLowerCase();
     return myRows
       .filter(a => {
+        if (scope === 'area' && colaboradorFilter !== 'all') {
+          if (a.colaboradorId === colaboradorFilter) return true;
+          const parts = participantesByActividade.get(a.id) ?? [];
+          if (!parts.some(p => p.colaboradorId === colaboradorFilter)) return false;
+        }
         const s = effectiveStatus(a);
         if (statusFilter !== 'all' && s !== statusFilter) return false;
         if (prioridadeFilter !== 'all' && a.prioridade !== prioridadeFilter) return false;
@@ -370,7 +449,7 @@ export default function MinhasActividadesPage({
         if (byPr !== 0) return byPr;
         return d(a.prazo) - d(b.prazo);
       });
-  }, [myRows, search, statusFilter, prioridadeFilter, categoriaFilter, dateFilter]);
+  }, [myRows, search, statusFilter, prioridadeFilter, categoriaFilter, dateFilter, scope, colaboradorFilter, participantesByActividade]);
 
   const metrics = useMemo(() => {
     const total = myRows.length;
@@ -992,6 +1071,41 @@ export default function MinhasActividadesPage({
         </div>
 
         <div className="grid w-full gap-2 md:flex md:w-auto md:items-center">
+          {scope === 'area' ? (
+            <>
+              <Select value={String(areaFilter)} onValueChange={(v: any) => setAreaFilter(v)} disabled={myEmpresaId === 1}>
+                <SelectTrigger className="w-full md:w-[220px]">
+                  <SelectValue placeholder="Área (módulo)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {myEmpresaId !== 1 ? <SelectItem value="all">Todas as áreas</SelectItem> : null}
+                  {areaOptions.map((o) => (
+                    <SelectItem key={o.key} value={o.label}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+            <Select
+              value={String(colaboradorFilter)}
+              onValueChange={(v) => setColaboradorFilter(v === 'all' ? 'all' : Number(v))}
+            >
+              <SelectTrigger className="w-full md:w-[240px]">
+                <SelectValue placeholder="Colaborador" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {direccaoColaboradores.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.nome ? shortName(String(c.nome)) : `#${c.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            </>
+          ) : null}
+
           <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
             <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Status" />
