@@ -711,6 +711,32 @@ export interface ProdutividadeEntregavel {
   reviewComment?: string | null;
 }
 
+export type ProdutividadeEventoTipo =
+  | 'created'
+  | 'status_changed'
+  | 'priority_changed'
+  | 'deadline_changed'
+  | 'deliverable_uploaded'
+  | 'comment_added';
+
+export interface ProdutividadeEvento {
+  id: number;
+  actividadeId: number;
+  tipo: ProdutividadeEventoTipo;
+  actorProfileId?: number | null;
+  actorColaboradorId?: number | null;
+  payload: any;
+  createdAt: string;
+}
+
+export interface ProdutividadeComentario {
+  id: number;
+  actividadeId: number;
+  autorColaboradorId: number;
+  conteudo: string;
+  createdAt: string;
+}
+
 export interface Correspondencia {
   id: number;
   tipo: 'Entrada' | 'Saída';

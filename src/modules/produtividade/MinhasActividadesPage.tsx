@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
-import type { ProdutividadeActividade, ProdutividadeEntregavel, ProdutividadeStatus } from '@/types';
+import type {
+  ProdutividadeActividade,
+  ProdutividadeComentario,
+  ProdutividadeEntregavel,
+  ProdutividadeEvento,
+  ProdutividadeStatus,
+} from '@/types';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -16,8 +22,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Search, UploadCloud } from 'lucide-react';
-import { DndContext, DragEndEvent, PointerSensor, closestCorners, useDroppable, useSensor, useSensors } from '@dnd-kit/core';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag } from 'lucide-react';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  closestCorners,
+  defaultDropAnimationSideEffects,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
@@ -28,6 +46,23 @@ const STATUS_KANBAN: Array<Extract<ProdutividadeStatus, 'Pendente' | 'Em Progres
   'Em Progresso',
   'Concluída',
 ];
+
+const DND_COL_PREFIX = 'col:' as const;
+const DND_ITEM_PREFIX = 'act:' as const;
+
+function dndItemId(id: number): string {
+  return `${DND_ITEM_PREFIX}${id}`;
+}
+
+function parseDndItemId(value: string): number | null {
+  if (!value.startsWith(DND_ITEM_PREFIX)) return null;
+  const n = Number(value.slice(DND_ITEM_PREFIX.length));
+  return Number.isFinite(n) ? n : null;
+}
+
+function isColumnId(value: string): value is `${typeof DND_COL_PREFIX}${(typeof STATUS_KANBAN)[number]}` {
+  return value.startsWith(DND_COL_PREFIX) && STATUS_KANBAN.includes(value.slice(DND_COL_PREFIX.length) as any);
+}
 
 function isOverdue(a: ProdutividadeActividade): boolean {
   if (a.status === 'Concluída' || a.status === 'Cancelada') return false;
@@ -57,23 +92,30 @@ function prioridadeColorClass(p: string): string {
   return 'text-muted-foreground';
 }
 
-function SortableCard({ id, a }: { id: string; a: ProdutividadeActividade }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+function TaskCard({
+  a,
+  dragging,
+  onOpen,
+}: {
+  a: ProdutividadeActividade;
+  dragging?: boolean;
+  onOpen?: () => void;
+}) {
   const s = effectiveStatus(a);
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
       className={cn(
-        'rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing',
-        isDragging && 'opacity-60',
+        'rounded-lg border bg-card p-3 shadow-sm transition-[box-shadow,transform,opacity] duration-200 ease-out',
+        'hover:shadow-md',
+        dragging && 'shadow-lg',
       )}
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (!onOpen) return;
+        if (e.key === 'Enter' || e.key === ' ') onOpen();
+      }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -90,6 +132,28 @@ function SortableCard({ id, a }: { id: string; a: ProdutividadeActividade }) {
         <span className={cn('text-xs font-semibold', prioridadeColorClass(a.prioridade))}>{a.prioridade}</span>
         <span className="text-xs text-muted-foreground">{a.categoria}</span>
       </div>
+    </div>
+  );
+}
+
+function SortableCard({ id, a }: { id: string; a: ProdutividadeActividade }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        'cursor-grab active:cursor-grabbing select-none',
+        isDragging && 'opacity-40',
+      )}
+    >
+      <TaskCard a={a} />
     </div>
   );
 }
@@ -132,6 +196,20 @@ export default function MinhasActividadesPage() {
   const [completeTargetId, setCompleteTargetId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsId, setDetailsId] = useState<number | null>(null);
+  const [detailsTab, setDetailsTab] = useState<'actividade' | 'comentarios'>('actividade');
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [events, setEvents] = useState<ProdutividadeEvento[]>([]);
+  const [comments, setComments] = useState<ProdutividadeComentario[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
+  const [kanbanUi, setKanbanUi] = useState<Record<(typeof STATUS_KANBAN)[number], string[]>>({
+    Pendente: [],
+    'Em Progresso': [],
+    Concluída: [],
+  });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -216,6 +294,138 @@ export default function MinhasActividadesPage() {
     for (const k of Object.keys(cols)) cols[k] = cols[k].slice().sort((a, b) => (a.kanbanOrder ?? 0) - (b.kanbanOrder ?? 0));
     return cols as Record<(typeof STATUS_KANBAN)[number], ProdutividadeActividade[]>;
   }, [filtered]);
+
+  // Mantém um estado local de IDs por coluna para animação/drag "tipo Jira".
+  useEffect(() => {
+    setKanbanUi({
+      Pendente: kanbanColumns.Pendente.map(a => dndItemId(a.id)),
+      'Em Progresso': kanbanColumns['Em Progresso'].map(a => dndItemId(a.id)),
+      Concluída: kanbanColumns.Concluída.map(a => dndItemId(a.id)),
+    });
+  }, [kanbanColumns.Pendente, kanbanColumns['Em Progresso'], kanbanColumns.Concluída]);
+
+  const activityById = useMemo(() => {
+    const m = new Map<number, ProdutividadeActividade>();
+    for (const a of myRows) m.set(a.id, a);
+    return m;
+  }, [myRows]);
+
+  const dragOverlayActivity = useMemo(() => {
+    if (!activeDragId) return null;
+    const id = parseDndItemId(activeDragId);
+    if (!id) return null;
+    return activityById.get(id) ?? null;
+  }, [activeDragId, activityById]);
+
+  const detailsActivity = useMemo(() => {
+    if (!detailsId) return null;
+    return activityById.get(detailsId) ?? null;
+  }, [detailsId, activityById]);
+
+  const detailsEntregaveis = useMemo(() => {
+    if (!detailsActivity) return [];
+    return (entregaveisByActividade.get(detailsActivity.id) ?? []).slice().sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
+  }, [detailsActivity, entregaveisByActividade]);
+
+  const eventLabel = useCallback((e: ProdutividadeEvento): string => {
+    const p = e.payload ?? {};
+    if (e.tipo === 'created') return 'Criou a actividade';
+    if (e.tipo === 'status_changed') return `Mudou o status: ${p.from ?? '—'} → ${p.to ?? '—'}`;
+    if (e.tipo === 'priority_changed') return `Mudou a prioridade: ${p.from ?? '—'} → ${p.to ?? '—'}`;
+    if (e.tipo === 'deadline_changed') return `Mudou o prazo: ${p.from ?? '—'} → ${p.to ?? '—'}`;
+    if (e.tipo === 'deliverable_uploaded') return `Anexou entregável: ${p.nome ?? 'ficheiro'}`;
+    if (e.tipo === 'comment_added') return 'Adicionou um comentário';
+    return e.tipo;
+  }, []);
+
+  useEffect(() => {
+    if (!detailsOpen || !detailsId || !isSupabaseConfigured() || !supabase) return;
+    let cancelled = false;
+    setDetailsLoading(true);
+    setEvents([]);
+    setComments([]);
+
+    const load = async () => {
+      try {
+        const [{ data: ev, error: evErr }, { data: cm, error: cmErr }] = await Promise.all([
+          supabase
+            .from('produtividade_eventos')
+            .select('*')
+            .eq('actividade_id', detailsId)
+            .order('created_at', { ascending: false })
+            .limit(200),
+          supabase
+            .from('produtividade_comentarios')
+            .select('*')
+            .eq('actividade_id', detailsId)
+            .order('created_at', { ascending: false })
+            .limit(200),
+        ]);
+        if (cancelled) return;
+        if (evErr) throw new Error(evErr.message);
+        if (cmErr) throw new Error(cmErr.message);
+        setEvents((ev ?? []).map(r => mapRowFromDb<ProdutividadeEvento>('produtividade_eventos', r as any)));
+        setComments((cm ?? []).map(r => mapRowFromDb<ProdutividadeComentario>('produtividade_comentarios', r as any)));
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : 'Erro ao carregar detalhes.');
+      } finally {
+        if (!cancelled) setDetailsLoading(false);
+      }
+    };
+
+    void load();
+
+    const channel = supabase
+      .channel(`produtividade-details:${detailsId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'produtividade_eventos', filter: `actividade_id=eq.${detailsId}` },
+        (payload) => {
+          const row = payload.new as any;
+          const mapped = mapRowFromDb<ProdutividadeEvento>('produtividade_eventos', row);
+          setEvents(prev => [mapped, ...prev].slice(0, 300));
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'produtividade_comentarios', filter: `actividade_id=eq.${detailsId}` },
+        (payload) => {
+          const row = payload.new as any;
+          const mapped = mapRowFromDb<ProdutividadeComentario>('produtividade_comentarios', row);
+          setComments(prev => [mapped, ...prev].slice(0, 300));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      try {
+        void supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, [detailsOpen, detailsId]);
+
+  async function postComment() {
+    if (!detailsId || !user?.colaboradorId) return;
+    const text = newComment.trim();
+    if (!text) return;
+    if (!isSupabaseConfigured() || !supabase) return;
+    setPostingComment(true);
+    try {
+      const { error } = await (supabase.from('produtividade_comentarios') as any).insert({
+        actividade_id: detailsId,
+        autor_colaborador_id: user.colaboradorId,
+        conteudo: text,
+      });
+      if (error) throw new Error(error.message || 'Erro ao comentar');
+      setNewComment('');
+      toast.success('Comentário enviado.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao comentar');
+    } finally {
+      setPostingComment(false);
+    }
+  }
 
   const dayKey = useMemo(() => {
     if (!selectedDay) return '';
@@ -312,6 +522,12 @@ export default function MinhasActividadesPage() {
     void setStatus(a.id, 'Concluída');
   }
 
+  function openDetails(id: number) {
+    setDetailsId(id);
+    setDetailsOpen(true);
+    setDetailsTab('actividade');
+  }
+
   function isAllowedDeliverableFile(f: File): boolean {
     const name = f.name.toLowerCase();
     const ext = name.split('.').pop() || '';
@@ -358,64 +574,84 @@ export default function MinhasActividadesPage() {
     }
   }
 
+  function findContainerForItemId(itemId: string, state: Record<(typeof STATUS_KANBAN)[number], string[]>): (typeof STATUS_KANBAN)[number] | null {
+    for (const col of STATUS_KANBAN) {
+      if (state[col].includes(itemId)) return col;
+    }
+    return null;
+  }
+
+  function onDragStart(e: DragStartEvent) {
+    setActiveDragId(String(e.active.id));
+  }
+
+  function onDragEnd(e: DragEndEvent) {
+    void updateKanban(e);
+    setActiveDragId(null);
+  }
+
   async function updateKanban(event: DragEndEvent) {
     const activeId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
     if (!overId) return;
 
     // ids:
-    // - card:<id>
-    // - col:<Status>
-    if (!activeId.startsWith('card:')) return;
-    const activeActId = Number(activeId.replace('card:', ''));
-    if (!Number.isFinite(activeActId)) return;
+    // - act:<id> (items)
+    // - col:<Status> (containers)
+    if (!activeId.startsWith(DND_ITEM_PREFIX)) return;
+    const activeActId = parseDndItemId(activeId);
+    if (!activeActId) return;
 
-    const overIsColumn = overId.startsWith('col:');
-    const overStatus = overIsColumn ? overId.replace('col:', '') : overId.includes(':') ? overId.split(':')[0] : null;
-
-    // quando o over é outro card, ele vem como `${status}:${id}` no SortableContext
-    const targetStatus = overIsColumn
-      ? (overStatus as (typeof STATUS_KANBAN)[number])
-      : ((overId.split(':')[0] ?? '') as (typeof STATUS_KANBAN)[number]);
-
-    if (!STATUS_KANBAN.includes(targetStatus)) return;
-
-    const active = myRows.find(a => a.id === activeActId);
+    const active = activityById.get(activeActId);
     if (!active) return;
 
-    const fromStatus = (effectiveStatus(active) as any) as (typeof STATUS_KANBAN)[number];
-    if (!STATUS_KANBAN.includes(fromStatus)) return;
+    const fromCol = findContainerForItemId(activeId, kanbanUi);
+    if (!fromCol) return;
 
-    // 1) mover entre colunas → muda status (com validação de entregável ao concluir)
-    if (fromStatus !== targetStatus) {
-      if (targetStatus === 'Concluída') {
+    // target col
+    let toCol: (typeof STATUS_KANBAN)[number] | null = null;
+    let overItemId: string | null = null;
+    if (isColumnId(overId)) {
+      toCol = overId.slice(DND_COL_PREFIX.length) as any;
+    } else if (overId.startsWith(DND_ITEM_PREFIX)) {
+      overItemId = overId;
+      toCol = findContainerForItemId(overId, kanbanUi);
+    }
+    if (!toCol) return;
+
+    const nextUi = { ...kanbanUi, [fromCol]: [...kanbanUi[fromCol]], [toCol]: fromCol === toCol ? [...kanbanUi[toCol]] : [...kanbanUi[toCol]] };
+    // remover do from
+    nextUi[fromCol] = nextUi[fromCol].filter(x => x !== activeId);
+    // inserir no to
+    const toIndex =
+      overItemId && nextUi[toCol].includes(overItemId) ? nextUi[toCol].indexOf(overItemId) : nextUi[toCol].length;
+    nextUi[toCol].splice(Math.max(0, toIndex), 0, activeId);
+    // se moveu entre colunas, garantir que não duplicou
+    if (fromCol !== toCol) nextUi[fromCol] = nextUi[fromCol].filter(x => x !== activeId);
+    setKanbanUi(nextUi);
+
+    // Persistência
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    if (fromCol !== toCol) {
+      if (toCol === 'Concluída') {
+        // se precisar de entregável, abre diálogo
         requestComplete(active);
-      } else {
-        await setStatus(active.id, targetStatus);
+        return;
       }
-      return;
+      await setStatus(active.id, toCol);
     }
 
-    // 2) reordenar dentro da mesma coluna
-    const fromItems = kanbanColumns[fromStatus];
-    const activeIndex = fromItems.findIndex(a => a.id === activeActId);
-    if (activeIndex < 0) return;
-
-    // over pode ser uma coluna (drop em vazio) → mandar para o fim
-    const overIndex = overIsColumn
-      ? fromItems.length - 1
-      : (() => {
-          const toId = Number(overId.split(':')[1]);
-          if (!Number.isFinite(toId)) return -1;
-          return fromItems.findIndex(a => a.id === toId);
-        })();
-    if (overIndex < 0) return;
-
-    const moved = arrayMove(fromItems, activeIndex, overIndex);
-    if (!isSupabaseConfigured() || !supabase) return;
-    const updates = moved.slice(0, 60).map((a, idx) => ({ id: a.id, kanban_order: idx }));
+    // Regravar ordens (em ambas colunas se mudou, senão apenas na coluna)
+    const colsToPersist: Array<(typeof STATUS_KANBAN)[number]> = fromCol === toCol ? [toCol] : [fromCol, toCol];
     await Promise.all(
-      updates.map(u => (supabase.from('produtividade_actividades') as any).update({ kanban_order: u.kanban_order }).eq('id', u.id)),
+      colsToPersist.flatMap((col) =>
+        nextUi[col].slice(0, 120).map((dndId, idx) => {
+          const id = parseDndItemId(dndId);
+          if (!id) return Promise.resolve();
+          return (supabase.from('produtividade_actividades') as any).update({ kanban_order: idx }).eq('id', id);
+        }),
+      ),
     );
   }
 
@@ -571,7 +807,13 @@ export default function MinhasActividadesPage() {
                   <div key={a.id} className="p-3 hover:bg-muted/30 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="font-medium truncate">{a.titulo}</div>
+                        <button
+                          type="button"
+                          className="font-medium truncate text-left hover:underline"
+                          onClick={() => openDetails(a.id)}
+                        >
+                          {a.titulo}
+                        </button>
                         <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                           {a.descricao?.trim() ? a.descricao : a.comentario?.trim() ? a.comentario : '—'}
                         </div>
@@ -607,21 +849,44 @@ export default function MinhasActividadesPage() {
         </TabsContent>
 
         <TabsContent value="kanban" className="mt-4">
-          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={updateKanban}>
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
             <div className="grid gap-3 md:grid-cols-3">
               {STATUS_KANBAN.map(col => (
                 <KanbanColumn key={col} columnId={`col:${col}`} title={col} count={kanbanColumns[col].length}>
-                  <SortableContext items={kanbanColumns[col].map(a => `${col}:${a.id}`)} strategy={rectSortingStrategy}>
-                    {kanbanColumns[col].map(a => (
-                      <SortableCard key={a.id} id={`card:${a.id}`} a={a} />
-                    ))}
+                  <SortableContext items={kanbanUi[col]} strategy={rectSortingStrategy}>
+                    {kanbanUi[col].map((dndId) => {
+                      const id = parseDndItemId(dndId);
+                      const a = id ? activityById.get(id) : null;
+                      if (!a) return null;
+                      return (
+                        <div key={dndId} onClickCapture={() => openDetails(a.id)}>
+                          <SortableCard id={dndId} a={a} />
+                        </div>
+                      );
+                    })}
                   </SortableContext>
-                  {kanbanColumns[col].length === 0 ? (
+                  {kanbanUi[col].length === 0 ? (
                     <div className="text-xs text-muted-foreground py-10 text-center">Arraste aqui</div>
                   ) : null}
                 </KanbanColumn>
               ))}
             </div>
+
+            <DragOverlay
+              dropAnimation={{
+                duration: 220,
+                easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+                sideEffects: defaultDropAnimationSideEffects({
+                  styles: { active: { opacity: '0.4' } },
+                }),
+              }}
+            >
+              {dragOverlayActivity ? (
+                <div className="w-[320px] md:w-[360px]">
+                  <TaskCard a={dragOverlayActivity} dragging />
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </TabsContent>
 
@@ -732,6 +997,191 @@ export default function MinhasActividadesPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Painel lateral de detalhes (tipo Jira) */}
+      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-[520px] p-0">
+          <div className="h-full max-h-[100dvh] overflow-hidden">
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b">
+              <div className="min-w-0">
+                <div className="text-lg font-semibold truncate">{detailsActivity?.titulo ?? 'Actividade'}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{detailsActivity ? `ID #${detailsActivity.id}` : ''}</div>
+              </div>
+              {/* O Sheet já tem Close default; evitamos duplicar */}
+            </div>
+
+            {detailsActivity ? (
+              <div className="px-5 py-4 space-y-4 overflow-auto max-h-[calc(100dvh-64px)]">
+                  <div className="grid gap-3">
+                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                      <div className="text-muted-foreground flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Criado em
+                      </div>
+                      <div className="text-foreground">
+                        {(detailsActivity.createdAt ?? '').slice(0, 19).replace('T', ' ') || '—'}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                      <div className="text-muted-foreground flex items-center gap-2">
+                        <Tag className="h-4 w-4" />
+                        Status
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={statusBadgeVariant(effectiveStatus(detailsActivity))}>
+                          {effectiveStatus(detailsActivity)}
+                        </Badge>
+                        <Select
+                          value={detailsActivity.status}
+                          onValueChange={(v: any) => void setStatus(detailsActivity.id, v)}
+                        >
+                          <SelectTrigger className="h-8 w-[170px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Pendente">Pendente</SelectItem>
+                            <SelectItem value="Em Progresso">Em Progresso</SelectItem>
+                            <SelectItem value="Concluída">Concluída</SelectItem>
+                            <SelectItem value="Cancelada">Cancelada</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                      <div className="text-muted-foreground flex items-center gap-2">
+                        <Flag className="h-4 w-4" />
+                        Prioridade
+                      </div>
+                      <Select
+                        value={detailsActivity.prioridade}
+                        onValueChange={(v: any) =>
+                          void (supabase?.from('produtividade_actividades') as any)
+                            ?.update({ prioridade: v })
+                            .eq('id', detailsActivity.id)
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-[190px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Baixa">Baixa</SelectItem>
+                          <SelectItem value="Média">Média</SelectItem>
+                          <SelectItem value="Alta">Alta</SelectItem>
+                          <SelectItem value="Urgente">Urgente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                      <div className="text-muted-foreground flex items-center gap-2">
+                        <CalendarDays className="h-4 w-4" />
+                        Datas
+                      </div>
+                      <div className="text-foreground">
+                        {detailsActivity.dataActividade} → <span className="font-medium">{detailsActivity.prazo}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                      <div className="text-muted-foreground">Categoria</div>
+                      <Badge variant="outline">{detailsActivity.categoria}</Badge>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border p-3">
+                    <div className="text-sm font-medium">Descrição</div>
+                    <div className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                      {detailsActivity.descricao?.trim() || detailsActivity.comentario?.trim() || '—'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium">Entregáveis</div>
+                      {detailsActivity.possuiEntregavel ? <Badge variant="secondary">Obrigatório</Badge> : <Badge variant="outline">Opcional</Badge>}
+                    </div>
+                    {detailsEntregaveis.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">Nenhum ficheiro anexado.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {detailsEntregaveis.map((e) => (
+                          <div key={e.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium truncate">{e.nomeFicheiro}</div>
+                              <div className="text-xs text-muted-foreground truncate">{e.mimeType}</div>
+                            </div>
+                            <Badge variant="outline">{e.estado}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Tabs value={detailsTab} onValueChange={(v: any) => setDetailsTab(v)} className="w-full">
+                    <TabsList className="w-full justify-start">
+                      <TabsTrigger value="actividade">Actividade</TabsTrigger>
+                      <TabsTrigger value="comentarios">Comentários</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="actividade" className="mt-3">
+                      {detailsLoading ? (
+                        <div className="text-sm text-muted-foreground">A carregar…</div>
+                      ) : events.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">Sem actividade recente.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {events.map((e) => (
+                            <div key={e.id} className="rounded-md border px-3 py-2">
+                              <div className="text-sm">{eventLabel(e)}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {(e.createdAt ?? '').slice(0, 19).replace('T', ' ')}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+                    <TabsContent value="comentarios" className="mt-3">
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-2">
+                          <Textarea
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            placeholder="Escreva um comentário…"
+                            className="min-h-[44px]"
+                          />
+                          <Button onClick={postComment} disabled={postingComment || !newComment.trim()} className="shrink-0">
+                            {postingComment ? 'A enviar…' : 'Enviar'}
+                          </Button>
+                        </div>
+
+                        {detailsLoading ? (
+                          <div className="text-sm text-muted-foreground">A carregar…</div>
+                        ) : comments.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">Sem comentários.</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {comments.map((c) => (
+                              <div key={c.id} className="rounded-md border px-3 py-2">
+                                <div className="text-sm whitespace-pre-wrap">{c.conteudo}</div>
+                                <div className="text-xs text-muted-foreground mt-0.5">
+                                  {(c.createdAt ?? '').slice(0, 19).replace('T', ' ')}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+              </div>
+            ) : (
+              <div className="px-5 py-6 text-sm text-muted-foreground">Seleccione uma actividade.</div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -773,6 +1223,17 @@ function CreateActivityForm({
   const [comentario, setComentario] = useState('');
   const [dataActividade, setDataActividade] = useState(todayKey);
   const [prazo, setPrazo] = useState(todayKey);
+  const minPrazo = useMemo(() => {
+    const a = dataActividade?.trim() ? dataActividade : todayKey;
+    // ISO yyyy-mm-dd compara lexicograficamente (seguro)
+    return a > todayKey ? a : todayKey;
+  }, [dataActividade, todayKey]);
+
+  useEffect(() => {
+    if (!prazo?.trim()) return;
+    if (prazo < minPrazo) setPrazo(minPrazo);
+  }, [minPrazo]);
+
   const [prioridade, setPrioridade] = useState('Média');
   const [categoria, setCategoria] = useState('Técnica');
   const [possuiEntregavel, setPossuiEntregavel] = useState(false);
@@ -882,11 +1343,12 @@ function CreateActivityForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="grid gap-2">
           <Label>Data da actividade</Label>
-          <Input type="date" value={dataActividade} onChange={e => setDataActividade(e.target.value)} />
+          <Input type="date" value={dataActividade} min={todayKey} onChange={e => setDataActividade(e.target.value)} />
         </div>
         <div className="grid gap-2">
           <Label>Prazo (deadline)</Label>
-          <Input type="date" value={prazo} onChange={e => setPrazo(e.target.value)} />
+          <Input type="date" value={prazo} min={minPrazo} onChange={e => setPrazo(e.target.value)} />
+          <div className="text-xs text-muted-foreground">O prazo não pode ser anterior a {minPrazo}.</div>
         </div>
       </div>
 
