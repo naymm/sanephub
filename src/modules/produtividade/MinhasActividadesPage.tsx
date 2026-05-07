@@ -1381,24 +1381,20 @@ function CreateActivityForm({
         )}
       </div>
 
-      <div className="grid gap-2">
-        <Label>Atribuir a (opcional)</Label>
-        {canAssign ? (
+      {canAssign ? (
+        <div className="grid gap-2">
+          <Label>Atribuir a (opcional)</Label>
           <EmployeeMultiSelect
             valueIds={atribuidoColaboradorIds}
             empresaId={empresaIdForSearch}
             disabled={disableSubmit}
             onChange={(ids) => setAtribuidoColaboradorIds(ids)}
           />
-        ) : (
-          <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-            Apenas Admin, Director e PCA podem atribuir tarefas.
+          <div className="text-xs text-muted-foreground">
+            A actividade ficará visível para ti e para o colaborador atribuído, e ambos podem actualizar o estado.
           </div>
-        )}
-        <div className="text-xs text-muted-foreground">
-          A actividade ficará visível para ti e para o colaborador atribuído, e ambos podem actualizar o estado.
         </div>
-      </div>
+      ) : null}
 
       <div className="grid gap-2">
         <Label>Título</Label>
