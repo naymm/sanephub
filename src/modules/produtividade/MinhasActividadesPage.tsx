@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
 import type {
@@ -24,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag } from 'lucide-react';
+import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag, User, Users } from 'lucide-react';
 import {
   DndContext,
   DragEndEvent,
@@ -42,6 +43,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { EmployeeMultiSelect } from '@/components/shared/EmployeeMultiSelect';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const STATUS_KANBAN: Array<Extract<ProdutividadeStatus, 'Pendente' | 'Em Progresso' | 'Concluída'>> = [
   'Pendente',
@@ -186,6 +188,7 @@ function KanbanColumn({
 export default function MinhasActividadesPage() {
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
+  const { colaboradoresTodos } = useData();
   const canAssign = user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProdutividadeStatus | 'all'>('all');
@@ -351,6 +354,42 @@ export default function MinhasActividadesPage() {
     if (!detailsActivity) return [];
     return (entregaveisByActividade.get(detailsActivity.id) ?? []).slice().sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
   }, [detailsActivity, entregaveisByActividade]);
+
+  const colaboradorById = useMemo(() => {
+    const m = new Map<number, { id: number; nome: string; fotoPerfilUrl?: string | null }>();
+    for (const c of colaboradoresTodos ?? []) m.set(c.id, c);
+    return m;
+  }, [colaboradoresTodos]);
+
+  const creatorColaborador = useMemo(() => {
+    if (!detailsActivity) return null;
+    return colaboradorById.get(detailsActivity.colaboradorId) ?? null;
+  }, [detailsActivity, colaboradorById]);
+
+  const detailsParticipants = useMemo(() => {
+    if (!detailsActivity) return [];
+    const parts = participantesByActividade.get(detailsActivity.id) ?? [];
+    const ids = new Set<number>([detailsActivity.colaboradorId, ...parts.map(p => p.colaboradorId)]);
+    const out = [...ids]
+      .map((id) => colaboradorById.get(id))
+      .filter(Boolean) as Array<{ id: number; nome: string; fotoPerfilUrl?: string | null }>;
+    out.sort((a, b) => a.nome.localeCompare(b.nome));
+    return out;
+  }, [detailsActivity, participantesByActividade, colaboradorById]);
+
+  const initialsForName = useCallback((nome: string): string => {
+    const parts = nome.trim().split(/\s+/).filter(Boolean);
+    const a = parts[0]?.[0] ?? '';
+    const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '';
+    return (a + b).toUpperCase() || '?';
+  }, []);
+
+  const shortName = useCallback((nome: string): string => {
+    const parts = nome.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '—';
+    if (parts.length === 1) return parts[0]!;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  }, []);
 
   const eventLabel = useCallback((e: ProdutividadeEvento): string => {
     const p = e.payload ?? {};
@@ -1084,6 +1123,46 @@ export default function MinhasActividadesPage() {
 
                     <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
                       <div className="text-muted-foreground flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        Criado por
+                      </div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Avatar className="h-7 w-7 ring-1 ring-border/60">
+                          {creatorColaborador?.fotoPerfilUrl ? (
+                            <AvatarImage src={creatorColaborador.fotoPerfilUrl} alt={creatorColaborador.nome} className="object-cover" />
+                          ) : null}
+                          <AvatarFallback className="text-[10px] font-semibold">
+                            {creatorColaborador?.nome ? initialsForName(creatorColaborador.nome) : '—'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="truncate">{creatorColaborador?.nome ? shortName(creatorColaborador.nome) : '—'}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                      <div className="text-muted-foreground flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Participantes
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {detailsParticipants.length === 0 ? (
+                          <div className="text-muted-foreground">—</div>
+                        ) : (
+                          detailsParticipants.map((c) => (
+                            <div key={c.id} className="flex items-center gap-2 rounded-full border bg-muted/30 px-2 py-1 max-w-full">
+                              <Avatar className="h-6 w-6 ring-1 ring-border/60">
+                                {c.fotoPerfilUrl ? <AvatarImage src={c.fotoPerfilUrl} alt={c.nome} className="object-cover" /> : null}
+                                <AvatarFallback className="text-[10px] font-semibold">{initialsForName(c.nome)}</AvatarFallback>
+                              </Avatar>
+                              <div className="text-xs truncate max-w-[240px]">{shortName(c.nome)}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
+                      <div className="text-muted-foreground flex items-center gap-2">
                         <Tag className="h-4 w-4" />
                         Status
                       </div>
@@ -1192,7 +1271,34 @@ export default function MinhasActividadesPage() {
                         <div className="space-y-2">
                           {events.map((e) => (
                             <div key={e.id} className="rounded-md border px-3 py-2">
-                              <div className="text-sm">{eventLabel(e)}</div>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Avatar className="h-7 w-7 ring-1 ring-border/60">
+                                    {e.actorColaboradorId && colaboradorById.get(e.actorColaboradorId)?.fotoPerfilUrl ? (
+                                      <AvatarImage
+                                        src={colaboradorById.get(e.actorColaboradorId)!.fotoPerfilUrl!}
+                                        alt={colaboradorById.get(e.actorColaboradorId)!.nome}
+                                        className="object-cover"
+                                      />
+                                    ) : null}
+                                    <AvatarFallback className="text-[10px] font-semibold">
+                                      {e.actorColaboradorId && colaboradorById.get(e.actorColaboradorId)?.nome
+                                        ? initialsForName(colaboradorById.get(e.actorColaboradorId)!.nome)
+                                        : '—'}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium truncate">
+                                      {e.actorColaboradorId
+                                        ? (colaboradorById.get(e.actorColaboradorId)?.nome
+                                          ? shortName(colaboradorById.get(e.actorColaboradorId)!.nome)
+                                          : '—')
+                                        : '—'}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">{eventLabel(e)}</div>
+                                  </div>
+                                </div>
+                              </div>
                               <div className="text-xs text-muted-foreground mt-0.5">
                                 {(e.createdAt ?? '').slice(0, 19).replace('T', ' ')}
                               </div>
@@ -1223,10 +1329,33 @@ export default function MinhasActividadesPage() {
                           <div className="space-y-2">
                             {comments.map((c) => (
                               <div key={c.id} className="rounded-md border px-3 py-2">
-                                <div className="text-sm whitespace-pre-wrap">{c.conteudo}</div>
-                                <div className="text-xs text-muted-foreground mt-0.5">
-                                  {(c.createdAt ?? '').slice(0, 19).replace('T', ' ')}
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Avatar className="h-7 w-7 ring-1 ring-border/60">
+                                      {colaboradorById.get(c.autorColaboradorId)?.fotoPerfilUrl ? (
+                                        <AvatarImage
+                                          src={colaboradorById.get(c.autorColaboradorId)!.fotoPerfilUrl!}
+                                          alt={colaboradorById.get(c.autorColaboradorId)!.nome}
+                                          className="object-cover"
+                                        />
+                                      ) : null}
+                                      <AvatarFallback className="text-[10px] font-semibold">
+                                        {colaboradorById.get(c.autorColaboradorId)?.nome
+                                          ? initialsForName(colaboradorById.get(c.autorColaboradorId)!.nome)
+                                          : '—'}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <div className="text-sm font-medium truncate">
+                                      {colaboradorById.get(c.autorColaboradorId)?.nome
+                                        ? shortName(colaboradorById.get(c.autorColaboradorId)!.nome)
+                                        : '—'}
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground shrink-0">
+                                    {(c.createdAt ?? '').slice(0, 19).replace('T', ' ')}
+                                  </div>
                                 </div>
+                                <div className="text-sm whitespace-pre-wrap">{c.conteudo}</div>
                               </div>
                             ))}
                           </div>
