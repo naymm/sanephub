@@ -170,6 +170,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   produtividade_entregaveis: ['id', 'actividadeId', 'tamanhoBytes', 'uploadedByColaboradorId', 'reviewedByPerfilId'],
   produtividade_eventos: ['id', 'actividadeId', 'actorProfileId', 'actorColaboradorId'],
   produtividade_comentarios: ['id', 'actividadeId', 'autorColaboradorId'],
+  produtividade_participantes: ['id', 'actividadeId', 'colaboradorId'],
 };
 
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {

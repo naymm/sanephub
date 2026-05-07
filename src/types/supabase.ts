@@ -100,6 +100,11 @@ export interface Database {
         Insert: Record<string, unknown>;
         Update: Record<string, unknown>;
       };
+      produtividade_participantes: {
+        Row: Record<string, unknown>;
+        Insert: Record<string, unknown>;
+        Update: Record<string, unknown>;
+      };
       aniversario_parabens: {
         Row: {
           id: number;
@@ -278,6 +283,10 @@ export interface Database {
       resolve_login_email: {
         Args: { p_username: string };
         Returns: string | null;
+      };
+      search_colaboradores: {
+        Args: { p_query: string; p_empresa_id?: number | null; p_limit?: number | null };
+        Returns: { id: number; nome: string; empresa_id: number }[];
       };
       perfil_tem_ponto_pin: {
         Args: Record<string, never>;

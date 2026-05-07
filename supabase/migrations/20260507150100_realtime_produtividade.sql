@@ -40,5 +40,15 @@ begin
     ) then
     execute 'alter publication supabase_realtime add table public.produtividade_comentarios';
   end if;
+
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'produtividade_participantes')
+    and not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = 'produtividade_participantes'
+    ) then
+    execute 'alter publication supabase_realtime add table public.produtividade_participantes';
+  end if;
 end $$;
 

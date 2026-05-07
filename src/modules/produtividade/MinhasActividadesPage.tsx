@@ -8,6 +8,7 @@ import type {
   ProdutividadeComentario,
   ProdutividadeEntregavel,
   ProdutividadeEvento,
+  ProdutividadeParticipante,
   ProdutividadeStatus,
 } from '@/types';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
@@ -40,6 +41,7 @@ import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@d
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { EmployeeMultiSelect } from '@/components/shared/EmployeeMultiSelect';
 
 const STATUS_KANBAN: Array<Extract<ProdutividadeStatus, 'Pendente' | 'Em Progresso' | 'Concluída'>> = [
   'Pendente',
@@ -228,6 +230,24 @@ export default function MinhasActividadesPage() {
     mapRow: mapEnt,
   });
 
+  const mapPart = useMemo(() => {
+    return (row: Record<string, unknown>) => mapRowFromDb<ProdutividadeParticipante>('produtividade_participantes', row);
+  }, []);
+  const { rows: allParticipantes } = useRealtimeTable<ProdutividadeParticipante>('produtividade_participantes', 'id', {
+    mapRow: mapPart,
+  });
+
+  const participantesByActividade = useMemo(() => {
+    const m = new Map<number, ProdutividadeParticipante[]>();
+    for (const p of allParticipantes) {
+      const id = Number(p.actividadeId);
+      if (!Number.isFinite(id)) continue;
+      if (!m.has(id)) m.set(id, []);
+      m.get(id)!.push(p);
+    }
+    return m;
+  }, [allParticipantes]);
+
   const entregaveisByActividade = useMemo(() => {
     const m = new Map<number, ProdutividadeEntregavel[]>();
     for (const e of allEntregaveis) {
@@ -246,7 +266,11 @@ export default function MinhasActividadesPage() {
         : allRows.filter(r => Number(r.empresaId) === Number(currentEmpresaId));
     // Em perfis sem colaboradorId (ex.: PCA grupo) mostramos vazio por defeito.
     if (!user?.colaboradorId) return [];
-    return base.filter(r => r.colaboradorId === user.colaboradorId);
+    return base.filter(r => {
+      if (r.colaboradorId === user.colaboradorId) return true;
+      const parts = participantesByActividade.get(r.id) ?? [];
+      return parts.some(p => p.colaboradorId === user.colaboradorId);
+    });
   }, [allRows, currentEmpresaId, user?.colaboradorId]);
 
   const filtered = useMemo(() => {
@@ -444,6 +468,7 @@ export default function MinhasActividadesPage() {
     tipoActividade: string;
     localizacao: string | null;
     meioOnline: string | null;
+    atribuidoColaboradorIds: number[];
     titulo: string;
     descricao: string;
     comentario: string;
@@ -486,8 +511,17 @@ export default function MinhasActividadesPage() {
         status: 'Pendente',
         kanban_order: 0,
       };
-      const { error } = await supabase.from('produtividade_actividades').insert(payload);
+      const { data, error } = await supabase.from('produtividade_actividades').insert(payload).select('id').maybeSingle();
       if (error) throw new Error(error.message || 'Erro ao criar actividade');
+      const actId = (data as any)?.id ? Number((data as any).id) : null;
+      if (actId && Array.isArray(form.atribuidoColaboradorIds) && form.atribuidoColaboradorIds.length > 0) {
+        const unique = [...new Set(form.atribuidoColaboradorIds)].filter((id) => Number.isFinite(id) && id !== user.colaboradorId);
+        if (unique.length > 0) {
+          const rows = unique.map((id) => ({ actividade_id: actId, colaborador_id: id, role: 'assignee' }));
+          const { error: pErr } = await (supabase.from('produtividade_participantes') as any).insert(rows);
+          if (pErr) throw new Error(pErr.message || 'Erro ao atribuir colaboradores');
+        }
+      }
       toast.success('Actividade criada.');
       setCreateDialogOpen(false);
     } finally {
@@ -671,24 +705,37 @@ export default function MinhasActividadesPage() {
                 Nova actividade
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Criar actividade</DialogTitle>
-              </DialogHeader>
-              <CreateActivityForm
-                onCreate={createActivity}
-                creating={creating}
-                disableSubmit={
-                  !user?.colaboradorId || (currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number')
-                }
-                disableReason={
-                  !user?.colaboradorId
-                    ? 'Utilizador sem colaborador associado.'
-                    : currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number'
-                      ? 'Seleccione uma empresa (não “consolidado”).'
-                      : undefined
-                }
-              />
+            <DialogContent className="max-w-2xl p-0 overflow-hidden">
+              <div className="max-h-[85dvh] overflow-hidden">
+                <div className="px-6 pt-6 pb-3 border-b bg-background sticky top-0 z-10">
+                  <DialogHeader>
+                    <DialogTitle>Criar actividade</DialogTitle>
+                  </DialogHeader>
+                </div>
+                <div className="px-6 pb-6 overflow-y-auto max-h-[calc(85dvh-72px)]">
+                  <CreateActivityForm
+                    onCreate={createActivity}
+                    creating={creating}
+                    disableSubmit={
+                      !user?.colaboradorId || (currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number')
+                    }
+                    disableReason={
+                      !user?.colaboradorId
+                        ? 'Utilizador sem colaborador associado.'
+                        : currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number'
+                          ? 'Seleccione uma empresa (não “consolidado”).'
+                          : undefined
+                    }
+                    empresaIdForSearch={
+                      currentEmpresaId === 'consolidado'
+                        ? typeof user?.empresaId === 'number'
+                          ? user.empresaId
+                          : null
+                        : currentEmpresaId
+                    }
+                  />
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -1191,14 +1238,17 @@ function CreateActivityForm({
   creating,
   disableSubmit,
   disableReason,
+  empresaIdForSearch,
 }: {
   creating: boolean;
   disableSubmit?: boolean;
   disableReason?: string;
+  empresaIdForSearch: number | null;
   onCreate: (form: {
     tipoActividade: string;
     localizacao: string | null;
     meioOnline: string | null;
+    atribuidoColaboradorIds: number[];
     titulo: string;
     descricao: string;
     comentario: string;
@@ -1218,6 +1268,7 @@ function CreateActivityForm({
   const [tipoActividade, setTipoActividade] = useState<string>('Presencial');
   const [localizacao, setLocalizacao] = useState<string>('Na Empresa');
   const [meioOnline, setMeioOnline] = useState<string>('Zoom');
+  const [atribuidoColaboradorIds, setAtribuidoColaboradorIds] = useState<number[]>([]);
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [comentario, setComentario] = useState('');
@@ -1259,6 +1310,7 @@ function CreateActivityForm({
           tipoActividade,
           localizacao: tipoActividade === 'Presencial' ? localizacao : null,
           meioOnline: tipoActividade === 'Online' ? meioOnline : null,
+          atribuidoColaboradorIds,
           titulo: titulo.trim(),
           descricao,
           comentario,
@@ -1323,6 +1375,19 @@ function CreateActivityForm({
             ) : null}
           </div>
         )}
+      </div>
+
+      <div className="grid gap-2">
+        <Label>Atribuir a (opcional)</Label>
+        <EmployeeMultiSelect
+          valueIds={atribuidoColaboradorIds}
+          empresaId={empresaIdForSearch}
+          disabled={disableSubmit}
+          onChange={(ids) => setAtribuidoColaboradorIds(ids)}
+        />
+        <div className="text-xs text-muted-foreground">
+          A actividade ficará visível para ti e para o colaborador atribuído, e ambos podem actualizar o estado.
+        </div>
       </div>
 
       <div className="grid gap-2">

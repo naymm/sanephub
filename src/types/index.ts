@@ -737,6 +737,16 @@ export interface ProdutividadeComentario {
   createdAt: string;
 }
 
+export type ProdutividadeParticipanteRole = 'owner' | 'assignee';
+
+export interface ProdutividadeParticipante {
+  id: number;
+  actividadeId: number;
+  colaboradorId: number;
+  role: ProdutividadeParticipanteRole;
+  createdAt: string;
+}
+
 export interface Correspondencia {
   id: number;
   tipo: 'Entrada' | 'Saída';
