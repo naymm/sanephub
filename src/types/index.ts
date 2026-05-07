@@ -737,7 +737,7 @@ export interface ProdutividadeComentario {
   createdAt: string;
 }
 
-export type ProdutividadeParticipanteRole = 'owner' | 'assignee';
+export type ProdutividadeParticipanteRole = 'owner' | 'assignee' | 'collaborator';
 
 export interface ProdutividadeParticipante {
   id: number;

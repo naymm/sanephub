@@ -470,6 +470,7 @@ export default function MinhasActividadesPage() {
     localizacao: string | null;
     meioOnline: string | null;
     atribuidoColaboradorIds: number[];
+    colegasColaboradorIds: number[];
     titulo: string;
     descricao: string;
     comentario: string;
@@ -521,6 +522,15 @@ export default function MinhasActividadesPage() {
           const rows = unique.map((id) => ({ actividade_id: actId, colaborador_id: id, role: 'assignee' }));
           const { error: pErr } = await (supabase.from('produtividade_participantes') as any).insert(rows);
           if (pErr) throw new Error(pErr.message || 'Erro ao atribuir colaboradores');
+        }
+      }
+
+      if (actId && Array.isArray(form.colegasColaboradorIds) && form.colegasColaboradorIds.length > 0) {
+        const unique = [...new Set(form.colegasColaboradorIds)].filter((id) => Number.isFinite(id) && id !== user.colaboradorId);
+        if (unique.length > 0) {
+          const rows = unique.map((id) => ({ actividade_id: actId, colaborador_id: id, role: 'collaborator' }));
+          const { error: cErr } = await (supabase.from('produtividade_participantes') as any).insert(rows);
+          if (cErr) throw new Error(cErr.message || 'Erro ao adicionar colegas');
         }
       }
       toast.success('Actividade criada.');
@@ -1253,6 +1263,7 @@ function CreateActivityForm({
     localizacao: string | null;
     meioOnline: string | null;
     atribuidoColaboradorIds: number[];
+    colegasColaboradorIds: number[];
     titulo: string;
     descricao: string;
     comentario: string;
@@ -1273,6 +1284,7 @@ function CreateActivityForm({
   const [localizacao, setLocalizacao] = useState<string>('Na Empresa');
   const [meioOnline, setMeioOnline] = useState<string>('Zoom');
   const [atribuidoColaboradorIds, setAtribuidoColaboradorIds] = useState<number[]>([]);
+  const [colegasColaboradorIds, setColegasColaboradorIds] = useState<number[]>([]);
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [comentario, setComentario] = useState('');
@@ -1315,6 +1327,7 @@ function CreateActivityForm({
           localizacao: tipoActividade === 'Presencial' ? localizacao : null,
           meioOnline: tipoActividade === 'Online' ? meioOnline : null,
           atribuidoColaboradorIds,
+          colegasColaboradorIds,
           titulo: titulo.trim(),
           descricao,
           comentario,
@@ -1392,6 +1405,21 @@ function CreateActivityForm({
           />
           <div className="text-xs text-muted-foreground">
             A actividade ficará visível para ti e para o colaborador atribuído, e ambos podem actualizar o estado.
+          </div>
+        </div>
+      ) : null}
+
+      {!canAssign ? (
+        <div className="grid gap-2">
+          <Label>Adicionar colega (opcional)</Label>
+          <EmployeeMultiSelect
+            valueIds={colegasColaboradorIds}
+            empresaId={empresaIdForSearch}
+            disabled={disableSubmit}
+            onChange={(ids) => setColegasColaboradorIds(ids)}
+          />
+          <div className="text-xs text-muted-foreground">
+            O(s) colega(s) adicionado(s) também verá(ão) a actividade e poderão actualizar o estado.
           </div>
         </div>
       ) : null}
