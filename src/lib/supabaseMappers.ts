@@ -166,6 +166,8 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   patrimonio_verificacao_itens: ['id', 'verificacaoId', 'activoId'],
   factura: ['id', 'empresaId', 'numFactura', 'serie'],
   produto: ['id', 'numLinha'],
+  produtividade_actividades: ['id', 'empresaId', 'colaboradorId', 'kanbanOrder'],
+  produtividade_entregaveis: ['id', 'actividadeId', 'tamanhoBytes', 'uploadedByColaboradorId', 'reviewedByPerfilId'],
 };
 
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {

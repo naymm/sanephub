@@ -17,6 +17,7 @@ import {
   MapPin,
   Package,
   Receipt,
+  ListChecks,
 } from 'lucide-react';
 import { PORTAL_MENU_ITEMS } from '@/navigation/portalMenu';
 
@@ -40,6 +41,12 @@ export const GENERAL_ITEMS: MenuChild[] = [
 ];
 
 export const MODULE_GROUPS: MenuGroup[] = [
+  {
+    label: 'Produtividade',
+    module: 'produtividade',
+    icon: ListChecks,
+    children: [{ label: 'Minhas Actividades', path: '/produtividade/actividades', module: 'produtividade' }],
+  },
   {
     label: 'Capital Humano',
     module: 'capital-humano',

@@ -650,6 +650,67 @@ export interface Notificacao {
   link?: string;
 }
 
+export type ProdutividadeTipoActividade = 'Presencial' | 'Online' | 'Externa' | 'Híbrida';
+export type ProdutividadeLocalizacao = 'Na Empresa' | 'Fora da Empresa';
+export type ProdutividadeMeioOnline = 'Zoom' | 'Google Meet' | 'Microsoft Teams';
+export type ProdutividadePrioridade = 'Baixa' | 'Média' | 'Alta' | 'Urgente';
+export type ProdutividadeCategoria =
+  | 'Administrativa'
+  | 'Financeira'
+  | 'RH'
+  | 'Operacional'
+  | 'Jurídica'
+  | 'Técnica'
+  | 'Outra';
+
+export type ProdutividadeStatus = 'Pendente' | 'Em Progresso' | 'Concluída' | 'Atrasada' | 'Cancelada';
+
+export interface ProdutividadeActividade {
+  id: number;
+  empresaId: number;
+  colaboradorId: number;
+
+  tipoActividade: ProdutividadeTipoActividade;
+  localizacao?: ProdutividadeLocalizacao | null;
+  meioOnline?: ProdutividadeMeioOnline | null;
+
+  titulo: string;
+  descricao?: string | null;
+  comentario?: string | null;
+
+  dataActividade: string; // yyyy-mm-dd
+  prazo: string; // yyyy-mm-dd
+
+  prioridade: ProdutividadePrioridade;
+  categoria: ProdutividadeCategoria;
+
+  possuiEntregavel: boolean;
+  status: ProdutividadeStatus;
+  kanbanOrder: number;
+
+  concluidaEm?: string | null;
+  canceladaEm?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export type ProdutividadeEntregavelEstado = 'Pendente' | 'Aprovado' | 'Rejeitado';
+
+export interface ProdutividadeEntregavel {
+  id: number;
+  actividadeId: number;
+  storagePath: string;
+  nomeFicheiro: string;
+  mimeType: string;
+  tamanhoBytes: number;
+  estado: ProdutividadeEntregavelEstado;
+  uploadedByColaboradorId?: number | null;
+  uploadedAt: string;
+  reviewedByPerfilId?: number | null;
+  reviewedAt?: string | null;
+  reviewComment?: string | null;
+}
+
 export interface Correspondencia {
   id: number;
   tipo: 'Entrada' | 'Saída';

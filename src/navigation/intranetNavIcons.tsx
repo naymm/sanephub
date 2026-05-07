@@ -20,6 +20,7 @@ import {
   Package,
   ScrollText,
   Receipt,
+  ListChecks,
 } from 'lucide-react';
 
 /** Ícones partilhados entre menu horizontal e drawer mobile (evita duplicar JSX). */
@@ -75,6 +76,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/comunicacao-interna/aniversarios': <Cake className="h-4 w-4 shrink-0" />,
     '/facturacao': <Receipt className="h-4 w-4 shrink-0" />,
     '/facturacao/receita': <Receipt className="h-4 w-4 shrink-0" />,
+    '/produtividade/actividades': <ListChecks className="h-4 w-4 shrink-0" />,
   };
   return map[path] ?? null;
 }

@@ -80,6 +80,7 @@ import ComunicadoDetalhePage from "@/modules/comunicacao-interna/ComunicadoDetal
 import PatrimonioPage from "@/modules/patrimonio/PatrimonioPage";
 import FacturacaoPage from "@/modules/facturacao/FacturacaoPage";
 import ReceitaPage from "@/modules/facturacao/ReceitaPage";
+import MinhasActividadesPage from "@/modules/produtividade/MinhasActividadesPage";
 
 const queryClient = new QueryClient();
 
@@ -155,6 +156,8 @@ const App = () => (
 
                   <Route path="/facturacao" element={<FacturacaoPage />} />
                   <Route path="/facturacao/receita" element={<ReceitaPage />} />
+                  {/* Produtividade */}
+                  <Route path="/produtividade/actividades" element={<MinhasActividadesPage />} />
                   {/* Contabilidade */}
                   <Route path="/contabilidade/pagamentos" element={<PagamentosPage />} />
                   <Route path="/contabilidade/pendencias" element={<PendenciasPage />} />
