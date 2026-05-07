@@ -186,6 +186,7 @@ function KanbanColumn({
 export default function MinhasActividadesPage() {
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
+  const canAssign = user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProdutividadeStatus | 'all'>('all');
   const [prioridadeFilter, setPrioridadeFilter] = useState<string | 'all'>('all');
@@ -733,6 +734,7 @@ export default function MinhasActividadesPage() {
                           : null
                         : currentEmpresaId
                     }
+                    canAssign={canAssign}
                   />
                 </div>
               </div>
@@ -1239,11 +1241,13 @@ function CreateActivityForm({
   disableSubmit,
   disableReason,
   empresaIdForSearch,
+  canAssign,
 }: {
   creating: boolean;
   disableSubmit?: boolean;
   disableReason?: string;
   empresaIdForSearch: number | null;
+  canAssign: boolean;
   onCreate: (form: {
     tipoActividade: string;
     localizacao: string | null;
@@ -1379,12 +1383,18 @@ function CreateActivityForm({
 
       <div className="grid gap-2">
         <Label>Atribuir a (opcional)</Label>
-        <EmployeeMultiSelect
-          valueIds={atribuidoColaboradorIds}
-          empresaId={empresaIdForSearch}
-          disabled={disableSubmit}
-          onChange={(ids) => setAtribuidoColaboradorIds(ids)}
-        />
+        {canAssign ? (
+          <EmployeeMultiSelect
+            valueIds={atribuidoColaboradorIds}
+            empresaId={empresaIdForSearch}
+            disabled={disableSubmit}
+            onChange={(ids) => setAtribuidoColaboradorIds(ids)}
+          />
+        ) : (
+          <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            Apenas Admin, Director e PCA podem atribuir tarefas.
+          </div>
+        )}
         <div className="text-xs text-muted-foreground">
           A actividade ficará visível para ti e para o colaborador atribuído, e ambos podem actualizar o estado.
         </div>
