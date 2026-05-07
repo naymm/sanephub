@@ -26,6 +26,8 @@ export type MenuChild = {
   path: string;
   module?: string;
   adminOnly?: boolean;
+  /** Se definido, só mostra para cargos específicos (match por substring, case-insensitive). */
+  requiresCargoIncludes?: string[];
 };
 
 export type MenuGroup = {
@@ -45,7 +47,15 @@ export const MODULE_GROUPS: MenuGroup[] = [
     label: 'Produtividade',
     module: 'produtividade',
     icon: ListChecks,
-    children: [{ label: 'Minhas Actividades', path: '/produtividade/actividades', module: 'produtividade' }],
+    children: [
+      { label: 'Minhas Actividades', path: '/produtividade/actividades', module: 'produtividade' },
+      {
+        label: 'Direcção',
+        path: '/produtividade/direccao',
+        module: 'produtividade',
+        requiresCargoIncludes: ['director', 'diretor', 'coordenador'],
+      },
+    ],
   },
   {
     label: 'Capital Humano',

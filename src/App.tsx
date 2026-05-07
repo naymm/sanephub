@@ -158,6 +158,7 @@ const App = () => (
                   <Route path="/facturacao/receita" element={<ReceitaPage />} />
                   {/* Produtividade */}
                   <Route path="/produtividade/actividades" element={<MinhasActividadesPage />} />
+                  <Route path="/produtividade/direccao" element={<MinhasActividadesPage scope="area" />} />
                   {/* Contabilidade */}
                   <Route path="/contabilidade/pagamentos" element={<PagamentosPage />} />
                   <Route path="/contabilidade/pendencias" element={<PendenciasPage />} />

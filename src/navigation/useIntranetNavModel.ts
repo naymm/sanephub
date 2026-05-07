@@ -60,6 +60,11 @@ export function useIntranetNavModel(): IntranetNavModel | null {
 
     const canShowChild = (child: MenuChild) => {
       if (child.adminOnly && user.perfil !== 'Admin') return false;
+      if (Array.isArray(child.requiresCargoIncludes) && child.requiresCargoIncludes.length > 0) {
+        const cargo = (user.cargo ?? '').toLowerCase();
+        const ok = child.requiresCargoIncludes.some((needle) => cargo.includes(String(needle).toLowerCase()));
+        if (!ok) return false;
+      }
       if (rotaBloqueadaPorRecursosDesactivados(child.path, organizacaoSettings.recursosDesactivados))
         return false;
       if (!child.module) return true;

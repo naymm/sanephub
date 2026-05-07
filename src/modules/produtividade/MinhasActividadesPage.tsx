@@ -185,11 +185,17 @@ function KanbanColumn({
   );
 }
 
-export default function MinhasActividadesPage() {
+export default function MinhasActividadesPage({
+  scope = 'mine',
+}: {
+  scope?: 'mine' | 'area';
+}) {
   const { currentEmpresaId } = useTenant();
   const { user } = useAuth();
   const { colaboradoresTodos } = useData();
   const canAssign = user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
+  const cargoLower = (user?.cargo ?? '').toLowerCase();
+  const isDireccaoCargo = cargoLower.includes('director') || cargoLower.includes('diretor') || cargoLower.includes('coordenador');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProdutividadeStatus | 'all'>('all');
   const [prioridadeFilter, setPrioridadeFilter] = useState<string | 'all'>('all');
@@ -207,6 +213,12 @@ export default function MinhasActividadesPage() {
   const [detailsId, setDetailsId] = useState<number | null>(null);
   const [detailsTab, setDetailsTab] = useState<'actividade' | 'comentarios'>('actividade');
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [prefillDate, setPrefillDate] = useState<string | null>(null);
+  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
+  const [calendarCursor, setCalendarCursor] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
   const [events, setEvents] = useState<ProdutividadeEvento[]>([]);
   const [comments, setComments] = useState<ProdutividadeComentario[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -268,14 +280,71 @@ export default function MinhasActividadesPage() {
       currentEmpresaId === 'consolidado'
         ? allRows
         : allRows.filter(r => Number(r.empresaId) === Number(currentEmpresaId));
-    // Em perfis sem colaboradorId (ex.: PCA grupo) mostramos vazio por defeito.
-    if (!user?.colaboradorId) return [];
+    if (scope === 'mine') {
+      // Em perfis sem colaboradorId (ex.: PCA grupo) mostramos vazio por defeito.
+      if (!user?.colaboradorId) return [];
+      return base.filter(r => {
+        if (r.colaboradorId === user.colaboradorId) return true;
+        const parts = participantesByActividade.get(r.id) ?? [];
+        return parts.some(p => p.colaboradorId === user.colaboradorId);
+      });
+    }
+
+    // scope === 'area'
+    if (!user?.colaboradorId || !isDireccaoCargo) return [];
+    const empresaId =
+      typeof user?.empresaId === 'number' ? user.empresaId : (typeof currentEmpresaId === 'number' ? currentEmpresaId : null);
+    if (!empresaId) return [];
+    const normalize = (v: string) =>
+      v
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '');
+    // Em /produtividade/direccao queremos sempre o grupo "Direcção" (com variantes).
+    const deptTargets = new Set(['direccao', 'direcao', 'direcção', 'direção'].map(normalize));
+    const areaIds = new Set<number>(
+      (colaboradoresTodos ?? [])
+        .filter(c => {
+          if (Number(c.empresaId) !== Number(empresaId)) return false;
+          const deptOk = deptTargets.has(normalize(String(c.departamento ?? '')));
+          const cargoN = normalize(String((c as any).cargo ?? ''));
+          const cargoOk = cargoN.includes('director') || cargoN.includes('diretor') || cargoN.includes('coordenador');
+          // Inclui todos os da Direcção (por departamento) e também cargos de liderança
+          // que por vezes não vêm com o departamento preenchido/normalizado.
+          return deptOk || cargoOk;
+        })
+        .map(c => c.id),
+    );
     return base.filter(r => {
-      if (r.colaboradorId === user.colaboradorId) return true;
+      if (areaIds.has(r.colaboradorId)) return true;
       const parts = participantesByActividade.get(r.id) ?? [];
-      return parts.some(p => p.colaboradorId === user.colaboradorId);
+      return parts.some(p => areaIds.has(p.colaboradorId));
     });
-  }, [allRows, currentEmpresaId, user?.colaboradorId]);
+  }, [
+    allRows,
+    currentEmpresaId,
+    scope,
+    user?.colaboradorId,
+    user?.empresaId,
+    isDireccaoCargo,
+    colaboradoresTodos,
+    participantesByActividade,
+  ]);
+
+  if (scope === 'area' && user && !isDireccaoCargo) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl font-semibold leading-tight">Produtividade</h1>
+          <p className="text-sm text-muted-foreground">Direcção</p>
+        </div>
+        <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+          Esta página é apenas para cargos Director/Coordenador.
+        </div>
+      </div>
+    );
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -503,6 +572,95 @@ export default function MinhasActividadesPage() {
     if (!dayKey) return [];
     return filtered.filter(a => a.dataActividade === dayKey).slice(0, 50);
   }, [filtered, dayKey]);
+
+  const isoFromDate = useCallback((dt: Date): string => {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const startOfWeekMonday = useCallback((dt: Date): Date => {
+    const d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const dow = (d.getDay() + 6) % 7; // segunda=0
+    d.setDate(d.getDate() - dow);
+    return d;
+  }, []);
+
+  const addDays = useCallback((dt: Date, days: number): Date => {
+    const d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    d.setDate(d.getDate() + days);
+    return d;
+  }, []);
+
+  const todayIso = useMemo(() => isoFromDate(new Date()), [isoFromDate]);
+
+  const weekStart = useMemo(() => startOfWeekMonday(selectedDay ?? new Date()), [selectedDay, startOfWeekMonday]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart, addDays]);
+  const weekLabel = useMemo(() => {
+    const a = weekDays[0];
+    const b = weekDays[6];
+    const fmt = (d: Date) => d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' });
+    return `${fmt(a)} – ${fmt(b)}`;
+  }, [weekDays]);
+
+  const monthLabel = useMemo(() => {
+    const y = calendarCursor.getFullYear();
+    const m = calendarCursor.toLocaleString('pt-PT', { month: 'long' });
+    return `${m.charAt(0).toUpperCase()}${m.slice(1)} ${y}`;
+  }, [calendarCursor]);
+
+  const monthCells = useMemo(() => {
+    const start = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+    const end = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + 1, 0);
+    const startDow = (start.getDay() + 6) % 7; // segunda=0
+    const totalDays = end.getDate();
+
+    const cells: Array<{ date: Date; iso: string; inMonth: boolean }> = [];
+    // leading days
+    for (let i = 0; i < startDow; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() - (startDow - i));
+      cells.push({ date: d, iso: isoFromDate(d), inMonth: false });
+    }
+    // month days
+    for (let day = 1; day <= totalDays; day++) {
+      const d = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), day);
+      cells.push({ date: d, iso: isoFromDate(d), inMonth: true });
+    }
+    // trailing to complete weeks
+    while (cells.length % 7 !== 0) {
+      const last = cells[cells.length - 1]!.date;
+      const d = new Date(last);
+      d.setDate(d.getDate() + 1);
+      cells.push({ date: d, iso: isoFromDate(d), inMonth: false });
+    }
+    return cells;
+  }, [calendarCursor, isoFromDate]);
+
+  const activitiesByIso = useMemo(() => {
+    const m = new Map<string, ProdutividadeActividade[]>();
+    for (const a of filtered) {
+      const k = a.dataActividade;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(a);
+    }
+    for (const [k, v] of m) {
+      m.set(
+        k,
+        v
+          .slice()
+          .sort((a, b) => {
+            const pr = (p: string) => (p === 'Urgente' ? 4 : p === 'Alta' ? 3 : p === 'Média' ? 2 : 1);
+            const byPr = pr(b.prioridade) - pr(a.prioridade);
+            if (byPr !== 0) return byPr;
+            return (a.kanbanOrder ?? 0) - (b.kanbanOrder ?? 0);
+          })
+          .slice(0, 50),
+      );
+    }
+    return m;
+  }, [filtered]);
 
   async function createActivity(form: {
     tipoActividade: string;
@@ -741,10 +899,11 @@ export default function MinhasActividadesPage() {
 
   return (
     <div className="space-y-5">
+      {/* styles removidos (calendário custom) */}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold leading-tight">Produtividade</h1>
-          <p className="text-sm text-muted-foreground">Minhas Actividades</p>
+          <p className="text-sm text-muted-foreground">{scope === 'area' ? 'Direcção' : 'Minhas Actividades'}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -766,6 +925,7 @@ export default function MinhasActividadesPage() {
                   <CreateActivityForm
                     onCreate={createActivity}
                     creating={creating}
+                    defaultDataActividade={prefillDate}
                     disableSubmit={
                       !user?.colaboradorId || (currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number')
                     }
@@ -989,40 +1149,283 @@ export default function MinhasActividadesPage() {
         </TabsContent>
 
         <TabsContent value="calendario" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-[340px_1fr]">
-            <div className="rounded-xl border bg-card p-3">
-              <Calendar mode="single" selected={selectedDay} onSelect={setSelectedDay} />
-            </div>
-            <div className="rounded-xl border bg-card">
-              <div className="p-3 border-b flex items-center justify-between">
-                <div className="text-sm font-semibold">{dayKey || 'Dia'}</div>
-                <div className="text-xs text-muted-foreground">{calendarRows.length} actividade(s)</div>
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="p-3 border-b flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={calendarView === 'month' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCalendarView('month')}
+                >
+                  Mês
+                </Button>
+                <Button
+                  variant={calendarView === 'week' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCalendarView('week')}
+                >
+                  Semana
+                </Button>
+                <Button
+                  variant={calendarView === 'day' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCalendarView('day')}
+                >
+                  Dia
+                </Button>
               </div>
-              <div className="divide-y">
-                {calendarRows.map(a => {
-                  const s = effectiveStatus(a);
-                  return (
-                    <div key={a.id} className="p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{a.titulo}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {a.comentario?.trim() ? a.comentario : '—'}
+
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (calendarView === 'month') {
+                      setCalendarCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+                      return;
+                    }
+                    if (calendarView === 'week') {
+                      setSelectedDay((d) => addDays(d ?? new Date(), -7));
+                      return;
+                    }
+                    setSelectedDay((d) => addDays(d ?? new Date(), -1));
+                  }}
+                >
+                  ‹
+                </Button>
+                <div className="text-sm font-semibold min-w-[160px] text-center">
+                  {calendarView === 'month' ? monthLabel : calendarView === 'week' ? weekLabel : (dayKey || 'Dia')}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (calendarView === 'month') {
+                      setCalendarCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+                      return;
+                    }
+                    if (calendarView === 'week') {
+                      setSelectedDay((d) => addDays(d ?? new Date(), 7));
+                      return;
+                    }
+                    setSelectedDay((d) => addDays(d ?? new Date(), 1));
+                  }}
+                >
+                  ›
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const now = new Date();
+                    if (calendarView === 'month') setCalendarCursor(new Date(now.getFullYear(), now.getMonth(), 1));
+                    setSelectedDay(now);
+                  }}
+                >
+                  Hoje
+                </Button>
+              </div>
+            </div>
+
+            {calendarView === 'month' ? (
+              <div className="p-3">
+                <div className="grid grid-cols-7 text-xs text-muted-foreground border rounded-lg overflow-hidden">
+                  {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((d) => (
+                    <div key={d} className="px-2 py-2 border-b bg-muted/20 font-medium">
+                      {d}
+                    </div>
+                  ))}
+
+                  {monthCells.map((cell) => {
+                    const rows = activitiesByIso.get(cell.iso) ?? [];
+                    const visible = rows.slice(0, 3);
+                    const more = rows.length - visible.length;
+                    const isToday = cell.iso === isoFromDate(new Date());
+                    const isPast = cell.iso < isoFromDate(new Date());
+                    return (
+                      <div
+                        key={cell.iso}
+                        className={cn(
+                          'min-h-[110px] border-b border-r p-2 group',
+                          !cell.inMonth && 'bg-muted/10 text-muted-foreground',
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className={cn('text-xs font-medium', isToday && 'text-primary')}>
+                            {cell.date.getDate()}
                           </div>
+                          {!isPast ? (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition"
+                              onClick={() => {
+                                setPrefillDate(cell.iso);
+                                setCreateDialogOpen(true);
+                              }}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Badge variant={statusBadgeVariant(s)}>{s}</Badge>
-                          <span className={cn('text-xs font-semibold', prioridadeColorClass(a.prioridade))}>{a.prioridade}</span>
+
+                        <div className="mt-2 space-y-1">
+                          {visible.map((a) => {
+                            const s = effectiveStatus(a);
+                            const pr =
+                              a.prioridade === 'Urgente'
+                                ? 'bg-red-500/15 text-red-800'
+                                : a.prioridade === 'Alta'
+                                  ? 'bg-amber-500/15 text-amber-800'
+                                  : a.prioridade === 'Média'
+                                    ? 'bg-blue-500/15 text-blue-800'
+                                    : 'bg-emerald-500/15 text-emerald-800';
+                            return (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => openDetails(a.id)}
+                                className={cn(
+                                  'w-full text-left rounded-md px-2 py-1 text-xs truncate border hover:bg-muted/30 transition',
+                                  pr,
+                                  s === 'Concluída' && 'opacity-70 line-through',
+                                  s === 'Atrasada' && 'ring-1 ring-red-500/30',
+                                )}
+                                title={a.titulo}
+                              >
+                                {a.titulo}
+                              </button>
+                            );
+                          })}
+                          {more > 0 ? (
+                            <div className="text-[11px] text-muted-foreground px-1">+{more} others</div>
+                          ) : null}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-                {calendarRows.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">Sem actividades neste dia.</div>
-                ) : null}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : calendarView === 'day' ? (
+              <div className="p-3">
+                <div className="text-sm font-semibold mb-2">{dayKey || 'Dia'}</div>
+                <div className="rounded-lg border divide-y">
+                  {calendarRows.map((a) => {
+                    const s = effectiveStatus(a);
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => openDetails(a.id)}
+                        className="w-full text-left p-3 hover:bg-muted/30 transition"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{a.titulo}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                              {a.comentario?.trim() ? a.comentario : '—'}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant={statusBadgeVariant(s)}>{s}</Badge>
+                            <span className={cn('text-xs font-semibold', prioridadeColorClass(a.prioridade))}>{a.prioridade}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {calendarRows.length === 0 ? (
+                    <div className="p-6 text-sm text-muted-foreground">Sem actividades neste dia.</div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="p-3">
+                <div className="grid grid-cols-7 border rounded-lg overflow-hidden">
+                  {weekDays.map((d, idx) => {
+                    const iso = isoFromDate(d);
+                    const rows = activitiesByIso.get(iso) ?? [];
+                    const visible = rows.slice(0, 6);
+                    const more = rows.length - visible.length;
+                    const isToday = iso === todayIso;
+                    const isPast = iso < todayIso;
+                    const dayName = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][idx]!;
+                    return (
+                      <div key={iso} className="min-h-[180px] border-r border-b p-2 group">
+                        <div className="flex items-start justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDay(d);
+                              setCalendarView('day');
+                            }}
+                            className={cn(
+                              'text-left min-w-0',
+                              isToday && 'text-primary',
+                            )}
+                            title="Abrir dia"
+                          >
+                            <div className="text-xs font-medium">{dayName}</div>
+                            <div className="text-[11px] text-muted-foreground">{iso}</div>
+                          </button>
+
+                          {!isPast ? (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition"
+                              onClick={() => {
+                                setPrefillDate(iso);
+                                setCreateDialogOpen(true);
+                              }}
+                              title="Nova actividade"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-2 space-y-1">
+                          {visible.map((a) => {
+                            const s = effectiveStatus(a);
+                            const pr =
+                              a.prioridade === 'Urgente'
+                                ? 'bg-red-500/15 text-red-800'
+                                : a.prioridade === 'Alta'
+                                  ? 'bg-amber-500/15 text-amber-800'
+                                  : a.prioridade === 'Média'
+                                    ? 'bg-blue-500/15 text-blue-800'
+                                    : 'bg-emerald-500/15 text-emerald-800';
+                            return (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => openDetails(a.id)}
+                                className={cn(
+                                  'w-full text-left rounded-md px-2 py-1 text-xs truncate border hover:bg-muted/30 transition',
+                                  pr,
+                                  s === 'Concluída' && 'opacity-70 line-through',
+                                  s === 'Atrasada' && 'ring-1 ring-red-500/30',
+                                )}
+                                title={a.titulo}
+                              >
+                                {a.titulo}
+                              </button>
+                            );
+                          })}
+                          {more > 0 ? (
+                            <div className="text-[11px] text-muted-foreground px-1">+{more} others</div>
+                          ) : null}
+                          {rows.length === 0 ? (
+                            <div className="text-[11px] text-muted-foreground px-1">—</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </TabsContent>
       </Tabs>
@@ -1374,6 +1777,10 @@ export default function MinhasActividadesPage() {
   );
 }
 
+export function DireccaoActividadesPage() {
+  return <MinhasActividadesPage scope="area" />;
+}
+
 function CreateActivityForm({
   onCreate,
   creating,
@@ -1381,12 +1788,14 @@ function CreateActivityForm({
   disableReason,
   empresaIdForSearch,
   canAssign,
+  defaultDataActividade,
 }: {
   creating: boolean;
   disableSubmit?: boolean;
   disableReason?: string;
   empresaIdForSearch: number | null;
   canAssign: boolean;
+  defaultDataActividade?: string | null;
   onCreate: (form: {
     tipoActividade: string;
     localizacao: string | null;
@@ -1417,8 +1826,14 @@ function CreateActivityForm({
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [comentario, setComentario] = useState('');
-  const [dataActividade, setDataActividade] = useState(todayKey);
-  const [prazo, setPrazo] = useState(todayKey);
+  const initialDate = useMemo(() => {
+    const v = defaultDataActividade?.trim();
+    if (v && v >= todayKey) return v;
+    return todayKey;
+  }, [defaultDataActividade, todayKey]);
+
+  const [dataActividade, setDataActividade] = useState(initialDate);
+  const [prazo, setPrazo] = useState(initialDate);
   const minPrazo = useMemo(() => {
     const a = dataActividade?.trim() ? dataActividade : todayKey;
     // ISO yyyy-mm-dd compara lexicograficamente (seguro)

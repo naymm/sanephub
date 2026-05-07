@@ -77,6 +77,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/facturacao': <Receipt className="h-4 w-4 shrink-0" />,
     '/facturacao/receita': <Receipt className="h-4 w-4 shrink-0" />,
     '/produtividade/actividades': <ListChecks className="h-4 w-4 shrink-0" />,
+    '/produtividade/direccao': <ListChecks className="h-4 w-4 shrink-0" />,
   };
   return map[path] ?? null;
 }

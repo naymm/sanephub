@@ -534,6 +534,8 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (user.perfil === 'Colaborador') {
     // Notícias / eventos / aniversários: acesso de leitura alinhado ao menu (não exigir módulo explícito na lista).
     if (module === 'comunicacao-interna') return true;
+    // Produtividade: transversal (uso diário) — não depende da lista `modulos` do colaborador.
+    if (module === 'produtividade') return true;
     if (!Array.isArray(user.modulos) || user.modulos.length === 0) {
       return MODULE_ACCESS_BY_PERFIL[module]?.includes(user.perfil) ?? false;
     }
