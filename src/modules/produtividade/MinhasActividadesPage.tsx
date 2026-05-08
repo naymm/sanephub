@@ -520,9 +520,23 @@ export default function MinhasActividadesPage({
     return (row: Record<string, unknown>) => mapRowFromDb<ProdutividadeActividade>('produtividade_actividades', row);
   }, []);
 
+  const [optimisticActivities, setOptimisticActivities] = useState<ProdutividadeActividade[]>([]);
+
   const { rows: allRows, isLoading } = useRealtimeTable<ProdutividadeActividade>('produtividade_actividades', 'id', {
     mapRow,
   });
+
+  const mergedAllRows = useMemo(() => {
+    if (!optimisticActivities.length) return allRows;
+    const ids = new Set<number>(allRows.map((r) => r.id));
+    return [...optimisticActivities.filter((r) => !ids.has(r.id)), ...allRows];
+  }, [allRows, optimisticActivities]);
+
+  useEffect(() => {
+    if (!optimisticActivities.length) return;
+    const ids = new Set<number>(allRows.map((r) => r.id));
+    setOptimisticActivities((prev) => prev.filter((r) => !ids.has(r.id)));
+  }, [allRows, optimisticActivities.length]);
 
   const mapEnt = useMemo(() => {
     return (row: Record<string, unknown>) => mapRowFromDb<ProdutividadeEntregavel>('produtividade_entregaveis', row);
@@ -563,8 +577,8 @@ export default function MinhasActividadesPage({
   const myRows = useMemo(() => {
     const base =
       currentEmpresaId === 'consolidado'
-        ? allRows
-        : allRows.filter(r => Number(r.empresaId) === Number(currentEmpresaId));
+        ? mergedAllRows
+        : mergedAllRows.filter(r => Number(r.empresaId) === Number(currentEmpresaId));
     if (scope === 'mine') {
       // Em perfis sem colaboradorId (ex.: PCA grupo) mostramos vazio por defeito.
       if (!user?.colaboradorId) return [];
@@ -610,7 +624,7 @@ export default function MinhasActividadesPage({
       return false;
     });
   }, [
-    allRows,
+    mergedAllRows,
     currentEmpresaId,
     scope,
     user?.colaboradorId,
@@ -1364,9 +1378,13 @@ export default function MinhasActividadesPage({
         status: 'Pendente',
         kanban_order: 0,
       };
-      const { data, error } = await supabase.from('produtividade_actividades').insert(payload).select('id').maybeSingle();
+      const { data, error } = await supabase.from('produtividade_actividades').insert(payload).select('*').maybeSingle();
       if (error) throw new Error(error.message || 'Erro ao criar actividade');
       const actId = (data as any)?.id ? Number((data as any).id) : null;
+      if (data) {
+        const mapped = mapRowFromDb<ProdutividadeActividade>('produtividade_actividades', data as any);
+        setOptimisticActivities((prev) => (prev.some((r) => r.id === mapped.id) ? prev : [mapped, ...prev]));
+      }
       if (actId && Array.isArray(form.atribuidoColaboradorIds) && form.atribuidoColaboradorIds.length > 0) {
         const unique = [...new Set(form.atribuidoColaboradorIds)].filter((id) => Number.isFinite(id) && id !== user.colaboradorId);
         if (unique.length > 0) {
