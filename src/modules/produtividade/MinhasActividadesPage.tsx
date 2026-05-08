@@ -792,6 +792,7 @@ export default function MinhasActividadesPage({
   const seenEventIdsRef = useRef<Set<number>>(new Set());
   const seenCommentIdsRef = useRef<Set<number>>(new Set());
   const lastStatusByActivityRef = useRef<Map<number, string>>(new Map());
+  const seenApprovalActivityIdsRef = useRef<Set<number>>(new Set());
   const activityByIdRef = useRef<Map<number, ProdutividadeActividade>>(new Map());
   const colaboradorByIdRef = useRef<Map<number, { id: number; nome: string; fotoPerfilUrl?: string | null }>>(new Map());
   const eventLabelRef = useRef<(e: ProdutividadeEvento) => string>(() => '');
@@ -1119,18 +1120,35 @@ export default function MinhasActividadesPage({
     // Inicializa mapa (sem toasts)
     if (lastStatusByActivityRef.current.size === 0) {
       for (const a of myRows) lastStatusByActivityRef.current.set(a.id, a.status);
+      // Regista o "baseline" de actividades já em aprovação para não tostar o histórico ao abrir a página.
+      for (const a of myRows) {
+        if (a.status === 'Em aprovação' && a.aprovadorColaboradorId === me) {
+          seenApprovalActivityIdsRef.current.add(a.id);
+        }
+      }
       return;
     }
 
     for (const a of myRows) {
       const prev = lastStatusByActivityRef.current.get(a.id);
-      if (prev && prev !== a.status) {
-        if (a.status === 'Em aprovação' && a.aprovadorColaboradorId === me) {
-          toast('Nova actividade para aprovar', {
-            description: `«${a.titulo}»`,
-          });
+      const isNowApprovalForMe = a.status === 'Em aprovação' && a.aprovadorColaboradorId === me;
+
+      // Caso 1: transição de estado para «Em aprovação».
+      if (prev && prev !== a.status && isNowApprovalForMe) {
+        if (!seenApprovalActivityIdsRef.current.has(a.id)) {
+          toast('Nova actividade para aprovar', { description: `«${a.titulo}»` });
+          seenApprovalActivityIdsRef.current.add(a.id);
         }
       }
+
+      // Caso 2: actividade nova entrou na lista já em «Em aprovação» (ex.: criada por outro utilizador).
+      if (!prev && isNowApprovalForMe) {
+        if (!seenApprovalActivityIdsRef.current.has(a.id)) {
+          toast('Nova actividade para aprovar', { description: `«${a.titulo}»` });
+          seenApprovalActivityIdsRef.current.add(a.id);
+        }
+      }
+
       lastStatusByActivityRef.current.set(a.id, a.status);
     }
   }, [myRows, user?.colaboradorId]);
@@ -1614,7 +1632,8 @@ export default function MinhasActividadesPage({
 
     if (fromCol !== toCol) {
       if (toCol === 'Em aprovação' && fromCol !== 'Em aprovação') {
-        toast.error('Não pode arrastar para «Em aprovação». Use a coluna «Concluída» para submeter a aprovação.');
+        // Permite arrastar directamente para «Em aprovação» (respeita regras/validações em setStatus + triggers SQL).
+        void setStatus(active.id, 'Em aprovação');
         return;
       }
       if (toCol === 'Concluída') {
