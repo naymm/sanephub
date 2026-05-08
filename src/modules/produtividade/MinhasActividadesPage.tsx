@@ -774,6 +774,14 @@ export default function MinhasActividadesPage({
     return m;
   }, [myRows]);
 
+  // Evita toasts duplicados em listeners realtime.
+  const seenEventIdsRef = useRef<Set<number>>(new Set());
+  const seenCommentIdsRef = useRef<Set<number>>(new Set());
+  const lastStatusByActivityRef = useRef<Map<number, string>>(new Map());
+  const activityByIdRef = useRef<Map<number, ProdutividadeActividade>>(new Map());
+  const colaboradorByIdRef = useRef<Map<number, { id: number; nome: string; fotoPerfilUrl?: string | null }>>(new Map());
+  const eventLabelRef = useRef<(e: ProdutividadeEvento) => string>(() => '');
+
   const dragOverlayActivity = useMemo(() => {
     if (!activeDragId) return null;
     const id = parseDndItemId(activeDragId);
@@ -785,6 +793,10 @@ export default function MinhasActividadesPage({
     if (!detailsId) return null;
     return activityById.get(detailsId) ?? null;
   }, [detailsId, activityById]);
+
+  useEffect(() => {
+    activityByIdRef.current = activityById;
+  }, [activityById]);
 
   const detailsEntregaveis = useMemo(() => {
     if (!detailsActivity) return [];
@@ -814,6 +826,10 @@ export default function MinhasActividadesPage({
     for (const c of colaboradoresTodos ?? []) m.set(c.id, c);
     return m;
   }, [colaboradoresTodos]);
+
+  useEffect(() => {
+    colaboradorByIdRef.current = colaboradorById;
+  }, [colaboradorById]);
 
   const creatorColaborador = useMemo(() => {
     if (!detailsActivity) return null;
@@ -1017,6 +1033,93 @@ export default function MinhasActividadesPage({
     if (e.tipo === 'comment_added') return 'Adicionou um comentário';
     return e.tipo;
   }, []);
+
+  useEffect(() => {
+    eventLabelRef.current = eventLabel;
+  }, [eventLabel]);
+
+  // Notificações em tempo-real para todos que têm acesso (via RLS) enquanto estiverem online neste módulo.
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    if (!user?.colaboradorId) return;
+
+    const channel = supabase
+      .channel(`produtividade-notifs:${user.colaboradorId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'produtividade_eventos' }, (payload) => {
+        try {
+          const row = payload.new as any;
+          const mapped = mapRowFromDb<ProdutividadeEvento>('produtividade_eventos', row);
+          if (seenEventIdsRef.current.has(mapped.id)) return;
+          seenEventIdsRef.current.add(mapped.id);
+
+          const act = activityByIdRef.current.get(mapped.actividadeId);
+          const actorName = mapped.actorColaboradorId
+            ? (colaboradorByIdRef.current.get(mapped.actorColaboradorId)?.nome ?? 'Alguém')
+            : 'Alguém';
+          const title = act?.titulo ? `«${act.titulo}»` : `#${mapped.actividadeId}`;
+
+          toast(`${actorName} ${eventLabelRef.current(mapped)}`, {
+            description: `Actividade ${title}`,
+          });
+        } catch (e) {
+          console.warn('produtividade event toast failed', e);
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'produtividade_comentarios' }, (payload) => {
+        try {
+          const row = payload.new as any;
+          const mapped = mapRowFromDb<ProdutividadeComentario>('produtividade_comentarios', row);
+          if (seenCommentIdsRef.current.has(mapped.id)) return;
+          seenCommentIdsRef.current.add(mapped.id);
+
+          const act = activityByIdRef.current.get(mapped.actividadeId);
+          const actorName = colaboradorByIdRef.current.get(mapped.autorColaboradorId)?.nome ?? 'Alguém';
+          const title = act?.titulo ? `«${act.titulo}»` : `#${mapped.actividadeId}`;
+          const snippet = (mapped.conteudo ?? '').trim().slice(0, 120);
+
+          toast(`${actorName} comentou`, {
+            description: snippet ? `${snippet} — em ${title}` : `Em ${title}`,
+          });
+        } catch (e) {
+          console.warn('produtividade comment toast failed', e);
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') console.info('[produtividade] realtime subscribed');
+        if (status === 'CHANNEL_ERROR') console.warn('[produtividade] realtime channel error');
+        if (status === 'TIMED_OUT') console.warn('[produtividade] realtime channel timed out');
+      });
+
+    return () => {
+      try {
+        void supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, [user?.colaboradorId]);
+
+  // Notificação para aprovador quando uma actividade muda para «Em aprovação».
+  useEffect(() => {
+    if (!user?.colaboradorId) return;
+    const me = user.colaboradorId;
+
+    // Inicializa mapa (sem toasts)
+    if (lastStatusByActivityRef.current.size === 0) {
+      for (const a of myRows) lastStatusByActivityRef.current.set(a.id, a.status);
+      return;
+    }
+
+    for (const a of myRows) {
+      const prev = lastStatusByActivityRef.current.get(a.id);
+      if (prev && prev !== a.status) {
+        if (a.status === 'Em aprovação' && a.aprovadorColaboradorId === me) {
+          toast('Nova actividade para aprovar', {
+            description: `«${a.titulo}»`,
+          });
+        }
+      }
+      lastStatusByActivityRef.current.set(a.id, a.status);
+    }
+  }, [myRows, user?.colaboradorId]);
 
   useEffect(() => {
     if (!detailsOpen || !detailsId || !isSupabaseConfigured() || !supabase) return;
@@ -2546,6 +2649,17 @@ export default function MinhasActividadesPage({
                               e.tipo === 'deliverable_uploaded'
                                 ? entregavelLinkedToDeliverableEvent(e, detailsEntregaveis)
                                 : null;
+                            const commentIdRaw = (p as any)['commentId'] ?? (p as any)['comment_id'];
+                            const commentId =
+                              typeof commentIdRaw === 'number' && Number.isFinite(commentIdRaw)
+                                ? commentIdRaw
+                                : typeof commentIdRaw === 'string'
+                                  ? Number(commentIdRaw)
+                                  : null;
+                            const linkedComment =
+                              e.tipo === 'comment_added' && commentId != null
+                                ? comments.find((c) => c.id === commentId) ?? null
+                                : null;
                             const deliverableNome =
                               (typeof p['nome'] === 'string' && p['nome']) || linked?.nomeFicheiro || null;
                             const deliverablePath =
@@ -2575,6 +2689,7 @@ export default function MinhasActividadesPage({
 
                             const showDeliverableCard =
                               e.tipo === 'deliverable_uploaded' && deliverableNome && Boolean(deliverablePath);
+                            const showCommentCard = e.tipo === 'comment_added' && Boolean(linkedComment?.conteudo?.trim());
 
                             return (
                               <div key={e.id} className="relative flex gap-3">
@@ -2686,6 +2801,10 @@ export default function MinhasActividadesPage({
                                   ) : e.tipo === 'deliverable_uploaded' && deliverableNome && !deliverablePath ? (
                                     <div className="rounded-lg border border-dashed bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
                                       Anexo «{deliverableNome}» (evento antigo — sem caminho de armazenamento para descarga).
+                                    </div>
+                                  ) : showCommentCard ? (
+                                    <div className="rounded-xl border bg-muted/10 px-3 py-2.5 shadow-sm">
+                                      <div className="text-sm whitespace-pre-wrap">{linkedComment!.conteudo.trim()}</div>
                                     </div>
                                   ) : null}
                                 </div>
