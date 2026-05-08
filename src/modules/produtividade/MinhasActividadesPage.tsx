@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag, User, Users, Loader2, Download, FileText, FileImage, File, Paperclip } from 'lucide-react';
+import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag, User, Users, Loader2, Download, Eye, FileText, FileImage, File, Paperclip } from 'lucide-react';
 import {
   DndContext,
   DragEndEvent,
@@ -49,11 +49,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 function isAllowedDeliverableFile(f: File): boolean {
   const name = f.name.toLowerCase();
   const ext = name.split('.').pop() || '';
-  const allowedExt = new Set(['pdf', 'docx', 'xlsx', 'png', 'jpg', 'jpeg', 'webp']);
+  const allowedExt = new Set(['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'webp']);
   return allowedExt.has(ext);
 }
 
-const ENTREGAVEL_INPUT_ACCEPT = '.pdf,.docx,.xlsx,.png,.jpg,.jpeg,.webp,image/*';
+const ENTREGAVEL_INPUT_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,image/*';
 
 function DeliverableFileDropZone({
   disabled,
@@ -89,7 +89,7 @@ function DeliverableFileDropZone({
         return;
       }
       if (!isAllowedDeliverableFile(file)) {
-        toast.error('Tipo de ficheiro não aceite. Use PDF, DOCX, XLSX ou imagem (PNG, JPG, JPEG, WebP).');
+        toast.error('Tipo de ficheiro não aceite. Use PDF, Word, PowerPoint, Excel ou imagem (PNG, JPG, JPEG, WebP).');
         return;
       }
       onFileSelected(file);
@@ -219,6 +219,26 @@ function formatEntregavelSize(bytes: number): string {
   if (bytes < 1024) return `${Math.round(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function isOfficePreviewableEntregavel(row: { nomeFicheiro: string; mimeType?: string | null }): boolean {
+  const name = (row.nomeFicheiro || '').toLowerCase();
+  const ext = name.split('.').pop() || '';
+  if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) return true;
+  const m = (row.mimeType || '').toLowerCase();
+  return m.includes('officedocument') || m.includes('msword') || m.includes('mspowerpoint') || m.includes('msexcel');
+}
+
+function isPdfPreviewableEntregavel(row: { nomeFicheiro: string; mimeType?: string | null }): boolean {
+  const name = (row.nomeFicheiro || '').toLowerCase();
+  const ext = name.split('.').pop() || '';
+  if (ext === 'pdf') return true;
+  const m = (row.mimeType || '').toLowerCase();
+  return m.includes('pdf');
+}
+
+function officeViewerUrlFromPublicUrl(publicUrl: string): string {
+  return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(publicUrl)}`;
 }
 
 function entregavelLinkedToDeliverableEvent(ev: ProdutividadeEvento, list: ProdutividadeEntregavel[]): ProdutividadeEntregavel | null {
@@ -463,6 +483,9 @@ export default function MinhasActividadesPage({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [detailsReplyUploading, setDetailsReplyUploading] = useState(false);
   const [detailsReplyPick, setDetailsReplyPick] = useState<File | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string>('');
+  const [viewerTitle, setViewerTitle] = useState<string>('');
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsId, setDetailsId] = useState<number | null>(null);
@@ -835,6 +858,52 @@ export default function MinhasActividadesPage({
         return;
       }
       window.open(url, '_blank', 'noopener,noreferrer');
+    },
+    [],
+  );
+
+  const openOfficeViewerForEntregavel = useCallback(
+    (row: { storagePath: string; nomeFicheiro: string; mimeType?: string | null }) => {
+      if (!isOfficePreviewableEntregavel(row)) {
+        toast.error('Este ficheiro não suporta pré-visualização.');
+        return;
+      }
+      if (!isSupabaseConfigured() || !supabase) {
+        toast.error('Serviço de ficheiros indisponível.');
+        return;
+      }
+      const { data } = supabase.storage.from('produtividade-entregaveis').getPublicUrl(row.storagePath);
+      const publicUrl = data?.publicUrl;
+      if (!publicUrl) {
+        toast.error('Não foi possível obter o link de visualização.');
+        return;
+      }
+      setViewerTitle(row.nomeFicheiro || 'Documento');
+      setViewerUrl(officeViewerUrlFromPublicUrl(publicUrl));
+      setViewerOpen(true);
+    },
+    [],
+  );
+
+  const openPdfViewerForEntregavel = useCallback(
+    (row: { storagePath: string; nomeFicheiro: string; mimeType?: string | null }) => {
+      if (!isPdfPreviewableEntregavel(row)) {
+        toast.error('Este ficheiro não suporta pré-visualização.');
+        return;
+      }
+      if (!isSupabaseConfigured() || !supabase) {
+        toast.error('Serviço de ficheiros indisponível.');
+        return;
+      }
+      const { data } = supabase.storage.from('produtividade-entregaveis').getPublicUrl(row.storagePath);
+      const publicUrl = data?.publicUrl;
+      if (!publicUrl) {
+        toast.error('Não foi possível obter o link de visualização.');
+        return;
+      }
+      setViewerTitle(row.nomeFicheiro || 'PDF');
+      setViewerUrl(publicUrl);
+      setViewerOpen(true);
     },
     [],
   );
@@ -2270,6 +2339,32 @@ export default function MinhasActividadesPage({
                                 </Badge>
                               </div>
                             </div>
+                          {isPdfPreviewableEntregavel(eRow) ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0"
+                              aria-label={`Ver ${eRow.nomeFicheiro}`}
+                              disabled={!eRow.storagePath}
+                              onClick={() => openPdfViewerForEntregavel(eRow)}
+                            >
+                              <Eye className="h-5 w-5" />
+                            </Button>
+                          ) : null}
+                          {isOfficePreviewableEntregavel(eRow) ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0"
+                              aria-label={`Ver ${eRow.nomeFicheiro}`}
+                              disabled={!eRow.storagePath}
+                              onClick={() => openOfficeViewerForEntregavel(eRow)}
+                            >
+                              <Eye className="h-5 w-5" />
+                            </Button>
+                          ) : null}
                             <Button
                               type="button"
                               variant="ghost"
@@ -2303,7 +2398,7 @@ export default function MinhasActividadesPage({
                           selectedFile={detailsReplyPick}
                           dropZoneClassName="min-h-[100px] p-4 rounded-lg"
                           ariaLabel="Área para anexar outro entregável"
-                          idleSub="ou clique para escolher — o envio é automático mas o estado não muda (PDF, DOCX, XLSX, imagens)"
+                          idleSub="ou clique para escolher — o envio é automático mas o estado não muda (PDF, Word, PowerPoint, Excel, imagens)"
                           onFileSelected={(f) => {
                             setDetailsReplyPick(f);
                             if (f) void uploadDetailsDeliverableAttachment(f);
@@ -2416,6 +2511,42 @@ export default function MinhasActividadesPage({
                                           {mimeLabel ? `${mimeLabel} · ${sizeLine}` : sizeLine}
                                         </div>
                                       </div>
+                                      {isPdfPreviewableEntregavel({ nomeFicheiro: deliverableNome!, mimeType: deliverableMime }) ? (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="shrink-0"
+                                          aria-label={`Ver ${deliverableNome}`}
+                                          onClick={() =>
+                                            openPdfViewerForEntregavel({
+                                              storagePath: deliverablePath,
+                                              nomeFicheiro: deliverableNome!,
+                                              mimeType: deliverableMime,
+                                            })
+                                          }
+                                        >
+                                          <Eye className="h-5 w-5" />
+                                        </Button>
+                                      ) : null}
+                                      {isOfficePreviewableEntregavel({ nomeFicheiro: deliverableNome!, mimeType: deliverableMime }) ? (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="shrink-0"
+                                          aria-label={`Ver ${deliverableNome}`}
+                                          onClick={() =>
+                                            openOfficeViewerForEntregavel({
+                                              storagePath: deliverablePath,
+                                              nomeFicheiro: deliverableNome!,
+                                              mimeType: deliverableMime,
+                                            })
+                                          }
+                                        >
+                                          <Eye className="h-5 w-5" />
+                                        </Button>
+                                      ) : null}
                                       <Button
                                         type="button"
                                         variant="ghost"
@@ -2507,6 +2638,38 @@ export default function MinhasActividadesPage({
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog
+        open={viewerOpen}
+        onOpenChange={(o) => {
+          setViewerOpen(o);
+          if (!o) {
+            setViewerUrl('');
+            setViewerTitle('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-[980px]">
+          <DialogHeader>
+            <DialogTitle className="truncate">{viewerTitle || 'Documento'}</DialogTitle>
+          </DialogHeader>
+          {viewerUrl ? (
+            <div className="w-full">
+              <iframe
+                title={viewerTitle || 'Microsoft Viewer'}
+                src={viewerUrl}
+                className="w-full h-[70vh] rounded-md border"
+                allow="fullscreen"
+              />
+              <div className="mt-2 text-xs text-muted-foreground">
+                Para ficheiros Office (Word/PowerPoint/Excel) a pré-visualização usa Microsoft Viewer. PDFs abrem no preview normal do browser.
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">A abrir…</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
