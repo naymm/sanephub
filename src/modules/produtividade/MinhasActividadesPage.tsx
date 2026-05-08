@@ -1600,6 +1600,23 @@ export default function MinhasActividadesPage({
         return;
       }
       if (toCol === 'Concluída') {
+        // Se está «Em aprovação», arrastar para «Concluída» significa APROVAR (apenas aprovador/gestão).
+        if (fromCol === 'Em aprovação' || active.status === 'Em aprovação') {
+          const ok = canManageApprovalTransition(
+            active,
+            user?.colaboradorId ?? null,
+            user?.perfil ?? null,
+            governanceEmpresaId,
+          );
+          if (!ok) {
+            toast.error('Só o aprovador designado (ou gestão) pode aprovar e concluir a actividade.');
+            return;
+          }
+          void setStatus(active.id, 'Concluída');
+          return;
+        }
+
+        // Caso normal: concluir (pode abrir diálogo de entregável obrigatório)
         requestComplete(active);
         return;
       }
