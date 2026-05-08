@@ -1575,6 +1575,10 @@ export default function MinhasActividadesPage({
 
     const active = activityById.get(activeActId);
     if (!active) return;
+    if (active.status === 'Concluída') {
+      toast.error('Actividade «Concluída» não pode ser movida.');
+      return;
+    }
 
     const fromCol = findContainerForItemId(activeId, kanbanUi);
     if (!fromCol) return;
@@ -2407,6 +2411,7 @@ export default function MinhasActividadesPage({
                           <Select
                             value={detailsActivity.status}
                             onValueChange={(v: any) => void setStatus(detailsActivity.id, v)}
+                            disabled={detailsActivity.status === 'Concluída'}
                           >
                             <SelectTrigger className="h-8 w-[170px]">
                               <SelectValue />
@@ -2436,6 +2441,11 @@ export default function MinhasActividadesPage({
                           </Select>
                         </div>
                       </div>
+                      {detailsActivity.status === 'Concluída' ? (
+                        <p className="text-[11px] text-muted-foreground pl-0 md:pl-[152px]">
+                          Esta actividade está «Concluída» e já não pode mudar de estado.
+                        </p>
+                      ) : null}
                       {mustCompleteViaApprovalFlow(detailsActivity) ? (
                         <p className="text-[11px] text-muted-foreground pl-0 md:pl-[152px]">
                           Com aprovação activa, «Concluída» só fica disponível depois de «Em aprovação» (via Concluir ou coluna no Kanban).
