@@ -846,7 +846,7 @@ export default function MinhasActividadesPage({
   }, []);
 
   const downloadEntregavelFicheiro = useCallback(
-    (row: { storagePath: string; nomeFicheiro: string }) => {
+    (row: { storagePath: string; nomeFicheiro: string; actividadeId?: number; entregavelId?: number | null }) => {
       if (!isSupabaseConfigured() || !supabase) {
         toast.error('Serviço de ficheiros indisponível.');
         return;
@@ -857,13 +857,94 @@ export default function MinhasActividadesPage({
         toast.error('Não foi possível obter o link de descarga.');
         return;
       }
+
+      // Regista no feed (sem bloquear o download).
+      if (row.actividadeId && user?.colaboradorId) {
+        (supabase.from('produtividade_eventos') as any)
+          .insert({
+            actividade_id: row.actividadeId,
+            tipo: 'deliverable_downloaded',
+            actor_profile_id: null,
+            actor_colaborador_id: user.colaboradorId,
+            payload: {
+              nome: row.nomeFicheiro,
+              entregavel_id: row.entregavelId ?? null,
+              storage_path: row.storagePath,
+            },
+          })
+          .then(({ error }: { error?: { message?: string } | null }) => {
+            if (error) console.warn('deliverable_downloaded event failed', error?.message ?? error);
+          })
+          .catch((e: unknown) => {
+            console.warn('deliverable_downloaded event failed', e);
+          });
+      }
+
       window.open(url, '_blank', 'noopener,noreferrer');
     },
-    [],
+    [user?.colaboradorId],
+  );
+
+  const logDeliverableDownloaded = useCallback(
+    (row: { storagePath: string; nomeFicheiro: string; actividadeId?: number; entregavelId?: number | null }) => {
+      if (!row.actividadeId || !user?.colaboradorId) return;
+      if (!isSupabaseConfigured() || !supabase) return;
+      (supabase.from('produtividade_eventos') as any)
+        .insert({
+          actividade_id: row.actividadeId,
+          tipo: 'deliverable_downloaded',
+          actor_profile_id: null,
+          actor_colaborador_id: user.colaboradorId,
+          payload: {
+            nome: row.nomeFicheiro,
+            entregavel_id: row.entregavelId ?? null,
+            storage_path: row.storagePath,
+          },
+        })
+        .then(({ error }: { error?: { message?: string } | null }) => {
+          if (error) console.warn('deliverable_downloaded event failed', error?.message ?? error);
+        })
+        .catch((e: unknown) => {
+          console.warn('deliverable_downloaded event failed', e);
+        });
+    },
+    [user?.colaboradorId],
+  );
+
+  const logDeliverableViewed = useCallback(
+    (row: { storagePath: string; nomeFicheiro: string; actividadeId?: number; entregavelId?: number | null }) => {
+      if (!row.actividadeId || !user?.colaboradorId) return;
+      if (!isSupabaseConfigured() || !supabase) return;
+      (supabase.from('produtividade_eventos') as any)
+        .insert({
+          actividade_id: row.actividadeId,
+          tipo: 'deliverable_viewed',
+          actor_profile_id: null,
+          actor_colaborador_id: user.colaboradorId,
+          payload: {
+            nome: row.nomeFicheiro,
+            entregavel_id: row.entregavelId ?? null,
+            storage_path: row.storagePath,
+          },
+        })
+        .then(({ error }: { error?: { message?: string } | null }) => {
+          if (error) console.warn('deliverable_viewed event failed', error?.message ?? error);
+        })
+        .catch((e: unknown) => {
+          console.warn('deliverable_viewed event failed', e);
+        });
+    },
+    [user?.colaboradorId],
   );
 
   const openOfficeViewerForEntregavel = useCallback(
-    (row: { storagePath: string; nomeFicheiro: string; mimeType?: string | null }) => {
+    (row: {
+      storagePath: string;
+      nomeFicheiro: string;
+      mimeType?: string | null;
+      actividadeId?: number;
+      entregavelId?: number | null;
+    }) => {
       if (!isOfficePreviewableEntregavel(row)) {
         toast.error('Este ficheiro não suporta pré-visualização.');
         return;
@@ -878,15 +959,22 @@ export default function MinhasActividadesPage({
         toast.error('Não foi possível obter o link de visualização.');
         return;
       }
+      logDeliverableViewed(row);
       setViewerTitle(row.nomeFicheiro || 'Documento');
       setViewerUrl(officeViewerUrlFromPublicUrl(publicUrl));
       setViewerOpen(true);
     },
-    [],
+    [logDeliverableViewed],
   );
 
   const openPdfViewerForEntregavel = useCallback(
-    (row: { storagePath: string; nomeFicheiro: string; mimeType?: string | null }) => {
+    (row: {
+      storagePath: string;
+      nomeFicheiro: string;
+      mimeType?: string | null;
+      actividadeId?: number;
+      entregavelId?: number | null;
+    }) => {
       if (!isPdfPreviewableEntregavel(row)) {
         toast.error('Este ficheiro não suporta pré-visualização.');
         return;
@@ -901,11 +989,12 @@ export default function MinhasActividadesPage({
         toast.error('Não foi possível obter o link de visualização.');
         return;
       }
+      logDeliverableViewed(row);
       setViewerTitle(row.nomeFicheiro || 'PDF');
       setViewerUrl(publicUrl);
       setViewerOpen(true);
     },
-    [],
+    [logDeliverableViewed],
   );
 
   useEffect(() => {
@@ -923,6 +1012,8 @@ export default function MinhasActividadesPage({
     if (e.tipo === 'priority_changed') return `Mudou a prioridade: ${p.from ?? '—'} → ${p.to ?? '—'}`;
     if (e.tipo === 'deadline_changed') return `Mudou o prazo: ${p.from ?? '—'} → ${p.to ?? '—'}`;
     if (e.tipo === 'deliverable_uploaded') return 'anexou um ficheiro';
+    if (e.tipo === 'deliverable_downloaded') return `descarregou o ficheiro ${p.nome ? `«${p.nome}»` : ''}`.trim();
+    if (e.tipo === 'deliverable_viewed') return `visualizou o ficheiro ${p.nome ? `«${p.nome}»` : ''}`.trim();
     if (e.tipo === 'comment_added') return 'Adicionou um comentário';
     return e.tipo;
   }, []);
@@ -2347,7 +2438,15 @@ export default function MinhasActividadesPage({
                               className="shrink-0"
                               aria-label={`Ver ${eRow.nomeFicheiro}`}
                               disabled={!eRow.storagePath}
-                              onClick={() => openPdfViewerForEntregavel(eRow)}
+                              onClick={() =>
+                                openPdfViewerForEntregavel({
+                                  storagePath: eRow.storagePath,
+                                  nomeFicheiro: eRow.nomeFicheiro,
+                                  mimeType: eRow.mimeType,
+                                  actividadeId: detailsActivity.id,
+                                  entregavelId: eRow.id,
+                                })
+                              }
                             >
                               <Eye className="h-5 w-5" />
                             </Button>
@@ -2360,7 +2459,15 @@ export default function MinhasActividadesPage({
                               className="shrink-0"
                               aria-label={`Ver ${eRow.nomeFicheiro}`}
                               disabled={!eRow.storagePath}
-                              onClick={() => openOfficeViewerForEntregavel(eRow)}
+                              onClick={() =>
+                                openOfficeViewerForEntregavel({
+                                  storagePath: eRow.storagePath,
+                                  nomeFicheiro: eRow.nomeFicheiro,
+                                  mimeType: eRow.mimeType,
+                                  actividadeId: detailsActivity.id,
+                                  entregavelId: eRow.id,
+                                })
+                              }
                             >
                               <Eye className="h-5 w-5" />
                             </Button>
@@ -2372,7 +2479,14 @@ export default function MinhasActividadesPage({
                               className="shrink-0"
                               aria-label={`Descarregar ${eRow.nomeFicheiro}`}
                               disabled={!eRow.storagePath}
-                              onClick={() => downloadEntregavelFicheiro(eRow)}
+                              onClick={() =>
+                                downloadEntregavelFicheiro({
+                                  storagePath: eRow.storagePath,
+                                  nomeFicheiro: eRow.nomeFicheiro,
+                                  actividadeId: detailsActivity.id,
+                                  entregavelId: eRow.id,
+                                })
+                              }
                             >
                               <Download className="h-5 w-5" />
                             </Button>
@@ -2523,6 +2637,8 @@ export default function MinhasActividadesPage({
                                               storagePath: deliverablePath,
                                               nomeFicheiro: deliverableNome!,
                                               mimeType: deliverableMime,
+                                              actividadeId: detailsActivity.id,
+                                              entregavelId: linked?.id ?? null,
                                             })
                                           }
                                         >
@@ -2541,6 +2657,8 @@ export default function MinhasActividadesPage({
                                               storagePath: deliverablePath,
                                               nomeFicheiro: deliverableNome!,
                                               mimeType: deliverableMime,
+                                              actividadeId: detailsActivity.id,
+                                              entregavelId: linked?.id ?? null,
                                             })
                                           }
                                         >
@@ -2557,6 +2675,8 @@ export default function MinhasActividadesPage({
                                           downloadEntregavelFicheiro({
                                             storagePath: deliverablePath,
                                             nomeFicheiro: deliverableNome!,
+                                            actividadeId: detailsActivity.id,
+                                            entregavelId: linked?.id ?? null,
                                           })
                                         }
                                       >

@@ -728,6 +728,8 @@ export type ProdutividadeEventoTipo =
   | 'priority_changed'
   | 'deadline_changed'
   | 'deliverable_uploaded'
+  | 'deliverable_downloaded'
+  | 'deliverable_viewed'
   | 'comment_added';
 
 export interface ProdutividadeEvento {
