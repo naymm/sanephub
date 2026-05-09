@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { HardDriveDownload, Loader2, Play, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Clock, HardDriveDownload, Loader2, Play, RefreshCw, ShieldAlert } from 'lucide-react';
 import { formatDate } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
 
@@ -157,7 +157,20 @@ export default function BackupsAdminPage() {
     return () => clearInterval(id);
   }, [load, runs]);
 
-  const backupInFlight = runs.some(r => ['queued', 'running'].includes(r.status));
+  /** Sem este processo no servidor, pedidos manuais ficam em «queued» indefinidamente. */
+  const QUEUE_STALE_MS = 90_000;
+
+  const hasRunning = useMemo(() => runs.some(r => r.status === 'running'), [runs]);
+  const hasQueued = useMemo(() => runs.some(r => r.status === 'queued'), [runs]);
+
+  const oldestQueuedAgeMs = useMemo(() => {
+    const q = runs.filter(r => r.status === 'queued');
+    if (!q.length) return null;
+    const oldest = Math.min(...q.map(r => new Date(r.created_at).getTime()));
+    return Date.now() - oldest;
+  }, [runs]);
+
+  const queueLooksStuck = hasQueued && !hasRunning && oldestQueuedAgeMs != null && oldestQueuedAgeMs > QUEUE_STALE_MS;
 
   const lastRun = useMemo(() => runs[0], [runs]);
 
@@ -197,7 +210,57 @@ export default function BackupsAdminPage() {
     try {
       const { error } = await supabase.rpc('erp_admin_request_backup');
       if (error) throw error;
-      toast.success('Pedido de backup colocado na fila. Procure corrida Pendente/em execução.');
+
+      const sseBase = (import.meta.env.VITE_SSE_URL as string | undefined)?.replace(/\/$/, '');
+      const triggerGateway =
+        import.meta.env.VITE_BACKUP_TRIGGER_VIA_GATEWAY === 'true' ||
+        import.meta.env.VITE_BACKUP_TRIGGER_VIA_GATEWAY === '1';
+
+      if (triggerGateway && sseBase) {
+        const { data: sess } = await supabase.auth.getSession();
+        const token = sess.session?.access_token;
+        if (!token) {
+          toast.warning('Pedido na fila; não há token de sessão para o gateway executar o processador.');
+        } else {
+          const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+          const sseTok = import.meta.env.VITE_SSE_TOKEN as string | undefined;
+          if (sseTok) headers['X-SSE-Token'] = sseTok;
+          try {
+            const res = await fetch(`${sseBase}/backups/process-queue`, { method: 'POST', headers });
+            const body = (await res.json().catch(() => null)) as {
+              ok?: boolean;
+              error?: string;
+              stderr?: string;
+              exitCode?: number;
+            } | null;
+            if (!res.ok) {
+              toast.error(
+                body?.error ??
+                  `O gateway respondeu HTTP ${res.status}. O pedido ficou na fila — veja logs do sse-gateway ou use cron.`,
+              );
+            } else if (body && body.ok === false) {
+              const hint = (body.stderr ?? '').trim().slice(0, 280);
+              toast.error(
+                hint
+                  ? `O script terminou com erro (código ${String(body.exitCode)}): ${hint}`
+                  : `O script terminou com código ${String(body.exitCode ?? '?')}. Verifique .env.backup e logs no servidor.`,
+              );
+            } else {
+              toast.success('Pedido na fila e processador executado no servidor.');
+            }
+          } catch (e) {
+            toast.warning(
+              `Pedido na fila, mas o gateway não respondeu (${e instanceof Error ? e.message : 'rede/CORS'}). ` +
+                'Confirme `npm run sse:gateway` no host dos backups e CORS, ou agende cron.',
+            );
+          }
+        }
+      } else {
+        toast.success(
+          'Pedido na fila. Para executar já: cron `process-backup-queue.sh`, ou defina `VITE_BACKUP_TRIGGER_VIA_GATEWAY=true` com o sse-gateway no mesmo servidor.',
+        );
+      }
+
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível pedir o backup.');
@@ -256,6 +319,21 @@ export default function BackupsAdminPage() {
         </AlertDescription>
       </Alert>
 
+      {queueLooksStuck ? (
+        <Alert className="border-amber-500/45 bg-amber-50/90 text-foreground dark:bg-amber-950/35 dark:border-amber-500/40">
+          <Clock className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+          <AlertTitle className="text-amber-950 dark:text-amber-100">Fila manual sem processador</AlertTitle>
+          <AlertDescription className="text-amber-950/90 dark:text-amber-100/90">
+            O pedido está na base como «pendente», mas{' '}
+            <strong>nada no servidor está a executar</strong> <code className="text-xs">process-backup-queue.sh</code>.{' '}
+            Corra esse script no mesmo host onde definiu <code className="text-xs">BACKUP_DATABASE_URL</code> e{' '}
+            <code className="text-xs">BACKUP_LOCAL_ROOT</code>, ou agende-o no cron (ex.: cada minuto). Alternativa:{' '}
+            <code className="text-xs">VITE_BACKUP_TRIGGER_VIA_GATEWAY=true</code> com o <code className="text-xs">sse-gateway</code> a correr nesse
+            mesmo host. Sem isso, o estado não muda. Ver separador <strong>Operações</strong>.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="pb-2">
@@ -292,18 +370,29 @@ export default function BackupsAdminPage() {
             ) : (
               <p className="text-sm text-muted-foreground">Sem histórico. Corra o primeiro backup no servidor ou peça corrida manual.</p>
             )}
-            {backupInFlight ? (
+            {hasRunning ? (
               <div className="space-y-2">
                 <p className="text-xs font-medium flex items-center gap-2">
-                  <Loader2 className="h-3 w-3 animate-spin" /> A processar corrida…
+                  <Loader2 className="h-3 w-3 animate-spin" /> Backup em execução no servidor…
                 </p>
                 <div
                   role="progressbar"
-                  aria-label="À espera da conclusão no servidor"
+                  aria-label="Backup em curso"
                   className="h-1 w-full rounded-full bg-primary/15 overflow-hidden"
                 >
                   <div className="h-full w-2/5 rounded-full bg-primary/55 motion-safe:animate-pulse" />
                 </div>
+              </div>
+            ) : hasQueued ? (
+              <div className="rounded-md border border-dashed border-muted-foreground/35 bg-muted/25 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 shrink-0" /> Na fila — à espera do processador
+                </p>
+                <p>
+                  O ERP já gravou o pedido. No servidor, execute <code className="text-[11px] bg-background/80 px-1 rounded">./process-backup-queue.sh</code> (com{' '}
+                  <code className="text-[11px] bg-background/80 px-1 rounded">.env.backup</code> carregado) ou configure cron para o
+                  correr periodicamente.
+                </p>
               </div>
             ) : null}
           </CardContent>
@@ -312,7 +401,10 @@ export default function BackupsAdminPage() {
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Executar backup</CardTitle>
-            <CardDescription>Coloca corrida manual na fila (processamento via cron/systemd no servidor).</CardDescription>
+            <CardDescription>
+              Coloca o pedido na base (fila). <strong>Só avança</strong> quando o servidor executar{' '}
+              <code className="text-[11px]">process-backup-queue.sh</code> — sem isso fica «Pendente» para sempre.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Button
@@ -473,6 +565,35 @@ export default function BackupsAdminPage() {
               <code>ERP_BACKUPS</code>.
             </AlertDescription>
           </Alert>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Disparo imediato a partir do ERP (opcional)</CardTitle>
+              <CardDescription>
+                O botão «Executar backup agora» só grava na base; por defeito precisa de cron. Para o mesmo clique também correr{' '}
+                <code className="text-[11px]">process-backup-queue.sh</code> no servidor:
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <ol className="list-decimal pl-5 space-y-1">
+                <li>
+                  No servidor com Docker/Supabase e <code className="text-xs">scripts/backups/.env.backup</code>, mantenha{' '}
+                  <code className="text-xs">npm run sse:gateway</code> (ou systemd) a correr.
+                </li>
+                <li>
+                  No build do frontend: <code className="text-xs">VITE_SSE_URL</code> apontando para esse gateway (público ou via proxy) e{' '}
+                  <code className="text-xs">VITE_BACKUP_TRIGGER_VIA_GATEWAY=true</code>.
+                </li>
+                <li>
+                  Se usar <code className="text-xs">SSE_GATEWAY_SECRET</code>, defina também <code className="text-xs">VITE_SSE_TOKEN</code> (o POST envia{' '}
+                  <code className="text-xs">X-SSE-Token</code>).
+                </li>
+              </ol>
+              <p className="text-xs pt-1">
+                O gateway valida o JWT do utilizador e exige perfil <strong>Admin</strong> antes de executar o script.
+              </p>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>

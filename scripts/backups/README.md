@@ -34,6 +34,18 @@ Aplicar a migração Supabase correspondente ao módulo `erp_backup_*` (ver `sup
 2. Em até 60s o cron do `process-backup-queue.sh` bloqueia a linha (`running`) e lança `backup.sh --from-queue-id <uuid>`.
 3. O estado volta a aparecer no painel quando o script finaliza.
 
+**Se o painel ficar eternamente em «Pendente na fila»:** o processador não está a correr. O browser **não** executa backups — tem de haver `process-backup-queue.sh` no servidor (cron ou uma execução manual em SSH).
+
+### Alternativa: mesmo clique no ERP dispara o script (opcional)
+
+Se o processo Node **`npm run sse:gateway`** correr no **mesmo servidor** que os scripts de backup (com `scripts/backups/.env.backup` correcto):
+
+1. No build do frontend: `VITE_SSE_URL` (URL do gateway) e `VITE_BACKUP_TRIGGER_VIA_GATEWAY=true`.
+2. Com `SSE_GATEWAY_SECRET`, defina também `VITE_SSE_TOKEN` (o POST envia `X-SSE-Token`).
+3. O endpoint `POST /backups/process-queue` valida o JWT do utilizador e exige perfil **Admin**, depois executa `process-backup-queue.sh`.
+
+Variável opcional no host do gateway: `BACKUP_SCRIPTS_DIR` (caminho absoluto para a pasta `scripts/backups` se não for a relativa ao repositório).
+
 Se não configurar cron da fila, use manualmente na shell:
 
 ```bash
