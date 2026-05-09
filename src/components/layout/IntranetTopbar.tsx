@@ -29,6 +29,7 @@ import {
   UserCircle,
   Users,
   Package,
+  HardDriveDownload,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -442,6 +443,10 @@ export function IntranetTopbar() {
                       <Layers className="mr-2 h-4 w-4" />
                       Módulos e recursos
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => navigate('/configuracoes/backups')}>
+                      <HardDriveDownload className="mr-2 h-4 w-4" />
+                      Backups
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => navigate('/configuracoes')}>
                       Configurações
@@ -534,6 +539,10 @@ export function IntranetTopbar() {
                   <DropdownMenuItem onClick={() => navigate('/configuracoes/modulos-recursos')}>
                     <Layers className="mr-2 h-4 w-4" />
                     Módulos e recursos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/configuracoes/backups')}>
+                    <HardDriveDownload className="mr-2 h-4 w-4" />
+                    Backups
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
                     <Settings className="mr-2 h-4 w-4" />

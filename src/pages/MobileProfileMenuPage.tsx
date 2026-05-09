@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  HardDriveDownload,
   Layers,
   LogOut,
   Lock,
@@ -165,6 +166,7 @@ export default function MobileProfileMenuPage() {
             <div className="my-1 border-t border-border/60 md:my-2" />
             <div className="flex flex-col gap-2">
               <MenuRow to="/configuracoes/modulos-recursos" label="Módulos e recursos" icon={Layers} />
+              <MenuRow to="/configuracoes/backups" label="Backups" icon={HardDriveDownload} />
               <MenuRow to="/configuracoes" label="Configurações" icon={Settings} />
             </div>
           </>

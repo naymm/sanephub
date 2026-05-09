@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
   Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock,   ShieldAlert, FolderArchive, Layers,
-  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator, Package
+  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator, Package, HardDriveDownload
 } from 'lucide-react';
 
 interface NavItem {
@@ -317,6 +317,10 @@ export function Sidebar() {
             <NavLink to="/configuracoes/modulos-recursos" className={cn("sidebar-item", isActive('/configuracoes/modulos-recursos') ? "sidebar-item-active" : "sidebar-item-inactive")}>
               <Layers className="h-4 w-4" />
               <span>Módulos e recursos</span>
+            </NavLink>
+            <NavLink to="/configuracoes/backups" className={cn("sidebar-item", isActive('/configuracoes/backups') ? "sidebar-item-active" : "sidebar-item-inactive")}>
+              <HardDriveDownload className="h-4 w-4" />
+              <span>Backups</span>
             </NavLink>
             <NavLink to="/configuracoes" className={cn("sidebar-item", isActive('/configuracoes') ? "sidebar-item-active" : "sidebar-item-inactive")}>
               <Settings className="h-4 w-4" />

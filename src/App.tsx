@@ -25,6 +25,7 @@ import DeclaracoesPage from "@/modules/capital-humano/DeclaracoesPage";
 import ProcessamentoSalarialPage from "@/modules/capital-humano/ProcessamentoSalarialPage";
 import AssiduidadePage from "@/modules/capital-humano/AssiduidadePage";
 const TimePunchesPage = lazy(() => import("@/modules/capital-humano/TimePunchesPage"));
+const BackupsAdminPage = lazy(() => import("@/modules/config/BackupsAdminPage"));
 import GeofencesPage from "@/modules/capital-humano/GeofencesPage";
 import RequisicoesPage from "@/modules/financas/RequisicoesPage";
 import TesourariaPage from "@/modules/financas/TesourariaPage";
@@ -221,6 +222,7 @@ const App = () => (
                   <Route path="/configuracoes/departamentos" element={<DepartamentosPage />} />
                   <Route path="/configuracoes/departamentos/novo" element={<DepartamentosPage />} />
                   <Route path="/configuracoes/modulos-recursos" element={<ModulosRecursosPage />} />
+                  <Route path="/configuracoes/backups" element={<BackupsAdminPage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

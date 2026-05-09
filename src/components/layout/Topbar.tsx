@@ -59,6 +59,7 @@ const routeTitles: Record<string, string> = {
   '/configuracoes/utilizadores': 'Utilizadores',
   '/configuracoes/departamentos': 'Departamentos',
   '/configuracoes/modulos-recursos': 'Módulos e recursos',
+  '/configuracoes/backups': 'Backups e restauro',
   '/portal/dados': 'Os Meus Dados',
   '/portal/ferias': 'As Minhas Férias',
   '/portal/faltas': 'As Minhas Faltas',
