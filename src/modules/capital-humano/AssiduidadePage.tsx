@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
+import { useTenant } from '@/context/TenantContext';
 import type { AtrasoAssiduidade, LicencaAssiduidade, LicencaAssiduidadeTipo } from '@/types';
 import { podeJustificarAtrasoMesmoDia } from '@/services/assiduidade/attendanceValidation';
 import { formatDate } from '@/utils/formatters';
@@ -27,9 +28,19 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { ExternalLink, Pencil, Plus, ShieldCheck } from 'lucide-react';
+import { EmployeeSelect } from '@/components/shared/EmployeeSelect';
+
+type LicencaFormDraft = Omit<Partial<LicencaAssiduidade>, 'colaboradorId'> & {
+  colaboradorId: number | null;
+};
+
+type AtrasoFormDraft = Omit<Partial<AtrasoAssiduidade>, 'colaboradorId'> & {
+  colaboradorId: number | null;
+};
 
 export default function AssiduidadePage() {
   const { user } = useAuth();
+  const { currentEmpresaId } = useTenant();
   const {
     colaboradores,
     assiduidadeLicencas,
@@ -41,14 +52,23 @@ export default function AssiduidadePage() {
     updateAssiduidadeAtraso,
   } = useData();
 
+  const empresaIdForSearch =
+    currentEmpresaId === 'consolidado'
+      ? typeof user?.empresaId === 'number'
+        ? user.empresaId
+        : null
+      : currentEmpresaId;
+
+  const selectDisabled = currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number';
+
   const [colabFilter, setColabFilter] = useState<number | 'todos'>('todos');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
 
   const [licOpen, setLicOpen] = useState(false);
   const [licEdit, setLicEdit] = useState<LicencaAssiduidade | null>(null);
-  const [licForm, setLicForm] = useState<Partial<LicencaAssiduidade>>({
-    colaboradorId: 0,
+  const [licForm, setLicForm] = useState<LicencaFormDraft>({
+    colaboradorId: null,
     empresaId: 0,
     tipo: 'maternidade',
     dataInicio: new Date().toISOString().slice(0, 10),
@@ -59,8 +79,8 @@ export default function AssiduidadePage() {
   const [atrOpen, setAtrOpen] = useState(false);
   const [atrJustify, setAtrJustify] = useState<AtrasoAssiduidade | null>(null);
   const [atrJustText, setAtrJustText] = useState('');
-  const [atrForm, setAtrForm] = useState<Partial<AtrasoAssiduidade>>({
-    colaboradorId: 0,
+  const [atrForm, setAtrForm] = useState<AtrasoFormDraft>({
+    colaboradorId: null,
     empresaId: 0,
     dataRef: new Date().toISOString().slice(0, 10),
     minutosAtraso: 0,
@@ -94,11 +114,10 @@ export default function AssiduidadePage() {
   }, [assiduidadeAtrasos, colabFilter, dataInicio, dataFim]);
 
   const openNovaLicenca = () => {
-    const c0 = colaboradores[0];
     setLicEdit(null);
     setLicForm({
-      colaboradorId: c0?.id ?? 0,
-      empresaId: c0?.empresaId ?? 0,
+      colaboradorId: null,
+      empresaId: 0,
       tipo: 'maternidade',
       dataInicio: new Date().toISOString().slice(0, 10),
       dataFim: new Date().toISOString().slice(0, 10),
@@ -114,15 +133,21 @@ export default function AssiduidadePage() {
   };
 
   const guardarLicenca = async () => {
-    const col = colaboradores.find(c => c.id === licForm.colaboradorId);
-    if (!col) {
+    const cid = licForm.colaboradorId;
+    if (cid == null || Number.isNaN(cid)) {
       toast.error('Seleccione um colaborador.');
+      return;
+    }
+    const colCtx = colaboradores.find((c) => c.id === cid);
+    const empresaId = colCtx?.empresaId ?? licForm.empresaId ?? 0;
+    if (!empresaId) {
+      toast.error('Não foi possível determinar a empresa do colaborador. Volte a seleccioná-lo.');
       return;
     }
     const payload: Partial<LicencaAssiduidade> = {
       ...licForm,
-      colaboradorId: col.id,
-      empresaId: col.empresaId,
+      colaboradorId: cid,
+      empresaId,
       tipo: (licForm.tipo as LicencaAssiduidadeTipo) ?? 'maternidade',
       dataInicio: String(licForm.dataInicio).slice(0, 10),
       dataFim: String(licForm.dataFim).slice(0, 10),
@@ -149,10 +174,9 @@ export default function AssiduidadePage() {
   };
 
   const openNovoAtraso = () => {
-    const c0 = colaboradores[0];
     setAtrForm({
-      colaboradorId: c0?.id ?? 0,
-      empresaId: c0?.empresaId ?? 0,
+      colaboradorId: null,
+      empresaId: 0,
       dataRef: new Date().toISOString().slice(0, 10),
       minutosAtraso: 15,
       justificado: false,
@@ -162,17 +186,25 @@ export default function AssiduidadePage() {
   };
 
   const guardarAtraso = async () => {
-    const col = colaboradores.find(c => c.id === atrForm.colaboradorId);
-    if (!col) {
+    const cid = atrForm.colaboradorId;
+    if (cid == null || Number.isNaN(cid)) {
       toast.error('Seleccione um colaborador.');
+      return;
+    }
+    const colCtx = colaboradores.find((c) => c.id === cid);
+    const empresaId = colCtx?.empresaId ?? atrForm.empresaId ?? 0;
+    if (!empresaId) {
+      toast.error('Não foi possível determinar a empresa do colaborador. Volte a seleccioná-lo.');
       return;
     }
     const dataRef = String(atrForm.dataRef).slice(0, 10);
     const minutos = Math.max(0, Math.floor(Number(atrForm.minutosAtraso) || 0));
-    const existente = assiduidadeAtrasos.find(a => a.colaboradorId === col.id && String(a.dataRef).slice(0, 10) === dataRef);
+    const existente = assiduidadeAtrasos.find(
+      (a) => a.colaboradorId === cid && String(a.dataRef).slice(0, 10) === dataRef,
+    );
     const base: Partial<AtrasoAssiduidade> = {
-      colaboradorId: col.id,
-      empresaId: col.empresaId,
+      colaboradorId: cid,
+      empresaId,
       dataRef,
       minutosAtraso: minutos,
       registadoPor: user?.nome ?? '',
@@ -399,25 +431,35 @@ export default function AssiduidadePage() {
           <div className="space-y-3">
             <div className="space-y-2">
               <Label>Colaborador</Label>
-              <Select
-                value={licForm.colaboradorId ? String(licForm.colaboradorId) : ''}
-                onValueChange={v => {
-                  const id = Number(v);
-                  const col = colaboradores.find(c => c.id === id);
-                  setLicForm(f => ({ ...f, colaboradorId: id, empresaId: col?.empresaId ?? f.empresaId }));
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar" />
-                </SelectTrigger>
-                <SelectContent>
-                  {colaboradores.map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EmployeeSelect
+                valueId={licForm.colaboradorId}
+                onChange={(id, opt) =>
+                  setLicForm((f) => ({
+                    ...f,
+                    colaboradorId: id,
+                    empresaId: id == null ? 0 : (opt?.empresaId ?? f.empresaId ?? 0),
+                  }))
+                }
+                empresaId={empresaIdForSearch}
+                disabled={selectDisabled || !!licEdit}
+                placeholder={
+                  selectDisabled
+                    ? 'Seleccione uma empresa específica…'
+                    : licEdit
+                      ? 'Colaborador da licença'
+                      : 'Pesquisar colaborador (mín. 4 letras)…'
+                }
+              />
+              {selectDisabled ? (
+                <p className="text-xs text-muted-foreground">
+                  Em modo grupo, escolha uma empresa no cabeçalho ou utilize uma conta com empresa definida.
+                </p>
+              ) : null}
+              {licEdit ? (
+                <p className="text-xs text-muted-foreground">
+                  O colaborador não pode ser alterado na edição. Remova a licença e crie outra para outra pessoa.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Tipo</Label>
@@ -453,7 +495,12 @@ export default function AssiduidadePage() {
             <Button variant="outline" onClick={() => setLicOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={guardarLicenca}>Guardar</Button>
+            <Button
+              onClick={guardarLicenca}
+              disabled={licForm.colaboradorId == null}
+            >
+              Guardar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -467,25 +514,28 @@ export default function AssiduidadePage() {
           <div className="space-y-3">
             <div className="space-y-2">
               <Label>Colaborador</Label>
-              <Select
-                value={atrForm.colaboradorId ? String(atrForm.colaboradorId) : ''}
-                onValueChange={v => {
-                  const id = Number(v);
-                  const col = colaboradores.find(c => c.id === id);
-                  setAtrForm(f => ({ ...f, colaboradorId: id, empresaId: col?.empresaId ?? f.empresaId }));
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar" />
-                </SelectTrigger>
-                <SelectContent>
-                  {colaboradores.map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EmployeeSelect
+                valueId={atrForm.colaboradorId}
+                onChange={(id, opt) =>
+                  setAtrForm((f) => ({
+                    ...f,
+                    colaboradorId: id,
+                    empresaId: id == null ? 0 : (opt?.empresaId ?? f.empresaId ?? 0),
+                  }))
+                }
+                empresaId={empresaIdForSearch}
+                disabled={selectDisabled}
+                placeholder={
+                  selectDisabled
+                    ? 'Seleccione uma empresa específica…'
+                    : 'Pesquisar colaborador (mín. 4 letras)…'
+                }
+              />
+              {selectDisabled ? (
+                <p className="text-xs text-muted-foreground">
+                  Em modo grupo, escolha uma empresa no cabeçalho ou utilize uma conta com empresa definida.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Dia</Label>
@@ -505,7 +555,9 @@ export default function AssiduidadePage() {
             <Button variant="outline" onClick={() => setAtrOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={guardarAtraso}>Guardar</Button>
+            <Button onClick={guardarAtraso} disabled={atrForm.colaboradorId == null}>
+              Guardar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

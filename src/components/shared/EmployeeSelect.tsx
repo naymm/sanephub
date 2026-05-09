@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -15,21 +15,38 @@ export type EmployeeOption = {
 type Props = {
   valueId: number | null;
   onChange: (nextId: number | null, option?: EmployeeOption | null) => void;
-  /** Empresa para pesquisa (obrigatória no contexto consolidado). */
   empresaId: number | null;
   placeholder?: string;
   disabled?: boolean;
-  /** Quantidade mínima de caracteres para pesquisar. Default 4. */
   minChars?: number;
-  /** Debounce em ms. Default 300. */
   debounceMs?: number;
-  /** Limite de resultados. Default 20. */
   limit?: number;
 };
 
 type CacheEntry = { options: EmployeeOption[]; ts: number };
+
 const CACHE_TTL_MS = 5 * 60_000;
 
+function cacheKey(empresaId: number | null, limit: number, qTrimmed: string) {
+  const q = qTrimmed.toLowerCase();
+  return `${empresaId ?? 'null'}::${limit}::${q}`;
+}
+
+async function rpcSearchEmployees(q: string, empresaId: number, limit: number): Promise<EmployeeOption[]> {
+  const { data, error } = await supabase.rpc('search_colaboradores', {
+    p_query: q,
+    p_empresa_id: empresaId,
+    p_limit: limit,
+  });
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as Array<{ id: number; nome: string; empresa_id: number }>;
+  return rows.map((r) => ({ id: Number(r.id), nome: String(r.nome), empresaId: Number(r.empresa_id) }));
+}
+
+/**
+ * Combobox pesquisável (Supabase RPC). Por defeito só pede dados após {minChars} caracteres + debounce.
+ * Lista limitada a {limit} pela API — adequado mesmo com milhares de colaboradores.
+ */
 export function EmployeeSelect({
   valueId,
   onChange,
@@ -47,98 +64,117 @@ export function EmployeeSelect({
   const [selected, setSelected] = useState<EmployeeOption | null>(null);
 
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
-  const lastRequestKeyRef = useRef<string>('');
-  const inFlightRef = useRef<number>(0);
-
-  const requestKey = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return `${empresaId ?? 'null'}::${limit}::${q}`;
-  }, [empresaId, limit, query]);
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
-    // manter label do seleccionado (evita ficar sem nome quando fecha/abre)
+    const qTrim = query.trim();
+    requestGenerationRef.current += 1;
+    const myGen = requestGenerationRef.current;
+
+    if (!open) {
+      return;
+    }
+    if (!qTrim.length || qTrim.length < minChars || !empresaId || disabled || !isSupabaseConfigured() || !supabase) {
+      setLoading(false);
+      setOptions([]);
+      return;
+    }
+
+    const ck = cacheKey(empresaId, limit, qTrim);
+    const cached = cacheRef.current.get(ck);
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      setLoading(false);
+      setOptions(cached.options);
+      return;
+    }
+
+    setLoading(false);
+    const tid = window.setTimeout(() => {
+      if (myGen !== requestGenerationRef.current) return;
+
+      const c2 = cacheRef.current.get(ck);
+      if (c2 && Date.now() - c2.ts < CACHE_TTL_MS) {
+        setOptions(c2.options);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      void rpcSearchEmployees(qTrim, empresaId, limit)
+        .then((mapped) => {
+          if (myGen !== requestGenerationRef.current) return;
+          cacheRef.current.set(ck, { options: mapped, ts: Date.now() });
+          setOptions(mapped);
+        })
+        .catch(() => {
+          if (myGen !== requestGenerationRef.current) return;
+          setOptions([]);
+        })
+        .finally(() => {
+          if (myGen !== requestGenerationRef.current) return;
+          setLoading(false);
+        });
+    }, debounceMs);
+
+    return () => window.clearTimeout(tid);
+  }, [open, query, minChars, debounceMs, empresaId, limit, disabled]);
+
+  const invalidateRequests = useCallback(() => {
+    requestGenerationRef.current += 1;
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
     if (valueId == null) {
       setSelected(null);
       return;
     }
     if (selected?.id === valueId) return;
-    const fromList = options.find(o => o.id === valueId);
-    if (fromList) setSelected(fromList);
-  }, [valueId, options, selected?.id]);
-
-  useEffect(() => {
-    if (!open) return;
-    const q = query.trim();
-    if (!q) {
-      setOptions([]);
+    const fromList = options.find((o) => o.id === valueId);
+    if (fromList) {
+      setSelected(fromList);
       return;
     }
-    if (q.length < minChars) {
-      setOptions([]);
-      return;
-    }
-    if (!empresaId || disabled) return;
     if (!isSupabaseConfigured() || !supabase) return;
-
-    // cache hit
-    const cached = cacheRef.current.get(requestKey);
-    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-      setOptions(cached.options);
-      return;
-    }
-    // evitar repetir a mesma query em loop
-    if (lastRequestKeyRef.current === requestKey) return;
-
-    setLoading(true);
-    const token = ++inFlightRef.current;
-    const t = window.setTimeout(() => {
-      lastRequestKeyRef.current = requestKey;
-      void (async () => {
-        try {
-          const { data, error } = await supabase.rpc('search_colaboradores', {
-            p_query: q,
-            p_empresa_id: empresaId,
-            p_limit: limit,
-          });
-          if (token !== inFlightRef.current) return;
-          if (error) throw new Error(error.message);
-          const rows = (data ?? []) as Array<{ id: number; nome: string; empresa_id: number }>;
-          const mapped: EmployeeOption[] = rows.map(r => ({ id: Number(r.id), nome: String(r.nome), empresaId: Number(r.empresa_id) }));
-          setOptions(mapped);
-          cacheRef.current.set(requestKey, { options: mapped, ts: Date.now() });
-        } catch {
-          setOptions([]);
-        } finally {
-          if (token === inFlightRef.current) setLoading(false);
-        }
-      })();
-    }, debounceMs);
-
-    return () => window.clearTimeout(t);
-  }, [open, query, minChars, debounceMs, empresaId, limit, disabled, requestKey]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from('colaboradores').select('id,nome,empresa_id').eq('id', valueId).maybeSingle();
+        if (cancelled || error || !data) return;
+        const row = data as Record<string, unknown>;
+        setSelected({
+          id: Number(row.id),
+          nome: String(row.nome ?? ''),
+          empresaId: Number(row.empresa_id ?? row.empresaId),
+        });
+      } catch {
+        /* noop */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [valueId, options, selected?.id]);
 
   const helperText = useMemo(() => {
     const q = query.trim();
-    if (!q) return `Digite pelo menos ${minChars} caracteres`;
+    if (!open) return null;
+    if (!q.length) return `Digite pelo menos ${minChars} caracteres`;
     if (q.length < minChars) return `Digite pelo menos ${minChars} caracteres`;
     if (!empresaId) return 'Seleccione uma empresa para pesquisar.';
     return null;
-  }, [query, minChars, empresaId]);
+  }, [open, query, minChars, empresaId]);
 
   return (
     <Popover
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
+        invalidateRequests();
         if (!v) {
-          // ao fechar, limpar input e estado transitório (evita “preso” num termo antigo)
           setQuery('');
           setOptions([]);
-          setLoading(false);
-          inFlightRef.current += 1; // invalida requests pendentes
-          lastRequestKeyRef.current = '';
         } else {
-          // ao abrir, começar sempre limpo
           setQuery('');
           setOptions([]);
         }
@@ -166,18 +202,19 @@ export function EmployeeSelect({
         <Command shouldFilter={false}>
           <CommandInput
             value={query}
-            onValueChange={setQuery}
+            onValueChange={(v) => setQuery(v)}
             placeholder={placeholder}
+            disabled={loading}
             autoFocus
           />
           <CommandList>
-            {helperText ? <CommandEmpty>{helperText}</CommandEmpty> : null}
-            {!helperText && !loading && options.length === 0 ? (
-              <CommandEmpty>Nenhum colaborador encontrado</CommandEmpty>
-            ) : null}
+            <CommandEmpty>
+              {helperText ??
+                (loading ? 'A pesquisar…' : query.trim().length >= minChars ? 'Nenhum colaborador encontrado' : `Digite pelo menos ${minChars} caracteres`)}
+            </CommandEmpty>
 
             <CommandGroup>
-              {valueId != null ? (
+              {valueId != null && !loading ? (
                 <CommandItem
                   value="__clear__"
                   onSelect={() => {
@@ -186,24 +223,27 @@ export function EmployeeSelect({
                     setOpen(false);
                   }}
                 >
-                  <Check className={cn('mr-2 h-4 w-4', 'opacity-0')} />
+                  <Check className={cn('mr-2 h-4 w-4 opacity-0')} aria-hidden />
                   <span className="truncate text-muted-foreground">Limpar selecção</span>
                 </CommandItem>
               ) : null}
-              {options.map((o) => (
-                <CommandItem
-                  key={o.id}
-                  value={String(o.id)}
-                  onSelect={() => {
-                    setSelected(o);
-                    onChange(o.id, o);
-                    setOpen(false);
-                  }}
-                >
-                  <Check className={cn('mr-2 h-4 w-4', valueId === o.id ? 'opacity-100' : 'opacity-0')} />
-                  <span className="truncate">{o.nome}</span>
-                </CommandItem>
-              ))}
+              {!loading && !helperText
+                ? options.map((o) => (
+                    <CommandItem
+                      key={o.id}
+                      value={`${o.id}-${o.nome}`}
+                      keywords={[String(o.id), o.nome]}
+                      onSelect={() => {
+                        setSelected(o);
+                        onChange(o.id, o);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check className={cn('mr-2 h-4 w-4', valueId === o.id ? 'opacity-100' : 'opacity-0')} />
+                      <span className="truncate">{o.nome}</span>
+                    </CommandItem>
+                  ))
+                : null}
             </CommandGroup>
           </CommandList>
         </Command>
@@ -211,4 +251,3 @@ export function EmployeeSelect({
     </Popover>
   );
 }
-

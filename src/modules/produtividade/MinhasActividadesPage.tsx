@@ -272,6 +272,31 @@ function EntregavelFileVisual({ mimeType }: { mimeType: string }) {
   return <File className={cn(box, 'text-muted-foreground')} aria-hidden />;
 }
 
+function isoToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function clampIso(iso: string): string {
+  if (!iso || iso.length < 10) return '';
+  return iso.slice(0, 10);
+}
+
+function parseIsoToUtcMs(iso: string): number {
+  if (!iso) return 0;
+  return new Date(`${iso}T00:00:00Z`).getTime();
+}
+
+function diffDays(aIso: string, bIso: string): number {
+  const a = parseIsoToUtcMs(aIso);
+  const b = parseIsoToUtcMs(bIso);
+  if (!a || !b) return 0;
+  return Math.round((a - b) / (24 * 60 * 60 * 1000));
+}
+
 const STATUS_KANBAN = ['Pendente', 'Em Progresso', 'Em aprovação', 'Concluída'] as const;
 type KanbanColumnId = (typeof STATUS_KANBAN)[number];
 
@@ -477,6 +502,17 @@ export default function MinhasActividadesPage({
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const [creating, setCreating] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportFrom, setReportFrom] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
+  const [reportTo, setReportTo] = useState<string>(() => isoToday());
+  const [reporting, setReporting] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completeTargetId, setCompleteTargetId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -513,6 +549,12 @@ export default function MinhasActividadesPage({
     if (typeof user?.empresaId === 'number') return user.empresaId;
     return null;
   }, [currentEmpresaId, user?.empresaId]);
+
+  const canExportAreaReport = useMemo(() => {
+    if (scope !== 'area') return false;
+    if (!user?.colaboradorId) return false;
+    return isDireccaoCargo || user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
+  }, [scope, user?.colaboradorId, user?.perfil, isDireccaoCargo]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -756,6 +798,122 @@ export default function MinhasActividadesPage({
     const pct = total === 0 ? 0 : Math.round((concluida / total) * 100);
     return { total, concluida, atrasada, emProgresso, pendente, pct };
   }, [myRows]);
+
+  async function exportAreaReportPdf() {
+    if (!canExportAreaReport) return;
+    const from = clampIso(reportFrom);
+    const to = clampIso(reportTo);
+    if (!from || !to) {
+      toast.error('Seleccione o período do relatório.');
+      return;
+    }
+    if (parseIsoToUtcMs(from) > parseIsoToUtcMs(to)) {
+      toast.error('Período inválido: a data inicial não pode ser maior que a final.');
+      return;
+    }
+
+    const today = isoToday();
+    const inRange = (iso: string) => parseIsoToUtcMs(iso) >= parseIsoToUtcMs(from) && parseIsoToUtcMs(iso) <= parseIsoToUtcMs(to);
+    const rows = myRows.filter((a) => inRange(a.dataActividade));
+
+    const total = rows.length;
+    const concluidas = rows.filter((a) => effectiveStatus(a) === 'Concluída').length;
+    const atrasadasAbertas = rows.filter((a) => effectiveStatus(a) === 'Atrasada').length;
+    const emAprovacao = rows.filter((a) => effectiveStatus(a) === 'Em aprovação').length;
+    const pct = total === 0 ? 0 : Math.round((concluidas / total) * 100);
+
+    const overdueDaysList = rows
+      .map((a) => {
+        const s = effectiveStatus(a);
+        if (s === 'Concluída') {
+          const doneIso = (a.concluidaEm ?? '').slice(0, 10);
+          if (!doneIso) return 0;
+          return Math.max(0, diffDays(doneIso, a.prazo));
+        }
+        if (s === 'Cancelada') return 0;
+        if (parseIsoToUtcMs(a.prazo) < parseIsoToUtcMs(today)) return diffDays(today, a.prazo);
+        return 0;
+      })
+      .filter((n) => Number.isFinite(n));
+    const avgOverdue = overdueDaysList.length ? Math.round((overdueDaysList.reduce((s, n) => s + n, 0) / overdueDaysList.length) * 10) / 10 : 0;
+
+    setReporting(true);
+    try {
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const title = `Relatório de Produtividade — ${areaFilter === 'all' ? 'Área (todas)' : `Área: ${areaFilter}`}`;
+      doc.setFontSize(14);
+      doc.text(title, 40, 40);
+      doc.setFontSize(10);
+      doc.text(`Período: ${from} → ${to}`, 40, 60);
+      doc.text(`Gerado em: ${new Date().toLocaleString('pt-PT')}`, 40, 76);
+
+      doc.setFontSize(11);
+      doc.text(
+        `Total: ${total}   Concluídas: ${concluidas}   Em aprovação: ${emAprovacao}   Atrasadas (abertas): ${atrasadasAbertas}   % conclusão: ${pct}%   Atraso médio (dias): ${avgOverdue}`,
+        40,
+        102,
+      );
+
+      const head = [[
+        'Data',
+        'Prazo',
+        'Status',
+        'Colaborador',
+        'Título',
+        'Prioridade',
+        'Categoria',
+        'Atraso (dias)',
+      ]];
+
+      const body = rows
+        .slice()
+        .sort((a, b) => a.dataActividade.localeCompare(b.dataActividade))
+        .map((a) => {
+          const s = effectiveStatus(a);
+          const name = colaboradorByIdRef.current.get(a.colaboradorId)?.nome ?? `#${a.colaboradorId}`;
+          let late = 0;
+          if (s === 'Concluída') {
+            const doneIso = (a.concluidaEm ?? '').slice(0, 10);
+            late = doneIso ? Math.max(0, diffDays(doneIso, a.prazo)) : 0;
+          } else if (s !== 'Cancelada' && parseIsoToUtcMs(a.prazo) < parseIsoToUtcMs(today)) {
+            late = diffDays(today, a.prazo);
+          }
+          return [
+            a.dataActividade,
+            a.prazo,
+            s,
+            name,
+            a.titulo,
+            a.prioridade,
+            a.categoria,
+            late ? String(late) : '',
+          ];
+        });
+
+      autoTable(doc as any, {
+        head,
+        body,
+        startY: 120,
+        styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
+        headStyles: { fillColor: [24, 24, 27] },
+        columnStyles: {
+          4: { cellWidth: 260 }, // Título
+          3: { cellWidth: 140 }, // Colaborador
+        },
+        margin: { left: 40, right: 40 },
+      });
+
+      doc.save(`relatorio-produtividade-${from}_a_${to}.pdf`);
+      setReportOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível gerar o PDF.');
+    } finally {
+      setReporting(false);
+    }
+  }
 
   const kanbanColumns = useMemo(() => {
     const cols: Record<KanbanColumnId, ProdutividadeActividade[]> = {
@@ -1754,6 +1912,42 @@ export default function MinhasActividadesPage({
               </div>
             </DialogContent>
           </Dialog>
+
+          {canExportAreaReport ? (
+            <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="secondary">
+                  Exportar PDF
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Exportar relatório (PDF)</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-3">
+                  <div className="grid gap-2">
+                    <Label>Data inicial</Label>
+                    <Input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Data final</Label>
+                    <Input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    O relatório respeita o seu acesso (Direcção) e mede produtividade por prazo/atrasos.
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <Button variant="secondary" onClick={() => setReportOpen(false)} disabled={reporting}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={exportAreaReportPdf} disabled={reporting}>
+                      {reporting ? 'A gerar…' : 'Gerar PDF'}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          ) : null}
         </div>
       </div>
 

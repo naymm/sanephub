@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { useTenant } from '@/context/TenantContext';
 import { useData } from '@/context/DataContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
@@ -28,6 +30,7 @@ import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { EmployeeSelect } from '@/components/shared/EmployeeSelect';
 
 const STATUS_OPTIONS: { value: StatusFerias | 'todos'; label: string }[] = [
   { value: 'todos', label: 'Todos' },
@@ -40,9 +43,25 @@ const STATUS_OPTIONS: { value: StatusFerias | 'todos'; label: string }[] = [
 const LIST_PATH = '/capital-humano/ferias';
 const NOVO_PATH = '/capital-humano/ferias/novo';
 
+type FeriasFormState = Omit<Ferias, 'id' | 'colaboradorId'> & {
+  /** null até o utilizador escolher (novo pedido). */
+  colaboradorId: number | null;
+};
+
 export default function FeriasPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { currentEmpresaId } = useTenant();
   const { ferias, addFerias, updateFerias, deleteFerias, colaboradores } = useData();
+
+  const empresaIdForSearch =
+    currentEmpresaId === 'consolidado'
+      ? typeof user?.empresaId === 'number'
+        ? user.empresaId
+        : null
+      : currentEmpresaId;
+
+  const selectDisabled = currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number';
   const isMobileViewport = useIsMobileViewport();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFerias | 'todos'>('todos');
@@ -53,8 +72,8 @@ export default function FeriasPage() {
   const [viewItem, setViewItem] = useState<Ferias | null>(null);
   const [rejectItem, setRejectItem] = useState<Ferias | null>(null);
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
-  const [form, setForm] = useState<Omit<Ferias, 'id'>>({
-    colaboradorId: 0,
+  const [form, setForm] = useState<FeriasFormState>({
+    colaboradorId: null,
     dataInicio: '',
     dataFim: '',
     dias: 0,
@@ -66,27 +85,27 @@ export default function FeriasPage() {
     setEditing(null);
     const today = new Date().toISOString().slice(0, 10);
     setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
+      colaboradorId: null,
       dataInicio: today,
       dataFim: today,
       dias: 1,
       status: 'Pendente',
       solicitadoEm: today,
     });
-  }, [colaboradores]);
+  }, []);
 
   const resetModal = useCallback(() => {
     setEditing(null);
     const today = new Date().toISOString().slice(0, 10);
     setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
+      colaboradorId: null,
       dataInicio: today,
       dataFim: today,
       dias: 1,
       status: 'Pendente',
       solicitadoEm: today,
     });
-  }, [colaboradores]);
+  }, []);
 
   const {
     isNovoRoute,
@@ -150,10 +169,21 @@ export default function FeriasPage() {
   };
 
   const save = async () => {
-    if (!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0) return;
+    if (
+      form.colaboradorId == null ||
+      Number.isNaN(form.colaboradorId) ||
+      !form.dataInicio ||
+      !form.dataFim ||
+      form.dias <= 0
+    )
+      return;
+    const payload: Omit<Ferias, 'id'> = {
+      ...form,
+      colaboradorId: form.colaboradorId,
+    };
     try {
-      if (editing) await updateFerias(editing.id, form);
-      else await addFerias(form);
+      if (editing) await updateFerias(editing.id, payload);
+      else await addFerias(payload);
       setDialogOpen(false);
       setEditing(null);
       if (isNovoRoute) {
@@ -363,17 +393,34 @@ export default function FeriasPage() {
             <div className="grid gap-4 py-2">
               <div className="space-y-2">
                 <Label>Colaborador</Label>
-                <Select
-                  value={form.colaboradorId ? String(form.colaboradorId) : ''}
-                  onValueChange={v => setForm(f => ({ ...f, colaboradorId: Number(v) }))}
-                >
-                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {colaboradores.filter(c => c.status === 'Activo').map(c => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.departamento}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <EmployeeSelect
+                  valueId={form.colaboradorId}
+                  onChange={(id) =>
+                    setForm((f) => ({
+                      ...f,
+                      colaboradorId: id,
+                    }))
+                  }
+                  empresaId={empresaIdForSearch}
+                  disabled={selectDisabled || !!editing}
+                  placeholder={
+                    selectDisabled
+                      ? 'Seleccione uma empresa específica…'
+                      : editing
+                        ? 'Colaborador do pedido'
+                        : 'Pesquisar colaborador (mín. 4 letras)…'
+                  }
+                />
+                {selectDisabled ? (
+                  <p className="text-xs text-muted-foreground">
+                    Em modo grupo, escolha uma empresa no cabeçalho ou utilize uma conta com empresa definida.
+                  </p>
+                ) : null}
+                {editing ? (
+                  <p className="text-xs text-muted-foreground">
+                    Para alterar o colaborador, remova o pedido e crie um novo.
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -404,7 +451,9 @@ export default function FeriasPage() {
               </Button>
               <Button
                 onClick={() => void save()}
-                disabled={!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0}
+                disabled={
+                  form.colaboradorId == null || !form.dataInicio || !form.dataFim || form.dias <= 0
+                }
               >
                 Guardar
               </Button>
@@ -423,7 +472,9 @@ export default function FeriasPage() {
               <Button
                 type="button"
                 className="min-h-11 flex-1 rounded-xl"
-                disabled={!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0}
+                disabled={
+                  form.colaboradorId == null || !form.dataInicio || !form.dataFim || form.dias <= 0
+                }
                 onClick={() => void save()}
               >
                 Guardar

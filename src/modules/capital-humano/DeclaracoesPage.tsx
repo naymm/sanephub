@@ -11,6 +11,7 @@ import {
 } from '@/components/shared/MobileCreateFormDialogContent';
 import { PdfPreviewDialog } from '@/components/PdfPreviewDialog';
 import { useAuth } from '@/context/AuthContext';
+import { useTenant } from '@/context/TenantContext';
 import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
@@ -28,23 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import { Search, Plus, Pencil, Eye, Check, FileDown, Trash2, ChevronsUpDown } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Check, FileDown, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
+import { EmployeeSelect } from '@/components/shared/EmployeeSelect';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
@@ -53,10 +41,24 @@ const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
 const LIST_PATH = '/capital-humano/declaracoes';
 const NOVO_PATH = '/capital-humano/declaracoes/novo';
 
+type DeclaracaoFormState = Omit<Omit<Declaracao, 'id'>, 'colaboradorId'> & {
+  colaboradorId: number | null;
+};
+
 export default function DeclaracoesPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { currentEmpresaId } = useTenant();
   const { declaracoes, addDeclaracao, updateDeclaracao, deleteDeclaracao, colaboradores } = useData();
+
+  const empresaIdForSearch =
+    currentEmpresaId === 'consolidado'
+      ? typeof user?.empresaId === 'number'
+        ? user.empresaId
+        : null
+      : currentEmpresaId;
+
+  const selectDisabled = currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number';
   const { addNotification } = useNotifications();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusDeclaracao | 'todos'>('todos');
@@ -64,36 +66,34 @@ export default function DeclaracoesPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [editing, setEditing] = useState<Declaracao | null>(null);
   const [viewItem, setViewItem] = useState<Declaracao | null>(null);
-  const [form, setForm] = useState<Omit<Declaracao, 'id'>>({
-    colaboradorId: 0,
+  const [form, setForm] = useState<DeclaracaoFormState>({
+    colaboradorId: null,
     tipo: 'Para Banco',
     dataPedido: new Date().toISOString().slice(0, 10),
     status: 'Pendente',
   });
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
-  const [colabSelectOpen, setColabSelectOpen] = useState(false);
 
   const prepareCreate = useCallback(() => {
     setEditing(null);
     setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
+      colaboradorId: null,
       tipo: 'Para Banco',
       dataPedido: new Date().toISOString().slice(0, 10),
       status: 'Pendente',
     });
-  }, [colaboradores]);
+  }, []);
 
   const resetModal = useCallback(() => {
     setEditing(null);
-    setColabSelectOpen(false);
     setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
+      colaboradorId: null,
       tipo: 'Para Banco',
       dataPedido: new Date().toISOString().slice(0, 10),
       status: 'Pendente',
     });
-  }, [colaboradores]);
+  }, []);
 
   const {
     isNovoRoute,
@@ -181,19 +181,21 @@ export default function DeclaracoesPage() {
   };
 
   const save = async () => {
-    if (!form.colaboradorId || !form.dataPedido) return;
+    const cid = form.colaboradorId;
+    if (cid == null || Number.isNaN(cid) || !form.dataPedido) return;
+    const payload: Omit<Declaracao, 'id'> = { ...form, colaboradorId: cid };
     try {
-      if (editing) await updateDeclaracao(editing.id, form);
+      if (editing) await updateDeclaracao(editing.id, payload);
       else {
-        await addDeclaracao(form);
-        const nome = getColabName(form.colaboradorId);
+        await addDeclaracao(payload);
+        const nome = getColabName(cid);
         addNotification({
           tipo: 'info',
           titulo: 'Declaração registada (RH)',
           mensagem: `Foi criada uma declaração (${form.tipo}) para ${nome}.`,
           moduloOrigem: 'capital-humano',
           destinatarioPerfil: ['Colaborador'],
-          destinatarioColaboradorId: form.colaboradorId,
+          destinatarioColaboradorId: cid,
           link: '/portal/declaracoes',
         });
       }
@@ -419,49 +421,29 @@ export default function DeclaracoesPage() {
             <div className="grid gap-4 py-2">
               <div className="space-y-2">
                 <Label>Colaborador</Label>
-                <Popover open={colabSelectOpen} onOpenChange={setColabSelectOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={colabSelectOpen}
-                      className="w-full justify-between font-normal"
-                    >
-                      {form.colaboradorId
-                        ? (colaboradores.find(c => c.id === form.colaboradorId)?.nome ?? 'Seleccionar')
-                        : 'Seleccionar colaborador'}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Pesquisar colaborador..." />
-                      <CommandList>
-                        <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
-                        <CommandGroup>
-                          {colaboradores.map(c => (
-                            <CommandItem
-                              key={c.id}
-                              value={c.nome}
-                              onSelect={() => {
-                                setForm(f => ({ ...f, colaboradorId: c.id }));
-                                setColabSelectOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  'mr-2 h-4 w-4',
-                                  form.colaboradorId === c.id ? 'opacity-100' : 'opacity-0'
-                                )}
-                              />
-                              {c.nome} — {c.departamento}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <EmployeeSelect
+                  valueId={form.colaboradorId}
+                  onChange={(id) => setForm((f) => ({ ...f, colaboradorId: id }))}
+                  empresaId={empresaIdForSearch}
+                  disabled={selectDisabled || !!editing}
+                  placeholder={
+                    selectDisabled
+                      ? 'Seleccione uma empresa específica…'
+                      : editing
+                        ? 'Colaborador da declaração'
+                        : 'Pesquisar colaborador (mín. 4 letras)…'
+                  }
+                />
+                {selectDisabled ? (
+                  <p className="text-xs text-muted-foreground">
+                    Em modo grupo, escolha uma empresa no cabeçalho ou utilize uma conta com empresa definida.
+                  </p>
+                ) : null}
+                {editing ? (
+                  <p className="text-xs text-muted-foreground">
+                    O colaborador não pode ser alterado na edição. Remova o registo e crie nova declaração para outra pessoa.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>Tipo</Label>
@@ -522,7 +504,10 @@ export default function DeclaracoesPage() {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={() => void save()} disabled={!form.colaboradorId || !form.dataPedido}>
+              <Button
+                onClick={() => void save()}
+                disabled={form.colaboradorId == null || !form.dataPedido}
+              >
                 Guardar
               </Button>
             </DialogFooter>
@@ -535,7 +520,7 @@ export default function DeclaracoesPage() {
               <Button
                 type="button"
                 className="min-h-11 flex-1 rounded-xl"
-                disabled={!form.colaboradorId || !form.dataPedido}
+                disabled={form.colaboradorId == null || !form.dataPedido}
                 onClick={() => void save()}
               >
                 Guardar

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, Loader2, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,22 @@ type Props = {
 type CacheEntry = { options: EmployeeOption[]; ts: number };
 const CACHE_TTL_MS = 5 * 60_000;
 
+function cacheKey(empresaId: number | null, limit: number, qTrimmed: string) {
+  const q = qTrimmed.toLowerCase();
+  return `${empresaId ?? 'null'}::${limit}::${q}`;
+}
+
+async function rpcSearchEmployees(q: string, empresaId: number, limit: number): Promise<EmployeeOption[]> {
+  const { data, error } = await supabase.rpc('search_colaboradores', {
+    p_query: q,
+    p_empresa_id: empresaId,
+    p_limit: limit,
+  });
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as Array<{ id: number; nome: string; empresa_id: number }>;
+  return rows.map((r) => ({ id: Number(r.id), nome: String(r.nome), empresaId: Number(r.empresa_id) }));
+}
+
 export function EmployeeMultiSelect({
   valueIds,
   onChange,
@@ -44,94 +60,139 @@ export function EmployeeMultiSelect({
   const [selectedById, setSelectedById] = useState<Map<number, EmployeeOption>>(new Map());
 
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
-  const lastRequestKeyRef = useRef<string>('');
-  const inFlightRef = useRef<number>(0);
+  const requestGenerationRef = useRef(0);
+  const selectedByIdRef = useRef(selectedById);
+  selectedByIdRef.current = selectedById;
 
-  const requestKey = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return `${empresaId ?? 'null'}::${limit}::${q}`;
-  }, [empresaId, limit, query]);
-
-  // manter labels dos seleccionados quando a opção vem em resultados
   useEffect(() => {
     if (valueIds.length === 0) {
-      if (selectedById.size) setSelectedById(new Map());
+      setSelectedById((prev) => (prev.size ? new Map() : prev));
       return;
     }
-    let changed = false;
-    const next = new Map(selectedById);
-    for (const o of options) {
-      if (valueIds.includes(o.id) && !next.has(o.id)) {
-        next.set(o.id, o);
-        changed = true;
+    setSelectedById((prev) => {
+      let next = prev;
+      let changed = false;
+      for (const o of options) {
+        if (valueIds.includes(o.id) && !next.has(o.id)) {
+          if (!changed) {
+            next = new Map(prev);
+            changed = true;
+          }
+          next.set(o.id, o);
+        }
       }
-    }
-    if (changed) setSelectedById(next);
+      return changed ? next : prev;
+    });
   }, [options, valueIds]);
 
   useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase || !empresaId) return;
+    if (!valueIds.length) return;
+
+    const missing = valueIds.filter((id) => !selectedByIdRef.current.has(id));
+    if (!missing.length) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from('colaboradores').select('id,nome,empresa_id').in('id', missing);
+        if (cancelled || error || !data?.length) return;
+        setSelectedById((prev) => {
+          const next = new Map(prev);
+          for (const row of data as Array<Record<string, unknown>>) {
+            const id = Number(row.id);
+            if (!valueIds.includes(id)) continue;
+            next.set(id, {
+              id,
+              nome: String(row.nome ?? ''),
+              empresaId: Number(row.empresa_id ?? row.empresaId),
+            });
+          }
+          return next;
+        });
+      } catch {
+        /* noop */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [valueIds, empresaId]);
+
+  useEffect(() => {
+    const qTrim = query.trim();
+    requestGenerationRef.current += 1;
+    const myGen = requestGenerationRef.current;
+
     if (!open) return;
-    const q = query.trim();
-    if (!q || q.length < minChars) {
+    if (!qTrim.length || qTrim.length < minChars || !empresaId || disabled || !isSupabaseConfigured() || !supabase) {
+      setLoading(false);
       setOptions([]);
       return;
     }
-    if (!empresaId || disabled) return;
-    if (!isSupabaseConfigured() || !supabase) return;
 
-    const cached = cacheRef.current.get(requestKey);
+    const ck = cacheKey(empresaId, limit, qTrim);
+    const cached = cacheRef.current.get(ck);
     if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      setLoading(false);
       setOptions(cached.options);
       return;
     }
-    if (lastRequestKeyRef.current === requestKey) return;
 
-    setLoading(true);
-    const token = ++inFlightRef.current;
-    const t = window.setTimeout(() => {
-      lastRequestKeyRef.current = requestKey;
-      void (async () => {
-        try {
-          const { data, error } = await supabase.rpc('search_colaboradores', {
-            p_query: q,
-            p_empresa_id: empresaId,
-            p_limit: limit,
-          });
-          if (token !== inFlightRef.current) return;
-          if (error) throw new Error(error.message);
-          const rows = (data ?? []) as Array<{ id: number; nome: string; empresa_id: number }>;
-          const mapped: EmployeeOption[] = rows.map(r => ({
-            id: Number(r.id),
-            nome: String(r.nome),
-            empresaId: Number(r.empresa_id),
-          }));
+    setLoading(false);
+    const tid = window.setTimeout(() => {
+      if (myGen !== requestGenerationRef.current) return;
+
+      const c2 = cacheRef.current.get(ck);
+      if (c2 && Date.now() - c2.ts < CACHE_TTL_MS) {
+        setOptions(c2.options);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      void rpcSearchEmployees(qTrim, empresaId, limit)
+        .then((mapped) => {
+          if (myGen !== requestGenerationRef.current) return;
+          cacheRef.current.set(ck, { options: mapped, ts: Date.now() });
           setOptions(mapped);
-          cacheRef.current.set(requestKey, { options: mapped, ts: Date.now() });
-        } catch {
+        })
+        .catch(() => {
+          if (myGen !== requestGenerationRef.current) return;
           setOptions([]);
-        } finally {
-          if (token === inFlightRef.current) setLoading(false);
-        }
-      })();
+        })
+        .finally(() => {
+          if (myGen !== requestGenerationRef.current) return;
+          setLoading(false);
+        });
     }, debounceMs);
 
-    return () => window.clearTimeout(t);
-  }, [open, query, minChars, debounceMs, empresaId, limit, disabled, requestKey]);
+    return () => window.clearTimeout(tid);
+  }, [open, query, minChars, debounceMs, empresaId, limit, disabled]);
+
+  const invalidateRequests = useCallback(() => {
+    requestGenerationRef.current += 1;
+    setLoading(false);
+  }, []);
 
   const helperText = useMemo(() => {
     const q = query.trim();
-    if (!q || q.length < minChars) return `Digite pelo menos ${minChars} caracteres`;
+    if (!open) return null;
+    if (!q.length) return `Digite pelo menos ${minChars} caracteres`;
+    if (q.length < minChars) return `Digite pelo menos ${minChars} caracteres`;
     if (!empresaId) return 'Seleccione uma empresa para pesquisar.';
     return null;
-  }, [query, minChars, empresaId]);
+  }, [open, query, minChars, empresaId]);
 
-  const selectedOptions = useMemo(() => {
-    return valueIds.map(id => selectedById.get(id)).filter(Boolean) as EmployeeOption[];
-  }, [valueIds, selectedById]);
+  const selectedOptions = useMemo(() => valueIds.map((id) => selectedById.get(id)).filter(Boolean) as EmployeeOption[], [valueIds, selectedById]);
 
   function remove(id: number) {
-    const next = valueIds.filter(x => x !== id);
-    onChange(next, selectedOptions.filter(o => o.id !== id));
+    const next = valueIds.filter((x) => x !== id);
+    onChange(
+      next,
+      selectedOptions.filter((o) => o.id !== id),
+    );
   }
 
   return (
@@ -162,12 +223,10 @@ export function EmployeeMultiSelect({
         open={open}
         onOpenChange={(v) => {
           setOpen(v);
+          invalidateRequests();
           if (!v) {
             setQuery('');
             setOptions([]);
-            setLoading(false);
-            inFlightRef.current += 1;
-            lastRequestKeyRef.current = '';
           } else {
             setQuery('');
             setOptions([]);
@@ -192,36 +251,41 @@ export function EmployeeMultiSelect({
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <Command shouldFilter={false}>
-            <CommandInput value={query} onValueChange={setQuery} placeholder={placeholder} autoFocus />
+            <CommandInput value={query} onValueChange={setQuery} placeholder={placeholder} disabled={loading} autoFocus />
             <CommandList>
-              {helperText ? <CommandEmpty>{helperText}</CommandEmpty> : null}
-              {!helperText && !loading && options.length === 0 ? <CommandEmpty>Nenhum colaborador encontrado</CommandEmpty> : null}
+              <CommandEmpty>
+                {helperText ??
+                  (loading ? 'A pesquisar…' : query.trim().length >= minChars ? 'Nenhum colaborador encontrado' : `Digite pelo menos ${minChars} caracteres`)}
+              </CommandEmpty>
 
               <CommandGroup>
-                {options.map((o) => {
-                  const already = valueIds.includes(o.id);
-                  return (
-                    <CommandItem
-                      key={o.id}
-                      value={String(o.id)}
-                      onSelect={() => {
-                        if (already) {
-                          setOpen(false);
-                          return;
-                        }
-                        const next = [...valueIds, o.id];
-                        const nextOpts = [...selectedOptions, o];
-                        setSelectedById(prev => new Map(prev).set(o.id, o));
-                        onChange(next, nextOpts);
-                        setOpen(false);
-                      }}
-                      className={cn(already && 'opacity-60')}
-                    >
-                      <Check className={cn('mr-2 h-4 w-4', already ? 'opacity-100' : 'opacity-0')} />
-                      <span className="truncate">{o.nome}</span>
-                    </CommandItem>
-                  );
-                })}
+                {!loading && !helperText
+                  ? options.map((o) => {
+                      const already = valueIds.includes(o.id);
+                      return (
+                        <CommandItem
+                          key={o.id}
+                          value={`${o.id}-${o.nome}`}
+                          keywords={[String(o.id), o.nome]}
+                          onSelect={() => {
+                            if (already) {
+                              setOpen(false);
+                              return;
+                            }
+                            const next = [...valueIds, o.id];
+                            const nextOpts = [...selectedOptions, o];
+                            setSelectedById((prev) => new Map(prev).set(o.id, o));
+                            onChange(next, nextOpts);
+                            setOpen(false);
+                          }}
+                          className={cn(already && 'opacity-60')}
+                        >
+                          <Check className={cn('mr-2 h-4 w-4', already ? 'opacity-100' : 'opacity-0')} />
+                          <span className="truncate">{o.nome}</span>
+                        </CommandItem>
+                      );
+                    })
+                  : null}
               </CommandGroup>
             </CommandList>
           </Command>
@@ -230,4 +294,3 @@ export function EmployeeMultiSelect({
     </div>
   );
 }
-

@@ -1,7 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
+import { useTenant } from '@/context/TenantContext';
 import type { Colaborador, ReciboSalario, TipoFalta } from '@/types';
+import { mapRowFromDb } from '@/lib/supabaseMappers';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   calcularInssIrtLiquidoComAssiduidade,
   DIAS_UTEIS_MES_NORMA_TRABALHO,
@@ -15,11 +19,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 
-import { Search, Plus, Check, X, ChevronsUpDown, Calculator } from 'lucide-react';
+import { Calculator } from 'lucide-react';
+import { EmployeeMultiSelect } from '@/components/shared/EmployeeMultiSelect';
+import { EmployeeSelect } from '@/components/shared/EmployeeSelect';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
@@ -58,7 +62,18 @@ function descricaoRegraDescontoTipo(tipo: TipoFalta): string {
 }
 
 export default function ProcessamentoSalarialPage() {
+  const { user } = useAuth();
+  const { currentEmpresaId } = useTenant();
   const { colaboradores, recibos, faltas, assiduidadeLicencas, addRecibo, updateRecibo, irtEscalaes } = useData();
+
+  const empresaIdForSearch =
+    currentEmpresaId === 'consolidado'
+      ? typeof user?.empresaId === 'number'
+        ? user.empresaId
+        : null
+      : currentEmpresaId;
+
+  const selectDisabled = currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number';
 
   const [modo, setModo] = useState<ModoProcessamento>('singular');
   const [ano, setAno] = useState(String(ANO_ACTUAL));
@@ -66,12 +81,10 @@ export default function ProcessamentoSalarialPage() {
 
   const mesAno = `${ano}-${mes}`;
 
-  const [colaboradorIdSingular, setColaboradorIdSingular] = useState<number>(0);
-  const [singularOpen, setSingularOpen] = useState(false);
-  const [singularSearch, setSingularSearch] = useState('');
-  const [loteOpen, setLoteOpen] = useState(false);
-  const [loteSearch, setLoteSearch] = useState('');
+  const [colaboradorIdSingular, setColaboradorIdSingular] = useState<number | null>(null);
   const [colaboradoresSelecionados, setColaboradoresSelecionados] = useState<number[]>([]);
+  /** Colaboradores seleccionados via pesquisa e ainda não presentes na lista tenant (fetch por id). */
+  const [extras, setExtras] = useState<Record<number, Colaborador | false>>({});
 
   const [outrasDeducoes, setOutrasDeducoes] = useState(0);
 
@@ -93,31 +106,118 @@ export default function ProcessamentoSalarialPage() {
   );
   const sortedMobileLastResult = useSortedMobileSlice(lastResult, mobileSort, mobileComparators);
 
-  const colaboradoresActivos = useMemo(() => {
-    return [...colaboradores].filter(c => c.status === 'Activo').sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+  const activoPorId = useMemo(() => {
+    const m = new Map<number, Colaborador>();
+    for (const c of colaboradores) {
+      if (c.status === 'Activo') m.set(c.id, c);
+    }
+    return m;
   }, [colaboradores]);
 
-  const colaboradoresFiltrados = useMemo(() => {
-    const q = loteSearch.trim().toLowerCase();
-    if (!q) return colaboradoresActivos;
-    return colaboradoresActivos.filter(c => c.nome.toLowerCase().includes(q));
-  }, [colaboradoresActivos, loteSearch]);
-
-  const colaboradoresSingularFiltrados = useMemo(() => {
-    const q = singularSearch.trim().toLowerCase();
-    if (!q) return colaboradoresActivos;
-    return colaboradoresActivos.filter(c => c.nome.toLowerCase().includes(q));
-  }, [colaboradoresActivos, singularSearch]);
-
-  const nomeColab = (id: number) => colaboradoresActivos.find(c => c.id === id)?.nome ?? `#${id}`;
-
-  const toggleColab = (id: number) => {
-    setColaboradoresSelecionados(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
-  };
+  useEffect(() => {
+    setExtras({});
+    setColaboradorIdSingular(null);
+    setColaboradoresSelecionados([]);
+  }, [empresaIdForSearch]);
 
   const selectedIds = useMemo(() => {
-    return modo === 'singular' ? (colaboradorIdSingular ? [colaboradorIdSingular] : []) : colaboradoresSelecionados;
+    return modo === 'singular' ? (colaboradorIdSingular != null ? [colaboradorIdSingular] : []) : colaboradoresSelecionados;
   }, [modo, colaboradorIdSingular, colaboradoresSelecionados]);
+
+  const selectionKey = useMemo(() => [...selectedIds].sort((a, b) => a - b).join('|'), [selectedIds]);
+
+  useEffect(() => {
+    const ids = selectionKey ? selectionKey.split('|').map(Number) : [];
+    setExtras((prev) => {
+      const next: Record<number, Colaborador | false> = {};
+      for (const id of ids) {
+        if (Object.prototype.hasOwnProperty.call(prev, id)) next[id] = prev[id]!;
+      }
+      const same =
+        Object.keys(next).length === Object.keys(prev).length &&
+        Object.keys(next).every((k) => {
+          const id = Number(k);
+          return prev[id] === next[id];
+        });
+      return same ? prev : next;
+    });
+  }, [selectionKey]);
+
+  useEffect(() => {
+    const pending = selectedIds.filter((id) => !activoPorId.has(id) && extras[id] === undefined);
+    if (!pending.length) return;
+
+    if (!isSupabaseConfigured() || !supabase) {
+      setExtras((prev) => {
+        const nx = { ...prev };
+        for (const id of pending) nx[id] = false;
+        return nx;
+      });
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from('colaboradores').select('*').in('id', pending);
+        if (cancelled) return;
+        if (error) {
+          setExtras((prev) => {
+            const nx = { ...prev };
+            for (const id of pending) {
+              if (nx[id] === undefined) nx[id] = false;
+            }
+            return nx;
+          });
+          return;
+        }
+        const mapped = (data ?? []).map((row) =>
+          mapRowFromDb<Colaborador>('colaboradores', row as Record<string, unknown>),
+        );
+        const byId = new Map(mapped.map((r) => [r.id, r]));
+        setExtras((prev) => {
+          const nx = { ...prev };
+          for (const id of pending) {
+            const row = byId.get(id);
+            if (row && row.status === 'Activo') nx[id] = row;
+            else nx[id] = false;
+          }
+          return nx;
+        });
+      } catch {
+        if (!cancelled) {
+          setExtras((prev) => {
+            const nx = { ...prev };
+            for (const id of pending) {
+              if (nx[id] === undefined) nx[id] = false;
+            }
+            return nx;
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedIds, activoPorId, extras]);
+
+  const getColaboradorActivo = useCallback(
+    (id: number): Colaborador | null => {
+      const fromTenant = activoPorId.get(id);
+      if (fromTenant) return fromTenant;
+      const ex = extras[id];
+      return ex && ex !== false ? ex : null;
+    },
+    [activoPorId, extras],
+  );
+
+  const extrasLoading = useMemo(
+    () => selectedIds.some((id) => !activoPorId.has(id) && extras[id] === undefined),
+    [selectedIds, activoPorId, extras],
+  );
+
+  const nomeColabResolvido = useCallback((id: number) => getColaboradorActivo(id)?.nome ?? `#${id}`, [getColaboradorActivo]);
 
   const irtEscalaesEfetivos = useMemo(() => {
     return irtEscalaes?.length ? irtEscalaes : IRT_ESCALOES_FALLBACK;
@@ -138,6 +238,20 @@ export default function ProcessamentoSalarialPage() {
       toast.error('Seleccione pelo menos um colaborador para processar.');
       return false;
     }
+    if (empresaIdForSearch == null) {
+      toast.error(
+        'Para pesquisar e processar, seleccione uma empresa no cabeçalho (visão grupo) ou utilize uma conta com empresa definida.',
+      );
+      return false;
+    }
+    if (extrasLoading || selectedIds.some((id) => !getColaboradorActivo(id))) {
+      toast.error(
+        extrasLoading
+          ? 'Ainda a carregar dados dos colaboradores. Aguarde um momento e tente de novo.'
+          : 'Um ou mais colaboradores seleccionados não estão disponíveis ou estão inactivos.',
+      );
+      return false;
+    }
     return true;
   };
 
@@ -148,14 +262,14 @@ export default function ProcessamentoSalarialPage() {
   };
 
   const previewSingular = useMemo(() => {
-    if (modo !== 'singular' || !colaboradorIdSingular) return null;
-    const col = colaboradoresActivos.find(c => c.id === colaboradorIdSingular);
+    if (modo !== 'singular' || colaboradorIdSingular == null) return null;
+    const col = getColaboradorActivo(colaboradorIdSingular);
     if (!col) return null;
     return calcularParaColaborador(col);
   }, [
     modo,
     colaboradorIdSingular,
-    colaboradoresActivos,
+    getColaboradorActivo,
     mesAno,
     faltas,
     assiduidadeLicencas,
@@ -179,7 +293,7 @@ export default function ProcessamentoSalarialPage() {
 
       // Executar sequencial para reduzir carga no banco e evitar corrida de inserts (lote).
       for (const id of selectedIds) {
-        const col = colaboradoresActivos.find(c => c.id === id);
+        const col = getColaboradorActivo(id);
         if (!col) continue;
 
         const existing = recibos.find(r => r.colaboradorId === id && r.mesAno === mesAno);
@@ -338,126 +452,45 @@ export default function ProcessamentoSalarialPage() {
         {modo === 'singular' ? (
           <div className="space-y-2 lg:col-span-1">
             <Label>Colaborador</Label>
-            <Popover
-              open={singularOpen}
-              onOpenChange={(open) => {
-                setSingularOpen(open);
-                if (open) setSingularSearch('');
-              }}
-            >
-              <PopoverTrigger asChild>
-                <Button type="button" variant="outline" className="w-full justify-between font-normal">
-                  <span className="truncate text-left">
-                    {colaboradorIdSingular ? nomeColab(colaboradorIdSingular) : 'Seleccionar colaborador…'}
-                  </span>
-                  <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <div className="p-2 border-b">
-                  <Input
-                    placeholder="Pesquisar por nome…"
-                    value={singularSearch}
-                    onChange={e => setSingularSearch(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-                <div className="max-h-56 overflow-y-auto p-2 space-y-1">
-                  {colaboradoresSingularFiltrados.length === 0 && (
-                    <p className="text-sm text-muted-foreground px-2 py-3">Nenhum colaborador encontrado.</p>
-                  )}
-                  {colaboradoresSingularFiltrados.map(c => {
-                    const selected = colaboradorIdSingular === c.id;
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                        onClick={() => {
-                          setColaboradorIdSingular(c.id);
-                          setSingularOpen(false);
-                        }}
-                      >
-                        <span
-                          className={cn(
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border border-input',
-                            selected && 'border-primary bg-primary text-primary-foreground',
-                          )}
-                        >
-                          {selected && <Check className="h-3 w-3" />}
-                        </span>
-                        <span className="flex-1 truncate">{c.nome}</span>
-                        <span className="text-xs text-muted-foreground tabular-nums">{formatKz(c.salarioBase)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </PopoverContent>
-            </Popover>
+            <EmployeeSelect
+              valueId={colaboradorIdSingular}
+              onChange={(nextId) => setColaboradorIdSingular(nextId)}
+              empresaId={empresaIdForSearch}
+              disabled={selectDisabled}
+              placeholder={selectDisabled ? 'Seleccione uma empresa específica…' : 'Pesquisar colaborador (mín. 4 letras)…'}
+            />
+            {selectDisabled ? (
+              <p className="text-xs text-muted-foreground">
+                Em modo grupo, escolha uma empresa no selector do cabeçalho ou utilize uma conta com empresa definida.
+              </p>
+            ) : null}
+            {colaboradorIdSingular != null &&
+            !activoPorId.has(colaboradorIdSingular) &&
+            extras[colaboradorIdSingular] === undefined ? (
+              <p className="text-xs text-muted-foreground">A carregar dados do colaborador…</p>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-2 lg:col-span-2">
             <Label>Colaboradores (lote)</Label>
-            <Popover open={loteOpen} onOpenChange={setLoteOpen}>
-              <PopoverTrigger asChild>
-                <Button type="button" variant="outline" className="w-full justify-between font-normal">
-                  <span className="truncate text-left">
-                    {colaboradoresSelecionados.length === 0 ? 'Seleccionar colaboradores…' : `${colaboradoresSelecionados.length} seleccionado(s)`}
-                  </span>
-                  <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <div className="p-2 border-b">
-                  <Input
-                    placeholder="Pesquisar por nome…"
-                    value={loteSearch}
-                    onChange={e => setLoteSearch(e.target.value)}
-                    className="h-9"
-                  />
-                </div>
-                <div className="max-h-56 overflow-y-auto p-2 space-y-1">
-                  {colaboradoresFiltrados.length === 0 && (
-                    <p className="text-sm text-muted-foreground px-2 py-3">Nenhum colaborador encontrado.</p>
-                  )}
-                  {colaboradoresFiltrados.map(c => {
-                    const checked = colaboradoresSelecionados.includes(c.id);
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                        onClick={() => toggleColab(c.id)}
-                      >
-                        <span
-                          className={cn(
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border border-input',
-                            checked && 'border-primary bg-primary text-primary-foreground',
-                          )}
-                        >
-                          {checked && <Check className="h-3 w-3" />}
-                        </span>
-                        <span className="flex-1 truncate">{c.nome}</span>
-                        <span className="text-xs text-muted-foreground tabular-nums">{formatKz(c.salarioBase)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {colaboradoresSelecionados.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {colaboradoresSelecionados.map(id => (
-                  <Badge key={id} variant="secondary" className="gap-1 pr-1 font-normal">
-                    {nomeColab(id)}
-                    <button type="button" className="rounded-full p-0.5 hover:bg-muted-foreground/20" onClick={() => toggleColab(id)} aria-label={`Remover ${nomeColab(id)}`}>
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
+            <EmployeeMultiSelect
+              valueIds={colaboradoresSelecionados}
+              empresaId={empresaIdForSearch}
+              disabled={selectDisabled}
+              onChange={(next) => setColaboradoresSelecionados(next)}
+              placeholder={
+                selectDisabled
+                  ? 'Seleccione uma empresa específica…'
+                  : colaboradoresSelecionados.length === 0
+                    ? 'Seleccionar colaboradores…'
+                    : `${colaboradoresSelecionados.length} seleccionado(s)`
+              }
+            />
+            {selectDisabled ? (
+              <p className="text-xs text-muted-foreground">
+                Em modo grupo, escolha uma empresa no selector do cabeçalho ou utilize uma conta com empresa definida.
+              </p>
+            ) : null}
           </div>
         )}
 
@@ -493,7 +526,7 @@ export default function ProcessamentoSalarialPage() {
         </div>
       </div>
 
-      {modo === 'singular' && previewSingular && colaboradorIdSingular ? (
+      {modo === 'singular' && previewSingular != null && colaboradorIdSingular != null ? (
         <div className="space-y-4 border rounded-lg bg-card p-4 shadow-sm">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -504,7 +537,7 @@ export default function ProcessamentoSalarialPage() {
               </p>
             </div>
             <Badge variant="outline" className="w-fit shrink-0 font-mono tabular-nums">
-              {nomeColab(colaboradorIdSingular)}
+              {nomeColabResolvido(colaboradorIdSingular)}
             </Badge>
           </div>
 

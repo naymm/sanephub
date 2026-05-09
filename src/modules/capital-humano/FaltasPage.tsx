@@ -13,6 +13,7 @@ import {
   mobileCreateDesktopHeader,
 } from '@/components/shared/MobileCreateFormDialogContent';
 import { useAuth } from '@/context/AuthContext';
+import { useTenant } from '@/context/TenantContext';
 import type { Falta, TipoFalta } from '@/types';
 import { formatDate } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ import {
 import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
+import { EmployeeSelect } from '@/components/shared/EmployeeSelect';
 
 const TIPO_OPTIONS: TipoFalta[] = ['Justificada', 'Injustificada', 'Atestado Médico', 'Licença', 'Por atrasos'];
 /** «Por atrasos» é criada pelo sistema; não entra no select de registo manual. */
@@ -68,10 +70,24 @@ function numeroFaltaAtrasoNoMes(f: Falta, todas: Falta[]): number | null {
 const LIST_PATH = '/capital-humano/faltas';
 const NOVO_PATH = '/capital-humano/faltas/novo';
 
+type FaltaFormState = Omit<Falta, 'id' | 'colaboradorId'> & {
+  colaboradorId: number | null;
+};
+
 export default function FaltasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { currentEmpresaId } = useTenant();
   const { faltas, addFalta, updateFalta, deleteFalta, colaboradores } = useData();
+
+  const empresaIdForSearch =
+    currentEmpresaId === 'consolidado'
+      ? typeof user?.empresaId === 'number'
+        ? user.empresaId
+        : null
+      : currentEmpresaId;
+
+  const selectDisabled = currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number';
   const isMobileViewport = useIsMobileViewport();
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoFalta | 'todos'>('todos');
@@ -81,8 +97,8 @@ export default function FaltasPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [editing, setEditing] = useState<Falta | null>(null);
   const [viewItem, setViewItem] = useState<Falta | null>(null);
-  const [form, setForm] = useState<Omit<Falta, 'id'>>({
-    colaboradorId: 0,
+  const [form, setForm] = useState<FaltaFormState>({
+    colaboradorId: null,
     data: new Date().toISOString().slice(0, 10),
     tipo: 'Justificada',
     motivo: '',
@@ -93,24 +109,24 @@ export default function FaltasPage() {
   const prepareCreate = useCallback(() => {
     setEditing(null);
     setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
+      colaboradorId: null,
       data: new Date().toISOString().slice(0, 10),
       tipo: 'Justificada',
       motivo: '',
       registadoPor: user?.nome ?? '',
     });
-  }, [colaboradores, user?.nome]);
+  }, [user?.nome]);
 
   const resetModal = useCallback(() => {
     setEditing(null);
     setForm({
-      colaboradorId: colaboradores[0]?.id ?? 0,
+      colaboradorId: null,
       data: new Date().toISOString().slice(0, 10),
       tipo: 'Justificada',
       motivo: '',
       registadoPor: user?.nome ?? '',
     });
-  }, [colaboradores, user?.nome]);
+  }, [user?.nome]);
 
   const {
     isNovoRoute,
@@ -224,10 +240,19 @@ export default function FaltasPage() {
   };
 
   const save = async () => {
-    if (!form.colaboradorId || !form.data) return;
+    if (
+      form.colaboradorId == null ||
+      Number.isNaN(form.colaboradorId) ||
+      !form.data
+    )
+      return;
+    const payload: Omit<Falta, 'id'> = {
+      ...form,
+      colaboradorId: form.colaboradorId,
+    };
     try {
-      if (editing) await updateFalta(editing.id, form);
-      else await addFalta(form);
+      if (editing) await updateFalta(editing.id, payload);
+      else await addFalta(payload);
       setDialogOpen(false);
       setEditing(null);
       if (isNovoRoute) {
@@ -380,14 +405,29 @@ export default function FaltasPage() {
             <div className="grid gap-4 py-2">
               <div className="space-y-2">
                 <Label>Colaborador</Label>
-                <Select value={form.colaboradorId ? String(form.colaboradorId) : ''} onValueChange={v => setForm(f => ({ ...f, colaboradorId: Number(v) }))}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {colaboradores.map(c => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.nome} — {c.departamento}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <EmployeeSelect
+                  valueId={form.colaboradorId}
+                  onChange={(id) => setForm((f) => ({ ...f, colaboradorId: id }))}
+                  empresaId={empresaIdForSearch}
+                  disabled={selectDisabled || !!editing}
+                  placeholder={
+                    selectDisabled
+                      ? 'Seleccione uma empresa específica…'
+                      : editing
+                        ? 'Colaborador do registo'
+                        : 'Pesquisar colaborador (mín. 4 letras)…'
+                  }
+                />
+                {selectDisabled ? (
+                  <p className="text-xs text-muted-foreground">
+                    Em modo grupo, escolha uma empresa no cabeçalho ou utilize uma conta com empresa definida.
+                  </p>
+                ) : null}
+                {editing ? (
+                  <p className="text-xs text-muted-foreground">
+                    Para alterar o colaborador, remova o registo e crie uma nova entrada.
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -425,7 +465,10 @@ export default function FaltasPage() {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={() => void save()} disabled={!form.colaboradorId || !form.data}>
+              <Button
+                onClick={() => void save()}
+                disabled={form.colaboradorId == null || !form.data}
+              >
                 Guardar
               </Button>
             </DialogFooter>
@@ -443,7 +486,7 @@ export default function FaltasPage() {
               <Button
                 type="button"
                 className="min-h-11 flex-1 rounded-xl"
-                disabled={!form.colaboradorId || !form.data}
+                disabled={form.colaboradorId == null || !form.data}
                 onClick={() => void save()}
               >
                 Guardar

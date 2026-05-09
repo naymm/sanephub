@@ -2,6 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
+import { useAuth } from '@/context/AuthContext';
+import { useTenant } from '@/context/TenantContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
@@ -30,13 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Trash2, ChevronsUpDown, Check, X } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 import { Textarea } from '@/components/ui/textarea';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { EmployeeMultiSelect } from '@/components/shared/EmployeeMultiSelect';
 
 const LIST_PATH = '/secretaria/reunioes';
 const NOVO_PATH = '/secretaria/reunioes/novo';
@@ -57,7 +57,18 @@ const emptyForm: Omit<Reuniao, 'id'> = {
 
 export default function ReunioesPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { currentEmpresaId } = useTenant();
   const { reunioes, addReuniao, updateReuniao, deleteReuniao, colaboradores } = useData();
+
+  const empresaIdForSearch =
+    currentEmpresaId === 'consolidado'
+      ? typeof user?.empresaId === 'number'
+        ? user.empresaId
+        : null
+      : currentEmpresaId;
+
+  const selectDisabled = currentEmpresaId === 'consolidado' && typeof user?.empresaId !== 'number';
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<Reuniao['tipo'] | 'todos'>('todos');
   const [statusFilter, setStatusFilter] = useState<Reuniao['status'] | 'todos'>('todos');
@@ -68,8 +79,6 @@ export default function ReunioesPage() {
   const [editing, setEditing] = useState<Reuniao | null>(null);
   const [viewItem, setViewItem] = useState<Reuniao | null>(null);
   const [form, setForm] = useState<Omit<Reuniao, 'id'>>(emptyForm);
-  const [participantesOpen, setParticipantesOpen] = useState(false);
-  const [participantesSearch, setParticipantesSearch] = useState('');
 
   const prepareCreate = useCallback(() => {
     setEditing(null);
@@ -96,16 +105,6 @@ export default function ReunioesPage() {
     prepareCreate,
     resetModal,
   });
-
-  const colaboradoresOrdenados = useMemo(
-    () => [...colaboradores].sort((a, b) => a.nome.localeCompare(b.nome, 'pt')),
-    [colaboradores],
-  );
-  const colaboradoresFiltrados = useMemo(() => {
-    const q = participantesSearch.trim().toLowerCase();
-    if (!q) return colaboradoresOrdenados;
-    return colaboradoresOrdenados.filter(c => c.nome.toLowerCase().includes(q));
-  }, [colaboradoresOrdenados, participantesSearch]);
 
   const getParticipantesNomes = (ids: number[]) =>
     ids.map(id => colaboradores.find(c => c.id === id)?.nome).filter(Boolean).join(', ') || '—';
@@ -148,15 +147,6 @@ export default function ReunioesPage() {
       status: r.status,
     });
     setDialogOpen(true);
-  };
-
-  const toggleParticipante = (colabId: number) => {
-    setForm(f => ({
-      ...f,
-      participantes: f.participantes.includes(colabId)
-        ? f.participantes.filter(id => id !== colabId)
-        : [...f.participantes, colabId],
-    }));
   };
 
   const save = async () => {
@@ -375,74 +365,24 @@ export default function ReunioesPage() {
             </div>
             <div className="space-y-2">
               <Label>Participantes</Label>
-              <Popover open={participantesOpen} onOpenChange={setParticipantesOpen}>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="outline" className="w-full justify-between font-normal">
-                    <span className="truncate text-left">
-                      {form.participantes.length === 0
-                        ? 'Seleccionar participantes...'
-                        : `${form.participantes.length} seleccionado(s)`}
-                    </span>
-                    <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                  <div className="p-2 border-b">
-                    <Input
-                      placeholder="Pesquisar por nome..."
-                      value={participantesSearch}
-                      onChange={e => setParticipantesSearch(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="max-h-56 overflow-y-auto p-2 space-y-1">
-                    {colaboradoresFiltrados.map(c => {
-                      const checked = form.participantes.includes(c.id);
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                          onClick={() => toggleParticipante(c.id)}
-                        >
-                          <span
-                            className={cn(
-                              'flex h-4 w-4 shrink-0 items-center justify-center rounded border border-input',
-                              checked && 'border-primary bg-primary text-primary-foreground',
-                            )}
-                          >
-                            {checked && <Check className="h-3 w-3" />}
-                          </span>
-                          <span className="flex-1 truncate">{c.nome}</span>
-                        </button>
-                      );
-                    })}
-                    {colaboradoresFiltrados.length === 0 && (
-                      <p className="text-sm text-muted-foreground px-2 py-3">Nenhum colaborador encontrado.</p>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              {form.participantes.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {form.participantes.map(id => {
-                    const nome = colaboradores.find(c => c.id === id)?.nome ?? `#${id}`;
-                    return (
-                      <Badge key={id} variant="secondary" className="gap-1 pr-1 font-normal">
-                        {nome}
-                        <button
-                          type="button"
-                          className="rounded-full p-0.5 hover:bg-muted-foreground/20"
-                          onClick={() => toggleParticipante(id)}
-                          aria-label={`Remover ${nome}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
+              <EmployeeMultiSelect
+                valueIds={form.participantes}
+                empresaId={empresaIdForSearch}
+                disabled={selectDisabled}
+                onChange={(next) => setForm((f) => ({ ...f, participantes: next }))}
+                placeholder={
+                  selectDisabled
+                    ? 'Seleccione uma empresa específica…'
+                    : form.participantes.length === 0
+                      ? 'Seleccionar participantes…'
+                      : `${form.participantes.length} seleccionado(s)`
+                }
+              />
+              {selectDisabled ? (
+                <p className="text-xs text-muted-foreground">
+                  Em modo grupo, escolha uma empresa no cabeçalho ou utilize uma conta com empresa definida.
+                </p>
+              ) : null}
             </div>
           </div>
           }
