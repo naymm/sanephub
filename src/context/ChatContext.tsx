@@ -751,7 +751,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return;
       }
       const text = content.trim() || '(ficheiro anexado)';
-      const withIds = attachments.map((a) => ({ ...a, id: a.id || genId('att') }));
+      const withIds = attachments.map((a) => ({
+        id: a.id || genId('att'),
+        name: a.name,
+        url: a.url,
+        type: a.type,
+        ...(typeof a.size === 'number' ? { size: a.size } : {}),
+      }));
       const replyTargetId = opts?.replyToMessageId;
       const replyTarget =
         replyTargetId ? messagesRef.current.find((m) => m.id === replyTargetId) ?? null : null;

@@ -3,6 +3,10 @@ import { ChatMobileComposerPortal } from '@/modules/chat/ChatMobileComposerPorta
 import { useAuth } from '@/context/AuthContext';
 import { useChat, CHAT_PAGE_SIZE } from '@/context/ChatContext';
 import type { ChatAttachment } from '@/types/chat';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { uploadChatAttachment, validateChatAttachmentFile } from '@/lib/chatAttachmentUpload';
+import { officeOnlineViewerUrl } from '@/utils/officeOnlineViewer';
+import { canUseMicrosoftViewerForAttachment } from '@/modules/chat/chatAttachmentDisplay';
 import { MessageBubble } from './MessageBubble';
 import { formatChatTime } from '@/utils/formatters';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -39,6 +43,7 @@ import {
   ImagePlus,
   Phone,
   Video,
+  Eye,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
@@ -339,19 +344,49 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAttachments(prev => [...prev, {
-          id: `att-${Date.now()}-${prev.length}`,
-          name: file.name,
-          url: reader.result as string,
-          type: file.type,
-          size: file.size,
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
+    if (!conversationId) {
+      toast.error('Seleccione uma conversa.');
+      e.target.value = '';
+      return;
+    }
+
+    void (async () => {
+      for (const file of Array.from(files)) {
+        const err = validateChatAttachmentFile(file);
+        if (err) {
+          toast.error(err);
+          continue;
+        }
+        const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        setAttachments(prev => [
+          ...prev,
+          { id, name: file.name, url: '', type: file.type || 'application/octet-stream', size: file.size, uploadPending: true },
+        ]);
+
+        if (isSupabaseConfigured() && supabase) {
+          try {
+            const { publicUrl } = await uploadChatAttachment(supabase, conversationId, file);
+            setAttachments(prev => prev.map(a => (a.id === id ? { ...a, url: publicUrl, uploadPending: false } : a)));
+          } catch (ex) {
+            setAttachments(prev => prev.filter(a => a.id !== id));
+            toast.error(ex instanceof Error ? ex.message : 'Falha ao enviar o anexo.');
+          }
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => {
+            setAttachments(prev =>
+              prev.map(a => (a.id === id ? { ...a, url: reader.result as string, uploadPending: false } : a)),
+            );
+          };
+          reader.onerror = () => {
+            setAttachments(prev => prev.filter(a => a.id !== id));
+            toast.error('Não foi possível ler o ficheiro.');
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    })();
+
     e.target.value = '';
   };
 
@@ -381,7 +416,8 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
       ? (ta?.value ?? mobileInputDraftRef.current ?? input)
       : input;
     const text = raw.trim();
-    if (!conversationId || (!text && attachments.length === 0)) return;
+    const readyAttachments = attachments.filter(a => a.url && !a.uploadPending);
+    if (!conversationId || (!text && readyAttachments.length === 0)) return;
     const now = Date.now();
     if (now - lastSendAtRef.current < 280) return;
     lastSendAtRef.current = now;
@@ -400,7 +436,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
       return;
     }
 
-    sendMessage(conversationId, text || '(ficheiro anexado)', attachments, {
+    sendMessage(conversationId, text || '(ficheiro anexado)', readyAttachments, {
       replyToMessageId: replyToMsgId ?? undefined,
     });
     mobileInputDraftRef.current = '';
@@ -489,7 +525,9 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
     }
   };
 
-  const composerSendDisabled = !input.trim() && attachments.length === 0;
+  const composerSendDisabled =
+    (!input.trim() && attachments.filter(a => a.url && !a.uploadPending).length === 0) ||
+    attachments.some(a => a.uploadPending);
 
   const getSenderName = (senderId: number) => usuarios.find(u => u.id === senderId)?.nome ?? 'Utilizador';
 
@@ -742,23 +780,45 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                       {convFiles.length > 0 ? 'Nenhum resultado.' : 'Nenhum ficheiro partilhado.'}
                     </p>
                   ) : (
-                    filteredFiles.map((item, i) => (
-                      <a
-                        key={`${item.messageId}-${item.attachment.id}-${i}`}
-                        href={item.attachment.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 rounded-md p-2 hover:bg-muted/50 text-left"
-                      >
-                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{item.attachment.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {getSenderName(item.senderId)} · {formatChatTime(item.createdAt)}
-                          </p>
+                    filteredFiles.map((item, i) => {
+                      const att = item.attachment;
+                      const ms = canUseMicrosoftViewerForAttachment(att);
+                      return (
+                        <div
+                          key={`${item.messageId}-${att.id}-${i}`}
+                          className="flex items-center gap-2 rounded-md p-2 hover:bg-muted/50"
+                        >
+                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{att.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {getSenderName(item.senderId)} · {formatChatTime(item.createdAt)}
+                            </p>
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                              {ms ? (
+                                <a
+                                  href={officeOnlineViewerUrl(att.url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'h-7 gap-1 text-xs')}
+                                >
+                                  <Eye className="h-3 w-3" />
+                                  Pré-visualizar (Microsoft)
+                                </a>
+                              ) : null}
+                              <a
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-7 text-xs')}
+                              >
+                                Abrir ficheiro
+                              </a>
+                            </div>
+                          </div>
                         </div>
-                      </a>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </ScrollArea>
@@ -1206,12 +1266,16 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                 key={a.id}
                 className="inline-flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs"
               >
-                {a.name}
+                {a.uploadPending ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+                ) : null}
+                <span className={cn('max-w-[200px] truncate', a.uploadPending && 'opacity-80')}>{a.name}</span>
                 <button
                   type="button"
                   onClick={() => removeAttachment(a.id)}
                   className="flex min-h-8 min-w-8 items-center justify-center rounded-md p-1 hover:bg-muted-foreground/20"
                   aria-label={`Remover ${a.name}`}
+                  disabled={a.uploadPending}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1251,7 +1315,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
           <input
             type="file"
             multiple
-            accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx"
+            accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*"
             className="hidden"
             id="chat-attach-desktop"
             onChange={handleFileSelect}
@@ -1321,12 +1385,16 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
                   key={a.id}
                   className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs shadow-sm"
                 >
-                  {a.name}
+                  {a.uploadPending ? (
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-400" aria-hidden />
+                  ) : null}
+                  <span className={cn('max-w-[180px] truncate', a.uploadPending && 'opacity-80')}>{a.name}</span>
                   <button
                     type="button"
                     onClick={() => removeAttachment(a.id)}
                     className="flex min-h-8 min-w-8 items-center justify-center rounded-full p-1 hover:bg-zinc-100"
                     aria-label={`Remover ${a.name}`}
+                    disabled={a.uploadPending}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -1353,7 +1421,7 @@ export function ConversationView({ conversationId, onMobileBack }: ConversationV
             <input
               type="file"
               multiple
-              accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx"
+              accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*"
               className="sr-only"
               id="chat-attach-mobile"
               onChange={handleFileSelect}

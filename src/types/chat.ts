@@ -3,13 +3,15 @@ export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
 export type ConversationType = 'private' | 'group';
 
-/** Anexo (mock: url pode ser data URL ou object URL) */
+/** Anexo (URL pública Storage ou legado data URL). */
 export interface ChatAttachment {
   id: string;
   name: string;
   url: string;
   type: string;
   size?: number;
+  /** Só no composer: envio para o Storage em curso. */
+  uploadPending?: boolean;
 }
 
 export interface ChatMessage {
