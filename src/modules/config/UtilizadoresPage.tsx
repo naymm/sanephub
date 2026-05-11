@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
-import { LockOpen, Search, Plus, Pencil, Trash2, KeyRound } from 'lucide-react';
+import { LockOpen, Search, Plus, Pencil, Trash2, KeyRound, Sparkles, Copy } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
@@ -69,6 +69,19 @@ type UsuarioFormState = Omit<Usuario, 'id'> & { empresaId?: number | null };
 const LIST_PATH = '/configuracoes/utilizadores';
 const NOVO_PATH = '/configuracoes/utilizadores/novo';
 
+const CHARSET_TEMP_PASSWORD =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*+-=';
+
+function gerarPalavraPasseTemporaria(length = 16): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += CHARSET_TEMP_PASSWORD[bytes[i]! % CHARSET_TEMP_PASSWORD.length];
+  }
+  return out;
+}
+
 export default function UtilizadoresPage() {
   const navigate = useNavigate();
   const { user: currentUser, usuarios, setUsuarios, createUserInSupabase, resetUserPasswordAsAdmin } = useAuth();
@@ -83,6 +96,7 @@ export default function UtilizadoresPage() {
   const [resetPwdTemp, setResetPwdTemp] = useState('');
   const [resetPwdTemp2, setResetPwdTemp2] = useState('');
   const [resetPwdBusy, setResetPwdBusy] = useState(false);
+  const [resetPwdSuccessValue, setResetPwdSuccessValue] = useState<string | null>(null);
   const [form, setForm] = useState<UsuarioFormState>({
     nome: '',
     email: '',
@@ -146,7 +160,15 @@ export default function UtilizadoresPage() {
     setResetPwdTarget(u);
     setResetPwdTemp('');
     setResetPwdTemp2('');
+    setResetPwdSuccessValue(null);
     setResetPwdOpen(true);
+  };
+
+  const gerarResetPwdAleatoria = () => {
+    const pwd = gerarPalavraPasseTemporaria(16);
+    setResetPwdTemp(pwd);
+    setResetPwdTemp2(pwd);
+    toast.success('Palavra-passe gerada. Anote-a para comunicar ao utilizador.');
   };
 
   const submitAdminResetPassword = async () => {
@@ -164,19 +186,32 @@ export default function UtilizadoresPage() {
     setResetPwdBusy(true);
     try {
       await resetUserPasswordAsAdmin({ target_profile_id: resetPwdTarget.id, new_password: a });
-      toast.success(
-        'Palavra-passe reposta. Entregue a palavra-passe temporária ao utilizador; ao iniciar sessão, será obrigado a definir uma nova.',
-        { duration: 10_000 },
-      );
-      setResetPwdOpen(false);
-      setResetPwdTarget(null);
-      setResetPwdTemp('');
-      setResetPwdTemp2('');
+      setResetPwdSuccessValue(a);
+      toast.success('Palavra-passe reposta. Copie a palavra-passe abaixo para enviar ao utilizador.');
       await loadLockMeta();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao repor a palavra-passe.');
     } finally {
       setResetPwdBusy(false);
+    }
+  };
+
+  const closeResetPwdDialog = () => {
+    setResetPwdOpen(false);
+    setResetPwdTarget(null);
+    setResetPwdTemp('');
+    setResetPwdTemp2('');
+    setResetPwdSuccessValue(null);
+  };
+
+  const copiarSenhaReposta = async () => {
+    const v = resetPwdSuccessValue?.trim();
+    if (!v) return;
+    try {
+      await navigator.clipboard.writeText(v);
+      toast.success('Copiado para a área de transferência.');
+    } catch {
+      toast.error('Não foi possível copiar. Seleccione o texto e copie manualmente.');
     }
   };
 
@@ -939,65 +974,104 @@ export default function UtilizadoresPage() {
       <Dialog
         open={resetPwdOpen}
         onOpenChange={v => {
-          setResetPwdOpen(v);
-          if (!v) {
-            setResetPwdTarget(null);
-            setResetPwdTemp('');
-            setResetPwdTemp2('');
-          }
+          if (!v) closeResetPwdDialog();
         }}
       >
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Repor palavra-passe</DialogTitle>
-            <DialogDescription>
-              {resetPwdTarget ? (
-                <>
-                  Utilizador: <span className="font-medium text-foreground">{resetPwdTarget.nome}</span> (
-                  {resetPwdTarget.email}). Defina uma palavra-passe temporária (mín. 8 caracteres). No próximo login, o
-                  sistema pedirá uma nova palavra-passe forte antes de continuar.
-                </>
-              ) : null}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Palavra-passe temporária</Label>
-              <Input
-                type="password"
-                autoComplete="new-password"
-                value={resetPwdTemp}
-                onChange={e => setResetPwdTemp(e.target.value)}
-                disabled={resetPwdBusy}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Confirmar palavra-passe temporária</Label>
-              <Input
-                type="password"
-                autoComplete="new-password"
-                value={resetPwdTemp2}
-                onChange={e => setResetPwdTemp2(e.target.value)}
-                disabled={resetPwdBusy}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setResetPwdOpen(false);
-                setResetPwdTarget(null);
-              }}
-              disabled={resetPwdBusy}
-            >
-              Cancelar
-            </Button>
-            <Button type="button" onClick={() => void submitAdminResetPassword()} disabled={resetPwdBusy}>
-              {resetPwdBusy ? 'A repor…' : 'Repor palavra-passe'}
-            </Button>
-          </DialogFooter>
+          {resetPwdSuccessValue != null && resetPwdTarget ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Palavra-passe reposta</DialogTitle>
+                <DialogDescription>
+                  A palavra-passe de <span className="font-medium text-foreground">{resetPwdTarget.nome}</span> foi
+                  actualizada. Copie o valor abaixo e envie-o ao utilizador de forma segura. No primeiro login, será
+                  pedida uma nova palavra-passe.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <Label htmlFor="reset-pwd-copiado">Palavra-passe temporária</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="reset-pwd-copiado"
+                    readOnly
+                    className="font-mono text-sm"
+                    value={resetPwdSuccessValue}
+                    onFocus={e => e.target.select()}
+                  />
+                  <Button type="button" variant="outline" className="shrink-0 gap-1.5" onClick={() => void copiarSenhaReposta()}>
+                    <Copy className="h-4 w-4" aria-hidden />
+                    Copiar
+                  </Button>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" onClick={closeResetPwdDialog}>
+                  Fechar
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Repor palavra-passe</DialogTitle>
+                <DialogDescription>
+                  {resetPwdTarget ? (
+                    <>
+                      Utilizador: <span className="font-medium text-foreground">{resetPwdTarget.nome}</span> (
+                      {resetPwdTarget.email}). Defina uma palavra-passe temporária (mín. 8 caracteres). No próximo login, o
+                      sistema pedirá uma nova palavra-passe forte antes de continuar.
+                    </>
+                  ) : null}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-2">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <Label htmlFor="reset-pwd-temp">Palavra-passe temporária</Label>
+                    <Button
+                      id="reset-pwd-gerar"
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1.5"
+                      onClick={gerarResetPwdAleatoria}
+                      disabled={resetPwdBusy}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                      Gerar aleatoriamente
+                    </Button>
+                  </div>
+                  <Input
+                    id="reset-pwd-temp"
+                    type="password"
+                    autoComplete="new-password"
+                    value={resetPwdTemp}
+                    onChange={e => setResetPwdTemp(e.target.value)}
+                    disabled={resetPwdBusy}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reset-pwd-temp2">Confirmar palavra-passe temporária</Label>
+                  <Input
+                    id="reset-pwd-temp2"
+                    type="password"
+                    autoComplete="new-password"
+                    value={resetPwdTemp2}
+                    onChange={e => setResetPwdTemp2(e.target.value)}
+                    disabled={resetPwdBusy}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeResetPwdDialog} disabled={resetPwdBusy}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={() => void submitAdminResetPassword()} disabled={resetPwdBusy}>
+                  {resetPwdBusy ? 'A repor…' : 'Repor palavra-passe'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
