@@ -40,6 +40,7 @@ function profileToUsuario(p: ProfileRow): Usuario {
     departamento: p.departamento ?? '',
     avatar: p.avatar ?? '?',
     primeiroAcessoPendente: p.primeiro_acesso_pendente === true,
+    obrigarTrocaSenha: p.obrigar_troca_senha === true,
     permissoes: p.permissoes ?? [],
     modulos: p.modulos ?? undefined,
     colaboradorId: p.colaborador_id ?? undefined,
@@ -103,6 +104,11 @@ export interface CreateUserSupabasePayload {
   numero_mec?: string | null;
 }
 
+export interface AdminResetPasswordPayload {
+  target_profile_id: number;
+  new_password: string;
+}
+
 interface AuthContextType {
   user: Usuario | null;
   usuarios: Usuario[];
@@ -122,6 +128,8 @@ interface AuthContextType {
   authSessionRevision: number;
   /** Cria utilizador no Supabase Auth + profiles (Edge Function). Só disponível com Supabase configurado. */
   createUserInSupabase: (payload: CreateUserSupabasePayload) => Promise<Usuario>;
+  /** Admin: repor palavra-passe de outro utilizador (Edge Function); o utilizador deverá alterá-la ao entrar. */
+  resetUserPasswordAsAdmin: (payload: AdminResetPasswordPayload) => Promise<Usuario>;
   /** Recarrega o perfil a partir do Supabase (após alterações em `profiles`, PIN, etc.). */
   refreshSessionUser: () => Promise<void>;
 }
@@ -456,6 +464,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const resetUserPasswordAsAdmin = useCallback(
+    async (payload: AdminResetPasswordPayload): Promise<Usuario> => {
+      if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase não configurado');
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error('Sessão expirada ou em falta. Faça login novamente.');
+      }
+      const { data, error } = await supabase.functions.invoke('admin-reset-user-password', {
+        body: {
+          target_profile_id: payload.target_profile_id,
+          new_password: payload.new_password,
+        },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) {
+        const msg = await getSupabaseFunctionsInvokeErrorMessage(
+          error,
+          (error as Error).message || 'Erro ao repor senha',
+        );
+        throw new Error(msg);
+      }
+      const raw = data as unknown;
+      if (raw && typeof raw === 'object' && 'error' in raw && typeof (raw as { error: string }).error === 'string') {
+        throw new Error((raw as { error: string }).error);
+      }
+      const profile = raw as ProfileRow;
+      if (!profile?.id) throw new Error('Resposta inválida da função');
+      const updatedUsuario = profileToUsuario(profile);
+      setUsuarios(prev => prev.map(u => (u.id === updatedUsuario.id ? { ...u, ...updatedUsuario } : u)));
+      return updatedUsuario;
+    },
+    [],
+  );
+
   const value = useMemo(
     () => ({
       user,
@@ -468,9 +513,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isRestoringSession: restoringSession,
       authSessionRevision,
       createUserInSupabase,
+      resetUserPasswordAsAdmin,
       refreshSessionUser,
     }),
-    [user, usuarios, login, logout, authReady, restoringSession, authSessionRevision, createUserInSupabase, refreshSessionUser],
+    [user, usuarios, login, logout, authReady, restoringSession, authSessionRevision, createUserInSupabase, resetUserPasswordAsAdmin, refreshSessionUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

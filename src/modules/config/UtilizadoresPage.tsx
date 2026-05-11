@@ -15,7 +15,7 @@ import type { Usuario, Perfil } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
-import { LockOpen, Search, Plus, Pencil, Trash2 } from 'lucide-react';
+import { LockOpen, Search, Plus, Pencil, Trash2, KeyRound } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
@@ -71,13 +71,18 @@ const NOVO_PATH = '/configuracoes/utilizadores/novo';
 
 export default function UtilizadoresPage() {
   const navigate = useNavigate();
-  const { user: currentUser, usuarios, setUsuarios, createUserInSupabase } = useAuth();
+  const { user: currentUser, usuarios, setUsuarios, createUserInSupabase, resetUserPasswordAsAdmin } = useAuth();
   const { empresas, colaboradoresTodos } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
   const [colaboradorSelectOpen, setColaboradorSelectOpen] = useState(false);
   const [lockMeta, setLockMeta] = useState<Record<number, { locked: boolean; attempts: number }>>({});
+  const [resetPwdOpen, setResetPwdOpen] = useState(false);
+  const [resetPwdTarget, setResetPwdTarget] = useState<Usuario | null>(null);
+  const [resetPwdTemp, setResetPwdTemp] = useState('');
+  const [resetPwdTemp2, setResetPwdTemp2] = useState('');
+  const [resetPwdBusy, setResetPwdBusy] = useState(false);
   const [form, setForm] = useState<UsuarioFormState>({
     nome: '',
     email: '',
@@ -136,6 +141,45 @@ export default function UtilizadoresPage() {
     },
     [loadLockMeta],
   );
+
+  const openAdminResetPasswordDialog = (u: Usuario) => {
+    setResetPwdTarget(u);
+    setResetPwdTemp('');
+    setResetPwdTemp2('');
+    setResetPwdOpen(true);
+  };
+
+  const submitAdminResetPassword = async () => {
+    if (!resetPwdTarget) return;
+    const a = resetPwdTemp.trim();
+    const b = resetPwdTemp2.trim();
+    if (a.length < 8) {
+      toast.error('A palavra-passe temporária deve ter pelo menos 8 caracteres.');
+      return;
+    }
+    if (a !== b) {
+      toast.error('As duas palavras-passe não coincidem.');
+      return;
+    }
+    setResetPwdBusy(true);
+    try {
+      await resetUserPasswordAsAdmin({ target_profile_id: resetPwdTarget.id, new_password: a });
+      toast.success(
+        'Palavra-passe reposta. Entregue a palavra-passe temporária ao utilizador; ao iniciar sessão, será obrigado a definir uma nova.',
+        { duration: 10_000 },
+      );
+      setResetPwdOpen(false);
+      setResetPwdTarget(null);
+      setResetPwdTemp('');
+      setResetPwdTemp2('');
+      await loadLockMeta();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao repor a palavra-passe.');
+    } finally {
+      setResetPwdBusy(false);
+    }
+  };
+
   const filtered = usuariosFromDb.filter(
     u =>
       u.nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -471,6 +515,18 @@ export default function UtilizadoresPage() {
                       <LockOpen className="h-4 w-4" />
                     </Button>
                   ) : null}
+                  {currentUser?.perfil === 'Admin' && isSupabaseConfigured() ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => openAdminResetPasswordDialog(u)}
+                      title="Repor palavra-passe (obriga nova ao login)"
+                      aria-label="Repor palavra-passe"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -554,6 +610,19 @@ export default function UtilizadoresPage() {
                   title="Desbloquear login"
                 >
                   <LockOpen className="h-4 w-4" />
+                </Button>
+              ) : null}
+              {currentUser?.perfil === 'Admin' && isSupabaseConfigured() ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  onClick={() => openAdminResetPasswordDialog(u)}
+                  aria-label="Repor palavra-passe"
+                  title="Repor palavra-passe"
+                >
+                  <KeyRound className="h-4 w-4" />
                 </Button>
               ) : null}
               <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(u)} aria-label="Editar">
@@ -865,6 +934,71 @@ export default function UtilizadoresPage() {
             </div>
           }
         />
+      </Dialog>
+
+      <Dialog
+        open={resetPwdOpen}
+        onOpenChange={v => {
+          setResetPwdOpen(v);
+          if (!v) {
+            setResetPwdTarget(null);
+            setResetPwdTemp('');
+            setResetPwdTemp2('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Repor palavra-passe</DialogTitle>
+            <DialogDescription>
+              {resetPwdTarget ? (
+                <>
+                  Utilizador: <span className="font-medium text-foreground">{resetPwdTarget.nome}</span> (
+                  {resetPwdTarget.email}). Defina uma palavra-passe temporária (mín. 8 caracteres). No próximo login, o
+                  sistema pedirá uma nova palavra-passe forte antes de continuar.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Palavra-passe temporária</Label>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={resetPwdTemp}
+                onChange={e => setResetPwdTemp(e.target.value)}
+                disabled={resetPwdBusy}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirmar palavra-passe temporária</Label>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={resetPwdTemp2}
+                onChange={e => setResetPwdTemp2(e.target.value)}
+                disabled={resetPwdBusy}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setResetPwdOpen(false);
+                setResetPwdTarget(null);
+              }}
+              disabled={resetPwdBusy}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void submitAdminResetPassword()} disabled={resetPwdBusy}>
+              {resetPwdBusy ? 'A repor…' : 'Repor palavra-passe'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );

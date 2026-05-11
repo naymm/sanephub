@@ -28,6 +28,7 @@ export interface Database {
           /** Nunca pedir em select público; só RPC bcrypt. */
           ponto_pin_hash?: string | null;
           primeiro_acesso_pendente?: boolean;
+          obrigar_troca_senha?: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -47,6 +48,7 @@ export interface Database {
           empresa_id?: number | null;
           numero_mec?: string | null;
           primeiro_acesso_pendente?: boolean;
+          obrigar_troca_senha?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -66,6 +68,7 @@ export interface Database {
           empresa_id?: number | null;
           numero_mec?: string | null;
           primeiro_acesso_pendente?: boolean;
+          obrigar_troca_senha?: boolean;
           created_at?: string;
           updated_at?: string;
         };

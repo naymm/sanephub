@@ -45,6 +45,8 @@ export interface Usuario {
   fotoPerfilUrl?: string | null;
   /** Supabase: colaborador novo deve concluir alteração de senha + PIN antes de usar a intranet. */
   primeiroAcessoPendente?: boolean;
+  /** Supabase: senha reposta pelo Admin — obrigar nova palavra-passe no próximo acesso. */
+  obrigarTrocaSenha?: boolean;
   permissoes: string[];
   /** Módulos a que o utilizador tem acesso. Se definido, sobrepõe o acesso por perfil. Admin ignora. */
   modulos?: string[];

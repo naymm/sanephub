@@ -15,6 +15,7 @@ import { HorizontalMenu } from './HorizontalMenu';
 import { FloatingCornerActions } from './FloatingCornerActions';
 import { MobileBottomNav } from './MobileBottomNav';
 import { ColaboradorPrimeiroAcessoWizard } from '@/components/onboarding/ColaboradorPrimeiroAcessoWizard';
+import { ObrigatorioTrocaSenhaDialog } from '@/components/auth/ObrigatorioTrocaSenhaDialog';
 import { ComunicadoLeituraPopup } from '@/components/comunicacao-interna/ComunicadoLeituraPopup';
 import { MobileWebPushBanner } from '@/components/mobile/MobileWebPushBanner';
 import { PwaGeolocationBanner } from '@/components/mobile/PwaGeolocationBanner';
@@ -157,6 +158,7 @@ export function Layout() {
       <div className={cn(isChatFullscreenMobile && 'max-md:hidden')}>
         <FloatingCornerActions />
       </div>
+      <ObrigatorioTrocaSenhaDialog />
       <ColaboradorPrimeiroAcessoWizard />
       <ComunicadoLeituraPopup />
     </div>

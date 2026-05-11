@@ -100,7 +100,13 @@ function PasswordComVisibilidade({
 export function ColaboradorPrimeiroAcessoWizard() {
   const { user, refreshSessionUser } = useAuth();
   const open =
-    Boolean(isSupabaseConfigured() && supabase && user?.perfil === 'Colaborador' && user.primeiroAcessoPendente);
+    Boolean(
+      isSupabaseConfigured() &&
+        supabase &&
+        user?.perfil === 'Colaborador' &&
+        user.primeiroAcessoPendente &&
+        !user.obrigarTrocaSenha,
+    );
 
   const [step, setStep] = useState(1);
   const [senhaAtual, setSenhaAtual] = useState('');

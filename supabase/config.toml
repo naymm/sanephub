@@ -7,6 +7,9 @@
 [functions.create-user]
 verify_jwt = false
 
+[functions.admin-reset-user-password]
+verify_jwt = false
+
 # Igual ao create-user: em localhost o gateway pode devolver 401 mesmo com sessão válida.
 # A função valida o Bearer com supabase.auth.getUser().
 [functions.birthdays]
