@@ -167,6 +167,8 @@ export function IntranetTopbar() {
       ],
       'gestao-documentos': [
         { key: 'gestao-documentos-main', label: 'Documentos', path: '/gestao-documentos' },
+        { key: 'gestao-documentos-normativos', label: 'Normativos', path: '/gestao-documentos/normativos' },
+        { key: 'gestao-documentos-minutas', label: 'Minutas', path: '/gestao-documentos/minutas' },
       ],
       patrimonio: [{ key: 'patrimonio-main', label: 'Activos e verificação', path: '/patrimonio' }],
       juridico: [

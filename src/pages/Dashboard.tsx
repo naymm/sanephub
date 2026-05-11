@@ -5,9 +5,28 @@ import { useNotifications } from '@/context/NotificationContext';
 import { KpiCard } from '@/components/shared/KpiCard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getCurrentDatePT, formatKz, formatDate, diasRestantes, getGreeting, parseMonetaryAmount } from '@/utils/formatters';
-import { UsersRound, ShieldCheck, TrendingUp, Receipt, Search, Calendar as LucideCalendar, Download, Star, Heart, MessageCircle, MapPin, Clock, Cake, ScrollText, Paperclip } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {
+  UsersRound,
+  ShieldCheck,
+  TrendingUp,
+  Receipt,
+  Search,
+  Calendar as LucideCalendar,
+  Download,
+  Star,
+  Heart,
+  MessageCircle,
+  MapPin,
+  Clock,
+  Cake,
+  ScrollText,
+  Paperclip,
+  Scale,
+  ClipboardList,
+  FolderArchive,
+} from 'lucide-react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar as UiCalendar } from '@/components/ui/calendar';
@@ -65,8 +84,8 @@ function filterBirthdaysInLocalMonth(all: BirthdayPerson[], ref: Date): Birthday
   });
 }
 
-/** Notícias publicadas no bloco «Notícias & Atualizações» (mais recentes primeiro). */
-const DASHBOARD_NOTICIAS_MAX = 3;
+/** Notícias publicadas no bloco «Notícias & Atualizações» (mais recentes primeiro, rotação no slider). */
+const DASHBOARD_NOTICIAS_MAX = 6;
 const DASHBOARD_COMUNICADOS_MAX = 4;
 
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
@@ -102,6 +121,8 @@ export default function Dashboard() {
   const [birthdaysError, setBirthdaysError] = useState<string | null>(null);
   const [receitaFacturacao, setReceitaFacturacao] = useState<number>(0);
   const [receitaFacturacaoLoading, setReceitaFacturacaoLoading] = useState(false);
+  const [newsSlideIndex, setNewsSlideIndex] = useState(0);
+  const [newsSliderPaused, setNewsSliderPaused] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -458,6 +479,22 @@ export default function Dashboard() {
     };
   }, [newsCardIdsKey]);
 
+  useEffect(() => {
+    setNewsSlideIndex(i => {
+      if (orderedNews.length === 0) return 0;
+      return i >= orderedNews.length ? 0 : i;
+    });
+  }, [newsCardIdsKey, orderedNews.length]);
+
+  useEffect(() => {
+    if (orderedNews.length <= 1) return;
+    if (newsSliderPaused) return;
+    const id = window.setInterval(() => {
+      setNewsSlideIndex(i => (i + 1) % orderedNews.length);
+    }, 6500);
+    return () => window.clearInterval(id);
+  }, [orderedNews.length, newsSliderPaused, newsCardIdsKey]);
+
   const formatDateTimePT = (iso?: string | null) => {
     if (!iso) return '';
     const d = new Date(iso);
@@ -484,9 +521,9 @@ export default function Dashboard() {
   };
 
   const newsCards: NewsCard[] = orderedNews.map(n => {
-    const content = (n.conteudo ?? '').trim();
-    const excerpt = content.slice(0, 220);
-    const hasMore = content.length > 220;
+    const content = comunicadoConteudoToPlainText((n.conteudo ?? '').trim());
+    const excerpt = content.slice(0, 320);
+    const hasMore = content.length > 320;
 
     return {
     key: `news-${n.id}`,
@@ -548,6 +585,8 @@ export default function Dashboard() {
   const canContabilidade = hasModuleAccess(user, 'contabilidade');
   const canSecretaria = hasModuleAccess(user, 'secretaria');
   const canJuridico = hasModuleAccess(user, 'juridico');
+  const canGestaoDocumentos = hasModuleAccess(user, 'gestao-documentos');
+  const showDashboardDestaques = canGestaoDocumentos || canComunicacao;
 
   const quickLinks = [
     { label: 'Requisições', path: '/financas/requisicoes', module: 'financas' },
@@ -753,80 +792,175 @@ export default function Dashboard() {
             </Button>
           </div>
 
-          <div className="space-y-3">
-            {newsCards.map(n => (
-              <div
-                key={n.key}
-                className="bg-card rounded-xl border border-border/80 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                      <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                        {'C'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">Comunicação Interna</p>
-                      <p className="text-xs text-muted-foreground mt-1">{n.meta}</p>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    {n.featured ? <Star className="h-4 w-4 text-[#a57e26]" /> : null}
-                  </div>
-                </div>
-
-                <p className="text-base font-semibold text-foreground mt-3">{n.title}</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {n.excerpt}
-                  {n.hasMore ? '...' : ''}
-                </p>
-
-                <div className="mt-3 overflow-hidden rounded-xl border border-border/60">
-                  {n.imageUrl ? (
-                    <img
-                      src={normalizePublicMediaUrl(n.imageUrl) ?? n.imageUrl}
-                      alt={n.title}
-                      className="h-44 w-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-44 w-full bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">
-                      Sem imagem
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-5 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Heart className="h-4 w-4 text-destructive" />
-                      <span>{likesCountByNewsId[n.id] ?? 0}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MessageCircle className="h-4 w-4" />
-                      <span>{commentsCountByNewsId[n.id] ?? 0}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => navigate(n.readMorePath)}
-                    className="text-sm font-medium text-[#a57e26] hover:underline"
-                    type="button"
-                  >
-                    Leia mais
-                  </button>
-                </div>
-              </div>
-            ))}
-            {newsCards.length === 0 && (
-              <div className="p-6 text-sm text-muted-foreground bg-card rounded-xl border border-border/80">
-                Sem notícias para mostrar.
-              </div>
-            )}
-          </div>
-
           
+
+          {newsCards.length > 0 ? (
+            <div
+              className="relative overflow-hidden rounded-2xl border border-border/80 shadow-[0_8px_30px_rgba(0,0,0,0.12)]"
+              role="region"
+              aria-roledescription="carrossel"
+              aria-label="Destaques de notícias"
+              onMouseEnter={() => setNewsSliderPaused(true)}
+              onMouseLeave={() => setNewsSliderPaused(false)}
+              onFocusCapture={() => setNewsSliderPaused(true)}
+              onBlurCapture={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  setNewsSliderPaused(false);
+                }
+              }}
+            >
+              <div className="relative min-h-[280px] pb-[4.25rem] md:min-h-[320px] md:pb-[4.5rem]">
+                {newsCards.map((n, slideIdx) => {
+                  const rawImg = n.imageUrl?.trim();
+                  const resolved = rawImg ? normalizePublicMediaUrl(rawImg) ?? rawImg : null;
+                  const bgStyle: CSSProperties | undefined = resolved
+                    ? { backgroundImage: `url(${JSON.stringify(resolved)})` }
+                    : undefined;
+                  const active = slideIdx === newsSlideIndex;
+                  return (
+                    <div
+                      key={n.key}
+                      className={cn(
+                        'absolute inset-0 flex flex-col transition-opacity duration-700 ease-out',
+                        active ? 'z-[1] opacity-100' : 'z-0 opacity-0 pointer-events-none',
+                      )}
+                      aria-hidden={!active}
+                    >
+                      <div
+                        className={cn(
+                          'absolute inset-0 bg-cover bg-center',
+                          !resolved && 'bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900',
+                        )}
+                        style={bgStyle}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/50 to-black/25" />
+
+                      <Link
+                        to={n.readMorePath}
+                        className="relative z-[2] flex flex-1 flex-col justify-center px-6 pb-4 pt-8 text-left outline-none ring-offset-0 transition-opacity duration-300 hover:opacity-[0.97] focus-visible:ring-2 focus-visible:ring-white/80 md:px-10 md:pb-5 md:pt-10"
+                      >
+                        <div className="flex max-w-2xl flex-col gap-3">
+                          {n.featured ? (
+                            <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-200">
+                              <Star className="h-3.5 w-3.5" aria-hidden />
+                              Destaque
+                            </span>
+                          ) : null}
+                          <p className="text-xs font-medium uppercase tracking-wide text-white/70">{n.meta}</p>
+                          <h3 className="text-2xl font-bold leading-tight text-white drop-shadow-sm md:text-3xl">
+                            {n.title}
+                          </h3>
+                          <p className="text-sm leading-relaxed text-white/90 line-clamp-4 md:text-base md:line-clamp-5">
+                            {n.excerpt}
+                            {n.hasMore ? '…' : ''}
+                          </p>
+                          <span className="mt-1 text-sm font-semibold text-amber-200 underline-offset-4 hover:underline">
+                            Ler mais
+                          </span>
+                        </div>
+                      </Link>
+                    </div>
+                  );
+                })}
+
+                {(() => {
+                  const active = newsCards[newsSlideIndex];
+                  if (!active) return null;
+                  return (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex flex-wrap items-center justify-between gap-3 border-t border-white/15 bg-black/35 px-4 py-3 text-white/90 backdrop-blur-[2px] md:px-6">
+                      <div className="pointer-events-auto flex items-center gap-5 text-xs md:text-sm">
+                        <div className="flex items-center gap-2">
+                          <Heart className="h-4 w-4 text-rose-300" aria-hidden />
+                          <span>{likesCountByNewsId[active.id] ?? 0}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MessageCircle className="h-4 w-4" aria-hidden />
+                          <span>{commentsCountByNewsId[active.id] ?? 0}</span>
+                        </div>
+                      </div>
+                      {newsCards.length > 1 ? (
+                        <div
+                          className="pointer-events-auto flex items-center gap-2"
+                          role="tablist"
+                          aria-label="Seleccionar notícia"
+                        >
+                          {newsCards.map((item, i) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              role="tab"
+                              aria-selected={i === newsSlideIndex}
+                              className={cn(
+                                'h-2.5 rounded-full transition-all',
+                                i === newsSlideIndex ? 'w-8 bg-white' : 'w-2.5 bg-white/40 hover:bg-white/65',
+                              )}
+                              onClick={() => setNewsSlideIndex(i)}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 text-sm text-muted-foreground bg-card rounded-xl border border-border/80">
+              Sem notícias para mostrar.
+            </div>
+          )}
+
+          <div className="bg-card rounded-xl border border-border/80 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-foreground">Comunicados recentes</h3>
+                <p className="text-sm text-muted-foreground mt-1">Feriados, tolerâncias de ponto e avisos internos.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate('/comunicacao-interna/comunicados')}>
+                Ver todos
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {recentComunicados.map(c => {
+                const previewBase = (c.resumo || comunicadoConteudoToPlainText(c.conteudo)).trim();
+                const preview = previewBase.slice(0, 150);
+                const hasMore = previewBase.length > 150;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => navigate(`/comunicacao-interna/comunicados/${c.id}`)}
+                    className="w-full rounded-xl border border-border/70 bg-background/40 p-4 text-left transition-colors hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ScrollText className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span>{new Date(c.publicadoEm).toLocaleString('pt-PT')}</span>
+                        {c.anexoUrl ? (
+                          <span className="inline-flex items-center gap-1 text-primary">
+                            <Paperclip className="h-3.5 w-3.5" />
+                            Anexo
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-foreground line-clamp-2">{c.titulo}</p>
+                      <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
+                        {preview || 'Sem descrição.'}
+                        {hasMore ? '...' : ''}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {recentComunicados.length === 0 ? (
+                <div className="rounded-xl border border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
+                  Sem comunicados recentes.
+                </div>
+              ) : null}
+            </div>
+          </div>
         </section>
         ) : null}
 
@@ -947,107 +1081,92 @@ export default function Dashboard() {
           </div>
           ) : null}
 
-          {rightHasCalendarOrBirthdays ? (
-          <div className="bg-card rounded-xl border border-border/80 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Aniversariantes do dia</h2>
-                <p className="text-sm text-muted-foreground mt-1">Destaque com foto de perfil.</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => navigate('/comunicacao-interna/aniversarios')}>
-                Ver
-              </Button>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-3">
-              {birthdaysLoading ? (
-                <p className="text-sm text-muted-foreground">Carregando...</p>
-              ) : birthdaysToday.length > 0 ? (
-                birthdaysToday.map(p => {
-                  const photoUrl = birthdayProfilePhotoUrl(p, colaboradores);
-                  const imgSrc = photoUrl ? normalizePublicMediaUrl(photoUrl) ?? photoUrl : undefined;
-                  return (
-                  <div key={p.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/30 px-3 py-2">
-                    <Avatar className="h-10 w-10 ring-1 ring-border/50">
-                      {imgSrc ? <AvatarImage src={imgSrc} alt="" /> : null}
-                      <AvatarFallback>
-                        {(p.name || '?')
-                          .split(/\s+/)
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map(w => w[0]?.toUpperCase())
-                          .join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">{formatDate(p.birth_date)}</div>
-                    </div>
-                  </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground">Sem aniversariantes hoje.</p>
-              )}
-            </div>
-          </div>
-          ) : null}
-
-<div className="bg-card rounded-xl border border-border/80 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-foreground">Comunicados recentes</h3>
-                <p className="text-sm text-muted-foreground mt-1">Feriados, tolerâncias de ponto e avisos internos.</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => navigate('/comunicacao-interna/comunicados')}>
-                Ver todos
-              </Button>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {recentComunicados.map(c => {
-                const previewBase = (c.resumo || comunicadoConteudoToPlainText(c.conteudo)).trim();
-                const preview = previewBase.slice(0, 150);
-                const hasMore = previewBase.length > 150;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => navigate(`/comunicacao-interna/comunicados/${c.id}`)}
-                    className="w-full rounded-xl border border-border/70 bg-background/40 p-4 text-left transition-colors hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <ScrollText className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span>{new Date(c.publicadoEm).toLocaleString('pt-PT')}</span>
-                        {c.anexoUrl ? (
-                          <span className="inline-flex items-center gap-1 text-primary">
-                            <Paperclip className="h-3.5 w-3.5" />
-                            Anexo
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-sm font-semibold text-foreground line-clamp-2">{c.titulo}</p>
-                      <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
-                        {preview || 'Sem descrição.'}
-                        {hasMore ? '...' : ''}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-
-              {recentComunicados.length === 0 ? (
-                <div className="rounded-xl border border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
-                  Sem comunicados recentes.
-                </div>
-              ) : null}
-            </div>
-          </div>
-
         </section>
         ) : null}
       </div>
+      ) : null}
+
+      {showDashboardDestaques ? (
+        <section className="space-y-4" aria-label="Destaques do dashboard">
+          <div className="flex items-center gap-3">
+            <h2 className="shrink-0 text-lg font-bold tracking-tight text-foreground">Destaques</h2>
+            <div className="h-px flex-1 bg-border/80" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {canGestaoDocumentos ? (
+              <Link
+                to="/gestao-documentos/normativos"
+                className="group flex flex-col rounded-xl border border-stone-200/90 bg-[#faf8f4] p-5 text-left shadow-sm transition-shadow hover:shadow-md dark:border-stone-700/60 dark:bg-stone-900/35"
+              >
+                <div className="flex gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/[0.06] dark:bg-stone-800 dark:ring-white/10">
+                    <Scale className="h-5 w-5 text-primary" aria-hidden />
+                  </div>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-bold text-primary">Normativos</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-snug text-muted-foreground">
+                  Regulamentos, circulares e normas internas na gestão documental.
+                </p>
+              </Link>
+            ) : null}
+            {canGestaoDocumentos ? (
+              <Link
+                to="/gestao-documentos/minutas"
+                className="group flex flex-col rounded-xl border border-stone-200/90 bg-[#faf8f4] p-5 text-left shadow-sm transition-shadow hover:shadow-md dark:border-stone-700/60 dark:bg-stone-900/35"
+              >
+                <div className="flex gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/[0.06] dark:bg-stone-800 dark:ring-white/10">
+                    <ClipboardList className="h-5 w-5 text-primary" aria-hidden />
+                  </div>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-bold text-primary">Minutas</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-snug text-muted-foreground">
+                  Modelos e minutas reutilizáveis para a sua equipa.
+                </p>
+              </Link>
+            ) : null}
+            {canGestaoDocumentos ? (
+              <Link
+                to="/gestao-documentos"
+                className="group flex flex-col rounded-xl border border-stone-200/90 bg-[#faf8f4] p-5 text-left shadow-sm transition-shadow hover:shadow-md dark:border-stone-700/60 dark:bg-stone-900/35"
+              >
+                <div className="flex gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/[0.06] dark:bg-stone-800 dark:ring-white/10">
+                    <FolderArchive className="h-5 w-5 text-primary" aria-hidden />
+                  </div>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-bold text-primary">Documentos</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-snug text-muted-foreground">
+                  Repositório central: pesquisar, pré-visualizar e descarregar ficheiros.
+                </p>
+              </Link>
+            ) : null}
+            {canComunicacao ? (
+              <Link
+                to="/comunicacao-interna/aniversarios"
+                className="group flex flex-col rounded-xl border border-stone-200/90 bg-[#faf8f4] p-5 text-left shadow-sm transition-shadow hover:shadow-md dark:border-stone-700/60 dark:bg-stone-900/35"
+              >
+                <div className="flex gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/[0.06] dark:bg-stone-800 dark:ring-white/10">
+                    <Cake className="h-5 w-5 text-primary" aria-hidden />
+                  </div>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-bold text-primary">Aniversariantes</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-snug text-muted-foreground">
+                  Calendário e lista de aniversários da organização.
+                </p>
+              </Link>
+            ) : null}
+          </div>
+        </section>
       ) : null}
 
       {/* Documentos oficiais (Secretaria) */}

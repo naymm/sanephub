@@ -123,7 +123,11 @@ export const MODULE_GROUPS: MenuGroup[] = [
     label: 'Gestão documental',
     module: 'gestao-documentos',
     icon: FolderArchive,
-    children: [{ label: 'Documentos', path: '/gestao-documentos', module: 'gestao-documentos' }],
+    children: [
+      { label: 'Documentos', path: '/gestao-documentos', module: 'gestao-documentos' },
+      { label: 'Normativos', path: '/gestao-documentos/normativos', module: 'gestao-documentos' },
+      { label: 'Minutas', path: '/gestao-documentos/minutas', module: 'gestao-documentos' },
+    ],
   },
   {
     label: 'Património',

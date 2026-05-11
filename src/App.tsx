@@ -174,6 +174,14 @@ const App = () => (
                   <Route path="/secretaria/documentos" element={<DocumentosOficiaisPage />} />
                   <Route path="/secretaria/documentos/novo" element={<DocumentosOficiaisPage />} />
                   <Route path="/gestao-documentos" element={<GestaoDocumentosPage />} />
+                  <Route
+                    path="/gestao-documentos/normativos"
+                    element={<GestaoDocumentosPage scopedRootFolderName="Normativos" pageHeading="Normativos" />}
+                  />
+                  <Route
+                    path="/gestao-documentos/minutas"
+                    element={<GestaoDocumentosPage scopedRootFolderName="Minutas" pageHeading="Minutas" />}
+                  />
                   <Route path="/secretaria/gestao-documentos" element={<Navigate to="/gestao-documentos" replace />} />
                   <Route path="/patrimonio" element={<PatrimonioPage />} />
                   <Route path="/secretaria/correspondencias" element={<CorrespondenciasPage />} />

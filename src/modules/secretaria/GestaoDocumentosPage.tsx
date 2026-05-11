@@ -71,6 +71,13 @@ import { nomeFicheiroParaDownload } from '@/utils/nomeFicheiroDownload';
 const BUCKET = 'gestao-documentos';
 const MOBILE_BG_LOCK_BYPASS_MS = 60_000;
 
+export type GestaoDocumentosPageProps = {
+  /** Pasta de 1.º nível (nome exacto na BD, sem diferenciar maiúsculas); a vista abre directamente nessa pasta. */
+  scopedRootFolderName?: string;
+  /** Título principal (substitui «Gestão de Documentos»). */
+  pageHeading?: string;
+};
+
 const MODULO_OPTIONS = [
   { value: 'capital-humano', label: 'Capital Humano' },
   { value: 'financas', label: 'Finanças' },
@@ -451,7 +458,10 @@ function canUpload(perfil: string, empresaId?: number | null): boolean {
   ].includes(perfil);
 }
 
-export default function GestaoDocumentosPage() {
+export default function GestaoDocumentosPage({
+  scopedRootFolderName,
+  pageHeading,
+}: GestaoDocumentosPageProps = {}) {
   const { user } = useAuth();
   const { currentEmpresaId } = useTenant();
   const { departamentos } = useData();
@@ -506,6 +516,7 @@ export default function GestaoDocumentosPage() {
   const [editPastaSectores, setEditPastaSectores] = useState<string[]>([]);
   const [savingPastaEdit, setSavingPastaEdit] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const scopeApplyKeyRef = useRef<string | null>(null);
 
   const [moverOpen, setMoverOpen] = useState(false);
   /** Um ou vários documentos a mover (fluxo único no diálogo). */
@@ -582,6 +593,29 @@ export default function GestaoDocumentosPage() {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  const gestaoScopedRootStatus = useMemo(() => {
+    const name = scopedRootFolderName?.trim();
+    if (!name || empresaIdNum == null) {
+      return { active: false as const, missing: false as const, rootId: null as number | null };
+    }
+    const root = pastas.find(p => p.parentId === null && p.nome.trim().toLowerCase() === name.toLowerCase());
+    return {
+      active: true as const,
+      missing: !loading && !root,
+      rootId: root?.id ?? null,
+    };
+  }, [scopedRootFolderName, empresaIdNum, pastas, loading]);
+
+  useEffect(() => {
+    if (!gestaoScopedRootStatus.active || gestaoScopedRootStatus.rootId == null || empresaIdNum == null) return;
+    const name = scopedRootFolderName?.trim();
+    if (!name) return;
+    const k = `${empresaIdNum}|${name.toLowerCase()}`;
+    if (scopeApplyKeyRef.current === k) return;
+    scopeApplyKeyRef.current = k;
+    setSelectedPastaId(gestaoScopedRootStatus.rootId);
+  }, [gestaoScopedRootStatus.active, gestaoScopedRootStatus.rootId, empresaIdNum, scopedRootFolderName]);
 
   const pastaNomeById = useMemo(() => {
     const m = new Map<number, string>();
@@ -1316,7 +1350,9 @@ export default function GestaoDocumentosPage() {
       <div className="border-b border-border/80 pb-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 space-y-1">
-            <h1 className="text-base font-medium tracking-tight text-foreground">Gestão de Documentos</h1>
+            <h1 className="text-base font-medium tracking-tight text-foreground">
+              {pageHeading ?? 'Gestão de Documentos'}
+            </h1>
             <nav className="flex flex-wrap items-center gap-0.5 text-sm text-muted-foreground" aria-label="Caminho da pasta">
               {breadcrumbTrail.map((seg, i) => (
                 <Fragment key={seg.id === null ? 'root' : seg.id}>
@@ -1336,6 +1372,13 @@ export default function GestaoDocumentosPage() {
                 </Fragment>
               ))}
             </nav>
+            {gestaoScopedRootStatus.active && gestaoScopedRootStatus.missing ? (
+              <p className="rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-50">
+                Não existe uma pasta de raiz com o nome{' '}
+                <span className="font-semibold">«{scopedRootFolderName?.trim()}»</span>. Crie esta pasta na gestão
+                documental (nível raiz) ou peça apoio à Secretaria / Administração.
+              </p>
+            ) : null}
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px]">
