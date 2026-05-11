@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { normalizePublicMediaUrl } from '@/utils/publicMediaUrl';
-import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
+import { LockOpen, Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
@@ -77,6 +77,7 @@ export default function UtilizadoresPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
   const [colaboradorSelectOpen, setColaboradorSelectOpen] = useState(false);
+  const [lockMeta, setLockMeta] = useState<Record<number, { locked: boolean; attempts: number }>>({});
   const [form, setForm] = useState<UsuarioFormState>({
     nome: '',
     email: '',
@@ -97,6 +98,44 @@ export default function UtilizadoresPage() {
 
   // Apenas utilizadores da base de dados (Supabase). Sem Supabase a página fica vazia (sem mock/seed).
   const usuariosFromDb = isSupabaseConfigured() ? usuarios : [];
+
+  const loadLockMeta = useCallback(async () => {
+    if (currentUser?.perfil !== 'Admin') return;
+    if (!isSupabaseConfigured() || !supabase) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, login_locked_at, login_failed_attempts')
+      .order('id', { ascending: true });
+    if (error || !data) return;
+    const next: Record<number, { locked: boolean; attempts: number }> = {};
+    for (const row of data as any[]) {
+      const id = Number(row.id);
+      next[id] = {
+        locked: Boolean(row.login_locked_at),
+        attempts: Number(row.login_failed_attempts ?? 0),
+      };
+    }
+    setLockMeta(next);
+  }, [currentUser?.perfil]);
+
+  useEffect(() => {
+    void loadLockMeta();
+  }, [loadLockMeta]);
+
+  const unlockLogin = useCallback(
+    async (u: Usuario) => {
+      if (!isSupabaseConfigured() || !supabase) return;
+      try {
+        const { error } = await supabase.rpc('admin_unlock_login', { p_profile_id: u.id });
+        if (error) throw error;
+        toast.success('Conta desbloqueada.');
+        await loadLockMeta();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Não foi possível desbloquear a conta.');
+      }
+    },
+    [loadLockMeta],
+  );
   const filtered = usuariosFromDb.filter(
     u =>
       u.nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -420,6 +459,18 @@ export default function UtilizadoresPage() {
                       : 'Por perfil'}
                 </td>
                 <td className="py-3 px-5 text-right">
+                  {lockMeta[u.id]?.locked ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-amber-700"
+                      onClick={() => void unlockLogin(u)}
+                      title="Desbloquear login"
+                      aria-label="Desbloquear login"
+                    >
+                      <LockOpen className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -467,6 +518,18 @@ export default function UtilizadoresPage() {
             { label: 'Login', value: <span className="font-mono text-xs">{u.username ?? u.email.split('@')[0] ?? '—'}</span> },
             { label: 'Email', value: u.email },
             { label: 'Perfil', value: u.perfil },
+            ...(lockMeta[u.id]?.locked
+              ? [
+                  {
+                    label: 'Login',
+                    value: (
+                      <span className="text-xs font-medium text-amber-700">
+                        Bloqueado (3 tentativas). Só Admin desbloqueia.
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
             { label: 'Cargo / Dept.', value: `${u.cargo} — ${u.departamento}` },
             {
               label: 'Acesso módulos',
@@ -480,6 +543,19 @@ export default function UtilizadoresPage() {
           ]}
           renderActions={u => (
             <>
+              {lockMeta[u.id]?.locked ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0"
+                  onClick={() => void unlockLogin(u)}
+                  aria-label="Desbloquear login"
+                  title="Desbloquear login"
+                >
+                  <LockOpen className="h-4 w-4" />
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => openEdit(u)} aria-label="Editar">
                 <Pencil className="h-4 w-4" />
               </Button>

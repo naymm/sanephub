@@ -347,18 +347,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (identificador: string, senha: string): Promise<boolean> => {
       if (isSupabaseConfigured() && supabase) {
-        let email = identificador.trim();
+        const ident = identificador.trim();
+        // Pre-check: conta bloqueada?
+        const { data: isBlocked, error: blockErr } = await supabase.rpc('auth_login_is_blocked', {
+          p_identifier: ident,
+        });
+        if (blockErr) {
+          // Não quebrar login por falha de RPC; seguir o fluxo normal.
+          console.error('[login] auth_login_is_blocked RPC error', blockErr);
+        } else if (isBlocked === true) {
+          // Login bloqueado: só Admin desbloqueia.
+          throw new Error('ACCOUNT_LOCKED');
+        }
+
+        let email = ident;
         if (!email.includes('@')) {
           const { data: resolved, error: rpcError } = await supabase.rpc('resolve_login_email', {
             p_username: email,
           });
           if (rpcError || resolved == null || typeof resolved !== 'string' || !resolved.trim()) {
+            // Username não resolve → registar falha para esse identificador.
+            await supabase.rpc('auth_login_register_failure', { p_identifier: ident });
             return false;
           }
           email = resolved.trim();
         }
+
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
-        if (error) return false;
+        if (error) {
+          await supabase.rpc('auth_login_register_failure', { p_identifier: ident });
+          return false;
+        }
         // Safari / mobile: garantir que o cliente aplicou o JWT antes dos selects (evita RLS vazio + UI presa).
         await supabase.auth.getSession();
         const authUserId = data.user?.id;
@@ -376,6 +395,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let u = profileToUsuario(prow);
         u = await mergeFotoPerfilFromColaborador(supabase, u, prow.colaborador_id);
         setUser(u);
+        // Reset contador (não desbloqueia contas; só Admin).
+        await supabase.rpc('auth_login_register_success', { p_auth_user_id: authUserId });
         bumpAuthSessionRevision();
         return true;
       }

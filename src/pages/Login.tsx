@@ -57,8 +57,12 @@ export default function Login() {
       } else {
         setError('Credenciais inválidas. Verifique o nome de utilizador e a senha.');
       }
-    } catch {
-      setError('Não foi possível iniciar sessão. Tente novamente.');
+    } catch (e) {
+      if (e instanceof Error && e.message === 'ACCOUNT_LOCKED') {
+        setError('Conta bloqueada após 3 tentativas falhadas. Contacte o Administrador para desbloquear.');
+      } else {
+        setError('Não foi possível iniciar sessão. Tente novamente.');
+      }
     } finally {
       setIsSubmitting(false);
     }

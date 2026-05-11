@@ -1978,7 +1978,7 @@ export default function MinhasActividadesPage({
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">% conclusão</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Performance</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{metrics.pct}%</CardContent>
         </Card>
