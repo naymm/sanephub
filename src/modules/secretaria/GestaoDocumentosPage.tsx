@@ -895,12 +895,20 @@ export default function GestaoDocumentosPage({
   };
 
   const openMover = (a: GestaoDocumentoArquivo) => {
+    if (user?.perfil !== 'Admin') {
+      toast.error('Apenas administradores podem mover documentos.');
+      return;
+    }
     setMoverArquivos([a]);
     setMoverDestinoPastaId(defaultMoverDestinoPastaId([a], pastas));
     setMoverOpen(true);
   };
 
   const openMoverSelecionados = () => {
+    if (user?.perfil !== 'Admin') {
+      toast.error('Apenas administradores podem mover documentos.');
+      return;
+    }
     if (empresaIdNum == null) return;
     const list = arquivos.filter(a => arquivosSelecionadosIds.includes(a.id));
     if (list.length === 0) {
@@ -913,6 +921,10 @@ export default function GestaoDocumentosPage({
   };
 
   const executarMover = async () => {
+    if (user?.perfil !== 'Admin') {
+      toast.error('Apenas administradores podem mover documentos.');
+      return;
+    }
     if (!supabase || moverDestinoPastaId == null || empresaIdNum == null) {
       toast.error('Seleccione a pasta de destino.');
       return;
@@ -1326,8 +1338,8 @@ export default function GestaoDocumentosPage({
 
   const manage = canManageFolders(user.perfil, user.empresaId);
   const uploadOk = canUpload(user.perfil, user.empresaId);
-  /** Quem vê documentos nesta empresa pode mover entre pastas (RLS: migração `20260320000025_gestao_arquivos_update_leitores_mover.sql`). */
-  const canMoverArquivos = empresaIdNum != null;
+  /** Mover ficheiros entre pastas: só Admin (política RLS + trigger em `gestao_documentos_arquivos`). */
+  const canMoverArquivos = user.perfil === 'Admin' && empresaIdNum != null;
   /** Checkboxes de selecção: quem pode eliminar em lote ou mover em lote. */
   const showSelecaoArquivos = manage || canMoverArquivos;
   /** Quem pode criar pastas (Admin / PCA / Secretaria) pode também eliminá-las — coerente com RLS `gestao_documentos_pode_gerir`. */
