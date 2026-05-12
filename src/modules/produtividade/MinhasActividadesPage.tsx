@@ -13,6 +13,11 @@ import type {
   ProdutividadeStatus,
 } from '@/types';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
+import {
+  canTransitionProdutividadeStatus,
+  produtividadeStatusSelectDisabled,
+  produtividadeTransitionBlockedMessage,
+} from '@/modules/produtividade/statusTransitions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -1739,6 +1744,16 @@ export default function MinhasActividadesPage({
   ): Promise<boolean> {
     if (!isSupabaseConfigured() || !supabase) return false;
     const current = activityById.get(id);
+    if (current?.status === next) return true;
+    if (next === 'Atrasada') {
+      toast.error('O estado «Atrasada» resulta do prazo vencido; não pode ser escolhido manualmente.');
+      return false;
+    }
+    const from = current?.status;
+    if (from && !canTransitionProdutividadeStatus(from, next)) {
+      toast.error(produtividadeTransitionBlockedMessage(from, next));
+      return false;
+    }
     if (next === 'Concluída' && mustCompleteViaApprovalFlow(current)) {
       toast.error(
         'Esta actividade exige aprovação: não pode passar directamente a «Concluída». Use «Concluir» ou arraste para a coluna «Concluída» no Kanban para submeter à aprovação.',
@@ -1925,6 +1940,10 @@ export default function MinhasActividadesPage({
     if (!toCol) return;
 
     if (fromCol !== toCol) {
+      if (toCol === 'Atrasada') {
+        toast.error('O estado «Atrasada» resulta do prazo vencido; arraste para Pendente ou Em Progresso em vez disso.');
+        return;
+      }
       if (toCol === 'Em aprovação' && fromCol !== 'Em aprovação') {
         // Permite arrastar directamente para «Em aprovação» (respeita regras/validações em setStatus + triggers SQL).
         void setStatus(active.id, 'Em aprovação');
@@ -1962,6 +1981,13 @@ export default function MinhasActividadesPage({
           toast.error('Só o aprovador designado (ou gestão) pode mover a actividade desde «Em aprovação».');
           return;
         }
+      }
+    }
+
+    if (fromCol !== toCol) {
+      if (!canTransitionProdutividadeStatus(active.status, toCol)) {
+        toast.error(produtividadeTransitionBlockedMessage(active.status, toCol));
+        return;
       }
     }
 
@@ -2944,17 +2970,40 @@ export default function MinhasActividadesPage({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Pendente">Pendente</SelectItem>
-                              <SelectItem value="Em Progresso">Em Progresso</SelectItem>
-                              <SelectItem value="Em aprovação" disabled={blockManualEmAprovacaoPorEntregavel}>
+                              <SelectItem
+                                value="Pendente"
+                                disabled={produtividadeStatusSelectDisabled(detailsActivity.status, 'Pendente')}
+                              >
+                                Pendente
+                              </SelectItem>
+                              <SelectItem
+                                value="Em Progresso"
+                                disabled={produtividadeStatusSelectDisabled(detailsActivity.status, 'Em Progresso')}
+                              >
+                                Em Progresso
+                              </SelectItem>
+                              <SelectItem
+                                value="Em aprovação"
+                                disabled={produtividadeStatusSelectDisabled(
+                                  detailsActivity.status,
+                                  'Em aprovação',
+                                  blockManualEmAprovacaoPorEntregavel,
+                                )}
+                              >
                                 Em aprovação
                               </SelectItem>
-                              <SelectItem value="Atrasada">Atrasada</SelectItem>
+                              {detailsActivity.status === 'Atrasada' ? (
+                                <SelectItem value="Atrasada" disabled>
+                                  Atrasada (automático)
+                                </SelectItem>
+                              ) : null}
                               <SelectItem
                                 value="Concluída"
-                                disabled={
-                                  mustCompleteViaApprovalFlow(detailsActivity) || blockSeleccionarConcluidaPorEntregavel
-                                }
+                                disabled={produtividadeStatusSelectDisabled(
+                                  detailsActivity.status,
+                                  'Concluída',
+                                  mustCompleteViaApprovalFlow(detailsActivity) || blockSeleccionarConcluidaPorEntregavel,
+                                )}
                                 className={
                                   mustCompleteViaApprovalFlow(detailsActivity) || blockSeleccionarConcluidaPorEntregavel
                                     ? 'opacity-50'
@@ -2963,7 +3012,12 @@ export default function MinhasActividadesPage({
                               >
                                 Concluída
                               </SelectItem>
-                              <SelectItem value="Cancelada">Cancelada</SelectItem>
+                              <SelectItem
+                                value="Cancelada"
+                                disabled={produtividadeStatusSelectDisabled(detailsActivity.status, 'Cancelada')}
+                              >
+                                Cancelada
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

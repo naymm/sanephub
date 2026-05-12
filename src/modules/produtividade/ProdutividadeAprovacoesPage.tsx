@@ -3,7 +3,8 @@ import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
-import type { ProdutividadeActividade, ProdutividadeParticipante } from '@/types';
+import type { ProdutividadeActividade, ProdutividadeParticipante, ProdutividadeStatus } from '@/types';
+import { canTransitionProdutividadeStatus, produtividadeTransitionBlockedMessage } from '@/modules/produtividade/statusTransitions';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -96,6 +97,12 @@ export default function ProdutividadeAprovacoesPage() {
 
   async function setStatus(id: number, next: string) {
     if (!isSupabaseConfigured() || !supabase) return;
+    const row = allRows.find(r => r.id === id);
+    const nextSt = next as ProdutividadeStatus;
+    if (row && row.status !== nextSt && !canTransitionProdutividadeStatus(row.status, nextSt)) {
+      toast.error(produtividadeTransitionBlockedMessage(row.status, nextSt));
+      return;
+    }
     setBusyId(id);
     try {
       const { error } = await (supabase.from('produtividade_actividades') as any).update({ status: next }).eq('id', id);
