@@ -28,6 +28,8 @@ export type MenuChild = {
   adminOnly?: boolean;
   /** Se definido, só mostra para cargos específicos (match por substring, case-insensitive). */
   requiresCargoIncludes?: string[];
+  /** Com `requiresCargoIncludes`, estes perfis vêem o item mesmo sem o cargo (ex.: Admin/PCA em Direcção). */
+  showForPerfisWithoutCargo?: string[];
 };
 
 export type MenuGroup = {
@@ -55,6 +57,7 @@ export const MODULE_GROUPS: MenuGroup[] = [
         path: '/produtividade/direccao',
         module: 'produtividade',
         requiresCargoIncludes: ['director', 'diretor', 'coordenador'],
+        showForPerfisWithoutCargo: ['Admin', 'PCA'],
       },
     ],
   },

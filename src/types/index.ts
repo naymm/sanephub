@@ -702,6 +702,8 @@ export interface ProdutividadeActividade {
   kanbanOrder: number;
 
   concluidaEm?: string | null;
+  /** Conclusão efectuada numa data posterior ao prazo (persistido; ver trigger). */
+  concluidaComAtraso?: boolean;
   canceladaEm?: string | null;
   createdAt: string;
   updatedAt?: string | null;

@@ -297,7 +297,7 @@ function diffDays(aIso: string, bIso: string): number {
   return Math.round((a - b) / (24 * 60 * 60 * 1000));
 }
 
-const STATUS_KANBAN = ['Pendente', 'Em Progresso', 'Em aprovação', 'Concluída'] as const;
+const STATUS_KANBAN = ['Pendente', 'Em Progresso', 'Atrasada', 'Em aprovação', 'Concluída'] as const;
 type KanbanColumnId = (typeof STATUS_KANBAN)[number];
 
 const DND_COL_PREFIX = 'col:' as const;
@@ -315,14 +315,6 @@ function parseDndItemId(value: string): number | null {
 
 function isColumnId(value: string): value is `${typeof DND_COL_PREFIX}${KanbanColumnId}` {
   return value.startsWith(DND_COL_PREFIX) && (STATUS_KANBAN as readonly string[]).includes(value.slice(DND_COL_PREFIX.length));
-}
-
-function kanbanColumnForActivity(a: ProdutividadeActividade): KanbanColumnId | null {
-  if (a.status === 'Cancelada') return null;
-  if (a.status === 'Concluída') return 'Concluída';
-  if (a.status === 'Em aprovação') return 'Em aprovação';
-  if (a.status === 'Pendente') return 'Pendente';
-  return 'Em Progresso';
 }
 
 /** Actividades com aprovação obrigatória só podem chegar a «Concluída» a partir de «Em aprovação». */
@@ -370,6 +362,24 @@ function effectiveStatus(a: ProdutividadeActividade): ProdutividadeStatus {
   return isOverdue(a) ? 'Atrasada' : a.status;
 }
 
+/** Conclusão registada depois do dia do prazo (coluna persistida ou inferida de concluida_em). */
+function actividadeConcluidaForaDoPrazo(a: ProdutividadeActividade): boolean {
+  if (a.status !== 'Concluída') return false;
+  if (typeof a.concluidaComAtraso === 'boolean') return a.concluidaComAtraso;
+  const done = (a.concluidaEm ?? '').slice(0, 10);
+  if (!done) return false;
+  return done > a.prazo;
+}
+
+/** Dias corridos entre o prazo e a data de conclusão (≥1 quando concluidaComAtraso). */
+function diasConclusaoAlemDoPrazo(a: ProdutividadeActividade): number | null {
+  if (!actividadeConcluidaForaDoPrazo(a)) return null;
+  const done = (a.concluidaEm ?? '').slice(0, 10);
+  if (!done) return null;
+  const d = diffDays(done, a.prazo);
+  return d > 0 ? d : null;
+}
+
 function statusBadgeVariant(s: ProdutividadeStatus): React.ComponentProps<typeof Badge>['variant'] {
   if (s === 'Concluída') return 'default';
   if (s === 'Em Progresso') return 'secondary';
@@ -379,6 +389,30 @@ function statusBadgeVariant(s: ProdutividadeStatus): React.ComponentProps<typeof
   return 'outline';
 }
 
+function ActividadeStatusBadges({ a, className }: { a: ProdutividadeActividade; className?: string }) {
+  const s = effectiveStatus(a);
+  const atrasoAposConclusao = actividadeConcluidaForaDoPrazo(a);
+  return (
+    <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
+      <Badge variant={statusBadgeVariant(s)}>{s}</Badge>
+      {atrasoAposConclusao ? (
+        <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/5 text-[10px] font-normal">
+          Atrasado
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function kanbanColumnForActivity(a: ProdutividadeActividade): KanbanColumnId | null {
+  if (a.status === 'Cancelada') return null;
+  if (a.status === 'Concluída') return 'Concluída';
+  if (a.status === 'Em aprovação') return 'Em aprovação';
+  if (effectiveStatus(a) === 'Atrasada') return 'Atrasada';
+  if (a.status === 'Pendente') return 'Pendente';
+  return 'Em Progresso';
+}
+
 function prioridadeColorClass(p: string): string {
   if (p === 'Urgente') return 'text-red-600';
   if (p === 'Alta') return 'text-amber-600';
@@ -386,14 +420,26 @@ function prioridadeColorClass(p: string): string {
   return 'text-muted-foreground';
 }
 
+/** Responsável + participantes na tabela: mais do que uma pessoa distinta. */
+function isActividadeCompartilhada(a: ProdutividadeActividade, participantes: ProdutividadeParticipante[]): boolean {
+  const ids = new Set<number>();
+  if (Number.isFinite(Number(a.colaboradorId))) ids.add(Number(a.colaboradorId));
+  for (const p of participantes) {
+    if (Number.isFinite(Number(p.colaboradorId))) ids.add(Number(p.colaboradorId));
+  }
+  return ids.size > 1;
+}
+
 function TaskCard({
   a,
   dragging,
   onOpen,
+  compartilhada,
 }: {
   a: ProdutividadeActividade;
   dragging?: boolean;
   onOpen?: () => void;
+  compartilhada?: boolean;
 }) {
   const s = effectiveStatus(a);
   return (
@@ -412,15 +458,20 @@ function TaskCard({
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-medium leading-snug truncate">{a.titulo}</div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="font-medium leading-snug truncate">{a.titulo}</div>
+            {compartilhada ? (
+              <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
+                Compartilhada
+              </Badge>
+            ) : null}
+          </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             Prazo: <span className={cn('font-medium', s === 'Atrasada' && 'text-destructive')}>{a.prazo}</span>
           </div>
         </div>
-        <Badge variant={statusBadgeVariant(s)} className="shrink-0">
-          {s}
-        </Badge>
+        <ActividadeStatusBadges a={a} className="shrink-0 flex-col items-end sm:flex-row sm:items-center" />
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className={cn('text-xs font-semibold', prioridadeColorClass(a.prioridade))}>{a.prioridade}</span>
@@ -430,7 +481,17 @@ function TaskCard({
   );
 }
 
-function SortableCard({ id, a, disabled }: { id: string; a: ProdutividadeActividade; disabled?: boolean }) {
+function SortableCard({
+  id,
+  a,
+  disabled,
+  compartilhada,
+}: {
+  id: string;
+  a: ProdutividadeActividade;
+  disabled?: boolean;
+  compartilhada?: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -447,7 +508,7 @@ function SortableCard({ id, a, disabled }: { id: string; a: ProdutividadeActivid
         isDragging && 'opacity-40',
       )}
     >
-      <TaskCard a={a} />
+      <TaskCard a={a} compartilhada={compartilhada} />
     </div>
   );
 }
@@ -484,6 +545,7 @@ export default function MinhasActividadesPage({
   const { user } = useAuth();
   const { colaboradoresTodos } = useData();
   const canAssign = user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
+  const verTodasActividades = user?.perfil === 'Admin' || user?.perfil === 'PCA';
   const cargoLower = (user?.cargo ?? '').toLowerCase();
   const isDireccaoCargo = cargoLower.includes('director') || cargoLower.includes('diretor') || cargoLower.includes('coordenador');
   const myEmpresaId = useMemo(() => {
@@ -492,6 +554,15 @@ export default function MinhasActividadesPage({
     if (user?.colaboradorId) return (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null;
     return null;
   }, [currentEmpresaId, user?.empresaId, user?.colaboradorId, colaboradoresTodos]);
+
+  /** Empresa do contexto na vista Direcção (para opções de área e listas). */
+  const direccaoEmpresaId = useMemo(() => {
+    if (typeof currentEmpresaId === 'number') return currentEmpresaId;
+    if (typeof user?.empresaId === 'number') return user.empresaId;
+    if (user?.colaboradorId) return (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null;
+    return null;
+  }, [currentEmpresaId, user?.empresaId, user?.colaboradorId, colaboradoresTodos]);
+
   const [areaFilter, setAreaFilter] = useState<string | 'all'>('all');
   const [colaboradorFilter, setColaboradorFilter] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
@@ -540,6 +611,7 @@ export default function MinhasActividadesPage({
   const [kanbanUi, setKanbanUi] = useState<Record<KanbanColumnId, string[]>>({
     Pendente: [],
     'Em Progresso': [],
+    Atrasada: [],
     'Em aprovação': [],
     Concluída: [],
   });
@@ -552,9 +624,10 @@ export default function MinhasActividadesPage({
 
   const canExportAreaReport = useMemo(() => {
     if (scope !== 'area') return false;
+    if (verTodasActividades) return true;
     if (!user?.colaboradorId) return false;
     return isDireccaoCargo || user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
-  }, [scope, user?.colaboradorId, user?.perfil, isDireccaoCargo]);
+  }, [scope, verTodasActividades, user?.colaboradorId, user?.perfil, isDireccaoCargo]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -621,6 +694,9 @@ export default function MinhasActividadesPage({
       currentEmpresaId === 'consolidado'
         ? mergedAllRows
         : mergedAllRows.filter(r => Number(r.empresaId) === Number(currentEmpresaId));
+    if (scope === 'mine' && verTodasActividades) {
+      return base;
+    }
     if (scope === 'mine') {
       // Em perfis sem colaboradorId (ex.: PCA grupo) mostramos vazio por defeito.
       if (!user?.colaboradorId) return [];
@@ -634,13 +710,50 @@ export default function MinhasActividadesPage({
     }
 
     // scope === 'area'
+    if (verTodasActividades) {
+      const normalize = (v: string) =>
+        v
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/\p{Diacritic}/gu, '');
+      if (currentEmpresaId === 'consolidado') {
+        if (areaFilter === 'all') return base;
+        const areaIds = new Set<number>(
+          (colaboradoresTodos ?? [])
+            .filter(c => normalize(String(c.departamento ?? '')) === normalize(areaFilter))
+            .map(c => c.id),
+        );
+        return base.filter(r => {
+          if (areaIds.has(r.colaboradorId)) return true;
+          const parts = participantesByActividade.get(r.id) ?? [];
+          if (parts.some(p => areaIds.has(p.colaboradorId))) return true;
+          return false;
+        });
+      }
+      const empresaId = direccaoEmpresaId;
+      if (!empresaId) return [];
+      const areaIds = new Set<number>(
+        (colaboradoresTodos ?? [])
+          .filter(c => {
+            if (Number(c.empresaId) !== Number(empresaId)) return false;
+            if (areaFilter === 'all') return true;
+            return normalize(String(c.departamento ?? '')) === normalize(areaFilter);
+          })
+          .map(c => c.id),
+      );
+      return base.filter(r => {
+        if (areaIds.has(r.colaboradorId)) return true;
+        const parts = participantesByActividade.get(r.id) ?? [];
+        if (parts.some(p => areaIds.has(p.colaboradorId))) return true;
+        if (user.colaboradorId && r.status === 'Em aprovação' && r.aprovadorColaboradorId === user.colaboradorId)
+          return true;
+        return false;
+      });
+    }
+
     if (!user?.colaboradorId || !isDireccaoCargo) return [];
-    const empresaId =
-      typeof currentEmpresaId === 'number'
-        ? currentEmpresaId
-        : typeof user?.empresaId === 'number'
-          ? user.empresaId
-          : (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null;
+    const empresaId = direccaoEmpresaId;
     if (!empresaId) return [];
     const normalize = (v: string) =>
       v
@@ -669,31 +782,39 @@ export default function MinhasActividadesPage({
     mergedAllRows,
     currentEmpresaId,
     scope,
+    verTodasActividades,
     user?.colaboradorId,
     user?.empresaId,
+    user?.perfil,
     isDireccaoCargo,
     areaFilter,
+    direccaoEmpresaId,
     colaboradoresTodos,
     participantesByActividade,
   ]);
 
   const areaOptions = useMemo(() => {
     if (scope !== 'area') return [];
-    const empresaId =
-      typeof currentEmpresaId === 'number'
-        ? currentEmpresaId
-        : typeof user?.empresaId === 'number'
-          ? user.empresaId
-          : user?.colaboradorId
-            ? (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null
-            : null;
-    if (!empresaId) return [];
     const normalize = (v: string) =>
       v
         .trim()
         .toLowerCase()
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '');
+    if (verTodasActividades && currentEmpresaId === 'consolidado') {
+      const m = new Map<string, string>();
+      for (const c of colaboradoresTodos ?? []) {
+        const raw = String(c.departamento ?? '').trim();
+        if (!raw) continue;
+        const key = normalize(raw);
+        if (!m.has(key)) m.set(key, raw);
+      }
+      const list = [...m.entries()].map(([key, label]) => ({ key, label }));
+      list.sort((a, b) => a.label.localeCompare(b.label));
+      return list;
+    }
+    const empresaId = direccaoEmpresaId;
+    if (!empresaId) return [];
     const m = new Map<string, string>();
     for (const c of colaboradoresTodos ?? []) {
       if (Number(c.empresaId) !== Number(empresaId)) continue;
@@ -705,36 +826,37 @@ export default function MinhasActividadesPage({
     const list = [...m.entries()].map(([key, label]) => ({ key, label }));
     list.sort((a, b) => a.label.localeCompare(b.label));
     return list;
-  }, [scope, colaboradoresTodos, user?.empresaId, user?.colaboradorId, currentEmpresaId]);
+  }, [scope, verTodasActividades, currentEmpresaId, direccaoEmpresaId, colaboradoresTodos]);
 
   const direccaoColaboradores = useMemo(() => {
     if (scope !== 'area') return [];
-    const empresaId =
-      typeof currentEmpresaId === 'number'
-        ? currentEmpresaId
-        : typeof user?.empresaId === 'number'
-          ? user.empresaId
-          : user?.colaboradorId
-            ? (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId)?.empresaId ?? null
-            : null;
-    if (!empresaId) return [];
     const normalize = (v: string) =>
       v
         .trim()
         .toLowerCase()
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '');
-    const list = (colaboradoresTodos ?? []).filter((c) => {
-      if (Number(c.empresaId) !== Number(empresaId)) return false;
-      if (areaFilter === 'all') return true;
-      return normalize(String(c.departamento ?? '')) === normalize(areaFilter);
-    });
+    if (verTodasActividades) {
+      let list = [...(colaboradoresTodos ?? [])];
+      if (currentEmpresaId !== 'consolidado' && direccaoEmpresaId != null) {
+        list = list.filter(c => Number(c.empresaId) === Number(direccaoEmpresaId));
+      }
+      if (areaFilter !== 'all') {
+        list = list.filter(c => normalize(String(c.departamento ?? '')) === normalize(areaFilter));
+      }
+      list.sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+      return list;
+    }
+    const empresaId = direccaoEmpresaId;
+    if (!empresaId) return [];
+    const list = (colaboradoresTodos ?? []).filter(c => Number(c.empresaId) === Number(empresaId));
     list.sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
     return list;
-  }, [scope, colaboradoresTodos, user?.empresaId, user?.colaboradorId, currentEmpresaId, areaFilter]);
+  }, [scope, verTodasActividades, currentEmpresaId, direccaoEmpresaId, colaboradoresTodos, areaFilter]);
 
   useEffect(() => {
     if (scope !== 'area') return;
+    if (verTodasActividades) return;
     if (myEmpresaId !== 1) return;
     if (!user?.colaboradorId) return;
     const me = (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId);
@@ -742,9 +864,15 @@ export default function MinhasActividadesPage({
     if (!dept) return;
     // Em empresa 1, Director/Coordenador só vê a sua área: forçamos o filtro.
     setAreaFilter(dept);
-  }, [scope, myEmpresaId, user?.colaboradorId, colaboradoresTodos]);
+  }, [scope, myEmpresaId, user?.colaboradorId, colaboradoresTodos, verTodasActividades]);
 
-  if (scope === 'area' && user && !isDireccaoCargo) {
+  /** Admin/PCA: ao mudar a área, repõe o filtro de colaborador (lista passa a ser da área). */
+  useEffect(() => {
+    if (scope !== 'area' || !verTodasActividades) return;
+    setColaboradorFilter('all');
+  }, [scope, verTodasActividades, areaFilter]);
+
+  if (scope === 'area' && user && !isDireccaoCargo && !verTodasActividades) {
     return (
       <div className="space-y-4">
         <div>
@@ -752,7 +880,7 @@ export default function MinhasActividadesPage({
           <p className="text-sm text-muted-foreground">Direcção</p>
         </div>
         <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
-          Esta página é apenas para cargos Director/Coordenador.
+          Esta página é apenas para cargos Director/Coordenador, ou para perfis Admin / PCA.
         </div>
       </div>
     );
@@ -919,6 +1047,7 @@ export default function MinhasActividadesPage({
     const cols: Record<KanbanColumnId, ProdutividadeActividade[]> = {
       Pendente: [],
       'Em Progresso': [],
+      Atrasada: [],
       'Em aprovação': [],
       Concluída: [],
     };
@@ -935,10 +1064,17 @@ export default function MinhasActividadesPage({
     setKanbanUi({
       Pendente: kanbanColumns.Pendente.map(a => dndItemId(a.id)),
       'Em Progresso': kanbanColumns['Em Progresso'].map(a => dndItemId(a.id)),
+      Atrasada: kanbanColumns.Atrasada.map(a => dndItemId(a.id)),
       'Em aprovação': kanbanColumns['Em aprovação'].map(a => dndItemId(a.id)),
       Concluída: kanbanColumns.Concluída.map(a => dndItemId(a.id)),
     });
-  }, [kanbanColumns.Pendente, kanbanColumns['Em Progresso'], kanbanColumns['Em aprovação'], kanbanColumns.Concluída]);
+  }, [
+    kanbanColumns.Pendente,
+    kanbanColumns['Em Progresso'],
+    kanbanColumns.Atrasada,
+    kanbanColumns['Em aprovação'],
+    kanbanColumns.Concluída,
+  ]);
 
   const activityById = useMemo(() => {
     const m = new Map<number, ProdutividadeActividade>();
@@ -1984,21 +2120,38 @@ export default function MinhasActividadesPage({
         </Card>
       </div>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="relative w-full md:max-w-md">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={e => setSearch(e.target.value)} className="pl-9" placeholder="Pesquisar actividade…" />
-        </div>
-
-        <div className="grid w-full gap-2 md:flex md:w-auto md:items-center">
-          {scope === 'area' ? (
-            <>
-              <Select value={String(areaFilter)} onValueChange={(v: any) => setAreaFilter(v)} disabled={myEmpresaId === 1}>
-                <SelectTrigger className="w-full md:w-[220px]">
+      {scope === 'area' ? (
+        <div className="flex flex-col gap-4">
+          <div className="grid max-w-full gap-1.5 md:max-w-md">
+            <Label htmlFor="prod-direccao-search" className="text-xs font-medium text-muted-foreground">
+              Pesquisar
+            </Label>
+            <div className="relative w-full">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="prod-direccao-search"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9"
+                placeholder="Pesquisar actividade…"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Área</Label>
+              <Select
+                value={String(areaFilter)}
+                onValueChange={(v: any) => setAreaFilter(v)}
+                disabled={myEmpresaId === 1 && !verTodasActividades}
+              >
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Área (módulo)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {myEmpresaId !== 1 ? <SelectItem value="all">Todas as áreas</SelectItem> : null}
+                  {myEmpresaId !== 1 || verTodasActividades ? (
+                    <SelectItem value="all">Todas as áreas</SelectItem>
+                  ) : null}
                   {areaOptions.map((o) => (
                     <SelectItem key={o.key} value={o.label}>
                       {o.label}
@@ -2006,77 +2159,148 @@ export default function MinhasActividadesPage({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Colaborador</Label>
+              <Select
+                value={String(colaboradorFilter)}
+                onValueChange={(v) => setColaboradorFilter(v === 'all' ? 'all' : Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Colaborador" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {direccaoColaboradores.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.nome ? shortName(String(c.nome)) : `#${c.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Status</Label>
+              <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="Pendente">Pendente</SelectItem>
+                  <SelectItem value="Em Progresso">Em Progresso</SelectItem>
+                  <SelectItem value="Em aprovação">Em aprovação</SelectItem>
+                  <SelectItem value="Concluída">Concluída</SelectItem>
+                  <SelectItem value="Atrasada">Atrasada</SelectItem>
+                  <SelectItem value="Cancelada">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Prioridade</Label>
+              <Select value={prioridadeFilter} onValueChange={(v: any) => setPrioridadeFilter(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Prioridade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="Baixa">Baixa</SelectItem>
+                  <SelectItem value="Média">Média</SelectItem>
+                  <SelectItem value="Alta">Alta</SelectItem>
+                  <SelectItem value="Urgente">Urgente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Categoria</Label>
+              <Select value={categoriaFilter} onValueChange={(v: any) => setCategoriaFilter(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {['Administrativa', 'Financeira', 'RH', 'Operacional', 'Jurídica', 'Técnica', 'Outra'].map(c => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="prod-direccao-data" className="text-xs font-medium text-muted-foreground">
+                Data
+              </Label>
+              <Input
+                id="prod-direccao-data"
+                type="date"
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value)}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-md">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} className="pl-9" placeholder="Pesquisar actividade…" />
+          </div>
 
-            <Select
-              value={String(colaboradorFilter)}
-              onValueChange={(v) => setColaboradorFilter(v === 'all' ? 'all' : Number(v))}
-            >
-              <SelectTrigger className="w-full md:w-[240px]">
-                <SelectValue placeholder="Colaborador" />
+          <div className="grid w-full gap-2 md:flex md:w-auto md:items-center">
+            <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+              <SelectTrigger className="w-full md:w-[180px]">
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {direccaoColaboradores.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.nome ? shortName(String(c.nome)) : `#${c.id}`}
+                <SelectItem value="Pendente">Pendente</SelectItem>
+                <SelectItem value="Em Progresso">Em Progresso</SelectItem>
+                <SelectItem value="Em aprovação">Em aprovação</SelectItem>
+                <SelectItem value="Concluída">Concluída</SelectItem>
+                <SelectItem value="Atrasada">Atrasada</SelectItem>
+                <SelectItem value="Cancelada">Cancelada</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={prioridadeFilter} onValueChange={(v: any) => setPrioridadeFilter(v)}>
+              <SelectTrigger className="w-full md:w-[170px]">
+                <SelectValue placeholder="Prioridade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="Baixa">Baixa</SelectItem>
+                <SelectItem value="Média">Média</SelectItem>
+                <SelectItem value="Alta">Alta</SelectItem>
+                <SelectItem value="Urgente">Urgente</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={categoriaFilter} onValueChange={(v: any) => setCategoriaFilter(v)}>
+              <SelectTrigger className="w-full md:w-[190px]">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {['Administrativa', 'Financeira', 'RH', 'Operacional', 'Jurídica', 'Técnica', 'Outra'].map(c => (
+                  <SelectItem key={c} value={c}>
+                    {c}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            </>
-          ) : null}
 
-          <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-            <SelectTrigger className="w-full md:w-[180px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="Pendente">Pendente</SelectItem>
-              <SelectItem value="Em Progresso">Em Progresso</SelectItem>
-              <SelectItem value="Em aprovação">Em aprovação</SelectItem>
-              <SelectItem value="Concluída">Concluída</SelectItem>
-              <SelectItem value="Atrasada">Atrasada</SelectItem>
-              <SelectItem value="Cancelada">Cancelada</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={prioridadeFilter} onValueChange={(v: any) => setPrioridadeFilter(v)}>
-            <SelectTrigger className="w-full md:w-[170px]">
-              <SelectValue placeholder="Prioridade" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="Baixa">Baixa</SelectItem>
-              <SelectItem value="Média">Média</SelectItem>
-              <SelectItem value="Alta">Alta</SelectItem>
-              <SelectItem value="Urgente">Urgente</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={categoriaFilter} onValueChange={(v: any) => setCategoriaFilter(v)}>
-            <SelectTrigger className="w-full md:w-[190px]">
-              <SelectValue placeholder="Categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {['Administrativa', 'Financeira', 'RH', 'Operacional', 'Jurídica', 'Técnica', 'Outra'].map(c => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Input
-            type="date"
-            value={dateFilter}
-            onChange={e => setDateFilter(e.target.value)}
-            className="w-full md:w-[170px]"
-            aria-label="Filtrar por data"
-          />
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+              className="w-full md:w-[170px]"
+              aria-label="Filtrar por data"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <Tabs defaultValue="lista" className="w-full">
         <TabsList>
@@ -2096,22 +2320,30 @@ export default function MinhasActividadesPage({
               {filtered.slice(0, 200).map(a => {
                 const s = effectiveStatus(a);
                 const hasEnt = (entregaveisByActividade.get(a.id) ?? []).length > 0;
+                const compartilhada = isActividadeCompartilhada(a, participantesByActividade.get(a.id) ?? []);
                 return (
                   <div key={a.id} className="p-3 hover:bg-muted/30 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <button
-                          type="button"
-                          className="font-medium truncate text-left hover:underline"
-                          onClick={() => openDetails(a.id)}
-                        >
-                          {a.titulo}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="font-medium truncate text-left hover:underline"
+                            onClick={() => openDetails(a.id)}
+                          >
+                            {a.titulo}
+                          </button>
+                          {compartilhada ? (
+                            <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
+                              Compartilhada
+                            </Badge>
+                          ) : null}
+                        </div>
                         <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                           {a.descricao?.trim() ? a.descricao : a.comentario?.trim() ? a.comentario : '—'}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                          <Badge variant={statusBadgeVariant(s)}>{s}</Badge>
+                          <ActividadeStatusBadges a={a} />
                           <span className={cn('font-semibold', prioridadeColorClass(a.prioridade))}>{a.prioridade}</span>
                           <span className="text-muted-foreground">{a.categoria}</span>
                           <span className="text-muted-foreground">Data: {a.dataActividade}</span>
@@ -2159,7 +2391,7 @@ export default function MinhasActividadesPage({
 
         <TabsContent value="kanban" className="mt-4">
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               {STATUS_KANBAN.map(col => (
                 <KanbanColumn key={col} columnId={`col:${col}`} title={col} count={kanbanColumns[col].length}>
                   <SortableContext items={kanbanUi[col]} strategy={rectSortingStrategy}>
@@ -2177,7 +2409,12 @@ export default function MinhasActividadesPage({
                         );
                       return (
                         <div key={dndId} onClickCapture={() => openDetails(a.id)}>
-                          <SortableCard id={dndId} a={a} disabled={blockDragFromApproval} />
+                          <SortableCard
+                            id={dndId}
+                            a={a}
+                            disabled={blockDragFromApproval}
+                            compartilhada={isActividadeCompartilhada(a, participantesByActividade.get(a.id) ?? [])}
+                          />
                         </div>
                       );
                     })}
@@ -2200,7 +2437,14 @@ export default function MinhasActividadesPage({
             >
               {dragOverlayActivity ? (
                 <div className="w-[320px] md:w-[360px]">
-                  <TaskCard a={dragOverlayActivity} dragging />
+                  <TaskCard
+                    a={dragOverlayActivity}
+                    dragging
+                    compartilhada={isActividadeCompartilhada(
+                      dragOverlayActivity,
+                      participantesByActividade.get(dragOverlayActivity.id) ?? [],
+                    )}
+                  />
                 </div>
               ) : null}
             </DragOverlay>
@@ -2331,6 +2575,10 @@ export default function MinhasActividadesPage({
                         <div className="mt-2 space-y-1">
                           {visible.map((a) => {
                             const s = effectiveStatus(a);
+                            const compartilhada = isActividadeCompartilhada(
+                              a,
+                              participantesByActividade.get(a.id) ?? [],
+                            );
                             const pr =
                               a.prioridade === 'Urgente'
                                 ? 'bg-red-500/15 text-red-800'
@@ -2345,14 +2593,19 @@ export default function MinhasActividadesPage({
                                 type="button"
                                 onClick={() => openDetails(a.id)}
                                 className={cn(
-                                  'w-full text-left rounded-md px-2 py-1 text-xs truncate border hover:bg-muted/30 transition',
+                                  'w-full text-left rounded-md px-2 py-1 text-xs border hover:bg-muted/30 transition flex flex-col items-start gap-0.5',
                                   pr,
                                   s === 'Concluída' && 'opacity-70 line-through',
                                   s === 'Atrasada' && 'ring-1 ring-red-500/30',
                                 )}
-                                title={a.titulo}
+                                title={compartilhada ? `${a.titulo} (Compartilhada)` : a.titulo}
                               >
-                                {a.titulo}
+                                <span className="w-full truncate">{a.titulo}</span>
+                                {compartilhada ? (
+                                  <Badge variant="secondary" className="h-4 px-1 text-[9px] font-normal leading-none">
+                                    Compartilhada
+                                  </Badge>
+                                ) : null}
                               </button>
                             );
                           })}
@@ -2371,6 +2624,10 @@ export default function MinhasActividadesPage({
                 <div className="rounded-lg border divide-y">
                   {calendarRows.map((a) => {
                     const s = effectiveStatus(a);
+                    const compartilhada = isActividadeCompartilhada(
+                      a,
+                      participantesByActividade.get(a.id) ?? [],
+                    );
                     return (
                       <button
                         key={a.id}
@@ -2380,13 +2637,20 @@ export default function MinhasActividadesPage({
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="font-medium truncate">{a.titulo}</div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="font-medium truncate">{a.titulo}</div>
+                              {compartilhada ? (
+                                <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
+                                  Compartilhada
+                                </Badge>
+                              ) : null}
+                            </div>
                             <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                               {a.comentario?.trim() ? a.comentario : '—'}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <Badge variant={statusBadgeVariant(s)}>{s}</Badge>
+                            <ActividadeStatusBadges a={a} />
                             <span className={cn('text-xs font-semibold', prioridadeColorClass(a.prioridade))}>{a.prioridade}</span>
                           </div>
                         </div>
@@ -2447,6 +2711,10 @@ export default function MinhasActividadesPage({
                         <div className="mt-2 space-y-1">
                           {visible.map((a) => {
                             const s = effectiveStatus(a);
+                            const compartilhada = isActividadeCompartilhada(
+                              a,
+                              participantesByActividade.get(a.id) ?? [],
+                            );
                             const pr =
                               a.prioridade === 'Urgente'
                                 ? 'bg-red-500/15 text-red-800'
@@ -2461,14 +2729,19 @@ export default function MinhasActividadesPage({
                                 type="button"
                                 onClick={() => openDetails(a.id)}
                                 className={cn(
-                                  'w-full text-left rounded-md px-2 py-1 text-xs truncate border hover:bg-muted/30 transition',
+                                  'w-full text-left rounded-md px-2 py-1 text-xs border hover:bg-muted/30 transition flex flex-col items-start gap-0.5',
                                   pr,
                                   s === 'Concluída' && 'opacity-70 line-through',
                                   s === 'Atrasada' && 'ring-1 ring-red-500/30',
                                 )}
-                                title={a.titulo}
+                                title={compartilhada ? `${a.titulo} (Compartilhada)` : a.titulo}
                               >
-                                {a.titulo}
+                                <span className="w-full truncate">{a.titulo}</span>
+                                {compartilhada ? (
+                                  <Badge variant="secondary" className="h-4 px-1 text-[9px] font-normal leading-none">
+                                    Compartilhada
+                                  </Badge>
+                                ) : null}
                               </button>
                             );
                           })}
@@ -2565,7 +2838,15 @@ export default function MinhasActividadesPage({
           <div className="h-full max-h-[100dvh] overflow-hidden">
             <div className="flex items-start justify-between gap-3 px-5 py-4 border-b">
               <div className="min-w-0">
-                <div className="text-lg font-semibold truncate">{detailsActivity?.titulo ?? 'Actividade'}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-lg font-semibold truncate">{detailsActivity?.titulo ?? 'Actividade'}</div>
+                  {detailsActivity &&
+                  isActividadeCompartilhada(detailsActivity, participantesByActividade.get(detailsActivity.id) ?? []) ? (
+                    <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
+                      Compartilhada
+                    </Badge>
+                  ) : null}
+                </div>
                 <div className="text-xs text-muted-foreground mt-0.5">{detailsActivity ? `ID #${detailsActivity.id}` : ''}</div>
               </div>
               {/* O Sheet já tem Close default; evitamos duplicar */}
@@ -2653,9 +2934,7 @@ export default function MinhasActividadesPage({
                           Status
                         </div>
                         <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-2">
-                          <Badge variant={statusBadgeVariant(effectiveStatus(detailsActivity))}>
-                            {effectiveStatus(detailsActivity)}
-                          </Badge>
+                          <ActividadeStatusBadges a={detailsActivity} />
                           <Select
                             value={detailsActivity.status}
                             onValueChange={(v: any) => void setStatus(detailsActivity.id, v)}
@@ -2691,7 +2970,16 @@ export default function MinhasActividadesPage({
                       </div>
                       {detailsActivity.status === 'Concluída' ? (
                         <p className="text-[11px] text-muted-foreground pl-0 md:pl-[152px]">
-                          Esta actividade está «Concluída» e já não pode mudar de estado.
+                          <span>Esta actividade está «Concluída» e já não pode mudar de estado.</span>
+                          {(() => {
+                            const dias = diasConclusaoAlemDoPrazo(detailsActivity);
+                            if (dias == null) return null;
+                            return (
+                              <span className="mt-1 block text-destructive/90">
+                                {`Conclusão ${dias} dia(s) após o prazo (${detailsActivity.prazo}). Registo: ${(detailsActivity.concluidaEm ?? '').slice(0, 10)}.`}
+                              </span>
+                            );
+                          })()}
                         </p>
                       ) : null}
                       {mustCompleteViaApprovalFlow(detailsActivity) ? (
