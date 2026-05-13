@@ -30,7 +30,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { Plus, Search, UploadCloud, Clock, Tag, CalendarDays, Flag, User, Users, Loader2, Download, Eye, FileText, FileImage, File, Paperclip } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  UploadCloud,
+  Clock,
+  Tag,
+  CalendarDays,
+  Flag,
+  User,
+  Users,
+  Loader2,
+  Download,
+  Eye,
+  FileText,
+  FileImage,
+  File,
+  Paperclip,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import {
   DndContext,
   DragEndEvent,
@@ -423,6 +442,40 @@ function prioridadeColorClass(p: string): string {
   if (p === 'Alta') return 'text-amber-600';
   if (p === 'Média') return 'text-sky-600';
   return 'text-muted-foreground';
+}
+
+/** % concluídas / total: indicador ao lado do valor (50% = tolerância). */
+function ProdutividadePerformanceKpi({ pct }: { pct: number }) {
+  const above = pct > 50;
+  const below = pct < 50;
+  const tolerance = pct === 50;
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2 text-2xl font-semibold tabular-nums leading-none">
+        <span>{pct}%</span>
+        {above ? (
+          <TrendingUp className="h-7 w-7 shrink-0 text-green-600 dark:text-green-500" aria-hidden />
+        ) : below ? (
+          <TrendingDown className="h-7 w-7 shrink-0 text-red-600 dark:text-red-500" aria-hidden />
+        ) : (
+          <span className="inline-flex shrink-0 items-center text-amber-500 dark:text-amber-400" aria-hidden>
+            <TrendingUp className="h-6 w-6" />
+            <TrendingDown className="h-6 w-6 -ml-1.5" />
+          </span>
+        )}
+      </div>
+      <div
+        className={cn(
+          'text-xs font-medium',
+          above && 'text-green-600 dark:text-green-500',
+          below && 'text-red-600 dark:text-red-500',
+          tolerance && 'text-amber-600 dark:text-amber-400',
+        )}
+      >
+        {above ? 'Objectivo' : below ? 'Incumprimento' : 'Tolerância'}
+      </div>
+    </div>
+  );
 }
 
 /** Responsável + participantes na tabela: mais do que uma pessoa distinta. */
@@ -2142,7 +2195,9 @@ export default function MinhasActividadesPage({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">Performance</CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">{metrics.pct}%</CardContent>
+          <CardContent>
+            <ProdutividadePerformanceKpi pct={metrics.pct} />
+          </CardContent>
         </Card>
       </div>
 
