@@ -1,5 +1,7 @@
 # App estática (Vite build) + Nginx com fallback SPA (mesma ideia do vercel.json).
 #
+# Redis + worker (fila): ver `docker-compose.enterprise.yml` e `docs/ENTERPRISE-ARCHITECTURE.md`.
+#
 # Supabase em Docker: na pasta do projecto, com Docker a correr, use a stack oficial do CLI:
 #   supabase start
 # Isto levanta Kong, Postgres, Auth, Storage, etc. (ver `supabase status` para URLs e keys).

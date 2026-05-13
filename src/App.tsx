@@ -2,7 +2,8 @@ import { lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "@/lib/query-client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { AppSplashOverlay } from "@/components/AppSplashOverlay";
@@ -85,7 +86,7 @@ import ReceitaPage from "@/modules/facturacao/ReceitaPage";
 import MinhasActividadesPage from "@/modules/produtividade/MinhasActividadesPage";
 import ProdutividadeAprovacoesPage from "@/modules/produtividade/ProdutividadeAprovacoesPage";
 
-const queryClient = new QueryClient();
+const queryClient = createAppQueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

@@ -11,6 +11,8 @@
  *           X-SSE-Token: <opcional, se SSE_GATEWAY_SECRET estiver definido>
  *
  * Segurança: em produção, proteger com `SSE_GATEWAY_SECRET` e reverse proxy; não expor sem TLS.
+ *
+ * Opcional — `REDIS_URL`: rate limiting distribuído em novas ligações `/realtime` (ver `RateLimitPresets` e `SSE_RATE_LIMIT_PER_MIN`).
  */
 import 'dotenv/config';
 import { spawn } from 'node:child_process';
@@ -19,6 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { REALTIME_TABLES, isRealtimeTable } from './realtime-tables';
+import { consumeRateLimit, getOptionalRedis, RateLimitPresets } from './enterprise/index';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -97,6 +100,16 @@ function parseTable(url: URL): string | null {
   return t && isRealtimeTable(t) ? t : null;
 }
 
+function getClientIp(req: http.IncomingMessage): string {
+  const fwd = req.headers['x-forwarded-for'];
+  if (typeof fwd === 'string' && fwd.length > 0) {
+    return fwd.split(',')[0]!.trim();
+  }
+  const real = req.headers['x-real-ip'];
+  if (typeof real === 'string' && real.trim().length > 0) return real.trim();
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
 function checkSseToken(req: http.IncomingMessage, url: URL): boolean {
   if (!GATEWAY_SECRET) return true;
   const raw = req.headers['x-sse-token'];
@@ -119,8 +132,9 @@ function sendJson(
   status: number,
   body: Record<string, unknown>,
   withCors = true,
+  extraHeaders?: Record<string, string>,
 ) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json; charset=utf-8' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json; charset=utf-8', ...extraHeaders };
   if (withCors) Object.assign(headers, corsHeaders());
   res.writeHead(status, headers);
   res.end(JSON.stringify(body));
@@ -209,38 +223,33 @@ async function handleBackupProcessQueue(
   }
 }
 
-const server = http.createServer((req, res) => {
-  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, corsHeaders());
-    res.end();
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/backups/process-queue') {
-    void handleBackupProcessQueue(req, res, url);
-    return;
-  }
-
-  if (req.method !== 'GET' || url.pathname !== '/realtime') {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not found');
-    return;
-  }
-
+async function handleRealtimeSse(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+): Promise<void> {
   if (!checkSseToken(req, url)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('Forbidden');
     return;
   }
 
+  const redis = getOptionalRedis();
+  const maxConn = Number(process.env.SSE_RATE_LIMIT_PER_MIN ?? RateLimitPresets.sseConnect.max);
+  const windowSec = RateLimitPresets.sseConnect.windowSec;
+  const ip = getClientIp(req);
+  const rl = await consumeRateLimit(redis, 'sse:connect', ip, maxConn, windowSec);
+  if (!rl.allowed) {
+    sendJson(res, 429, { error: 'rate_limited', retryAfterSec: rl.retryAfterSec }, true, {
+      'Retry-After': String(rl.retryAfterSec),
+    });
+    return;
+  }
+
   const table = parseTable(url);
   if (!table) {
     res.writeHead(400, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': CORS_ORIGIN });
-    res.end(
-      `Query "table" inválida. Use uma de: ${REALTIME_TABLES.join(', ')}`,
-    );
+    res.end(`Query "table" inválida. Use uma de: ${REALTIME_TABLES.join(', ')}`);
     return;
   }
 
@@ -274,10 +283,36 @@ const server = http.createServer((req, res) => {
     set!.delete(res);
     if (set!.size === 0) clientsByTable.delete(table);
   });
+}
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, corsHeaders());
+    res.end();
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/backups/process-queue') {
+    void handleBackupProcessQueue(req, res, url);
+    return;
+  }
+
+  if (req.method !== 'GET' || url.pathname !== '/realtime') {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not found');
+    return;
+  }
+
+  void handleRealtimeSse(req, res, url);
 });
 
 server.listen(PORT, () => {
   console.log(`[sse-gateway] http://localhost:${PORT}/realtime?table=<tabela>`);
   console.log(`[sse-gateway] POST http://localhost:${PORT}/backups/process-queue (JWT Admin + scripts em ${backupScriptsDir()})`);
   if (GATEWAY_SECRET) console.log('[sse-gateway] Protegido com SSE_GATEWAY_SECRET (query token= ou header X-SSE-Token)');
+  if (process.env.REDIS_URL?.trim()) {
+    console.log('[sse-gateway] Redis activo: rate limit distribuído em novas ligações SSE (SSE_RATE_LIMIT_PER_MIN).');
+  }
 });

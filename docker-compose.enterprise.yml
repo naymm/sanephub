@@ -1,0 +1,41 @@
+# Extensão opcional: Redis + worker (fila). Fundir com a stack web:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.enterprise.yml up -d
+#
+# Variáveis úteis no host (para `npm run sse:gateway` / worker fora do Docker):
+#   REDIS_URL=redis://localhost:6379
+#   SSE_RATE_LIMIT_PER_MIN=120
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - sanephub_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    image: node:22-bookworm
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: ["npx", "tsx", "server/worker.ts"]
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sanephub_redis:

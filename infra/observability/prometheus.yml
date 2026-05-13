@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Adicionar scrape do gateway Node quando expuser métricas (ex.: prom-client em /metrics).
+  # - job_name: sse-gateway
+  #   static_configs:
+  #     - targets: ["host.docker.internal:4000"]
