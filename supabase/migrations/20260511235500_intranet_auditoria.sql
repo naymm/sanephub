@@ -474,16 +474,3 @@ begin
       for each row execute function public.tr_intranet_audit_biometrico();
   end if;
 end $$;
-
--- Realtime (opcional para painel Admin em tempo real)
-do $$
-begin
-  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    if not exists (
-      select 1 from pg_publication_tables
-      where pubname = 'supabase_realtime' and tablename = 'intranet_audit_events'
-    ) then
-      alter publication supabase_realtime add table public.intranet_audit_events;
-    end if;
-  end if;
-end $$;

@@ -339,6 +339,17 @@ export interface Database {
         Args: { p_query: string; p_empresa_id?: number | null; p_limit?: number | null };
         Returns: { id: number; nome: string; empresa_id: number }[];
       };
+      search_profiles_chat: {
+        Args: { p_query: string; p_limit?: number | null };
+        Returns: {
+          id: number;
+          nome: string;
+          email: string;
+          empresa_id: number | null;
+          colaborador_id: number | null;
+          avatar: string;
+        }[];
+      };
       perfil_tem_ponto_pin: {
         Args: Record<string, never>;
         Returns: boolean;
