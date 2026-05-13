@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { Usuario, Perfil } from '@/types';
 import { USUARIOS_SEED } from '@/data/seed';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { logIntranetAuditClientEvent } from '@/lib/intranetAudit';
 import { PROFILES_SELECT_PUBLIC } from '@/lib/profileColumns';
 import type { Database } from '@/types/supabase';
 import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
@@ -405,6 +406,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(u);
         // Reset contador (não desbloqueia contas; só Admin).
         await supabase.rpc('auth_login_register_success', { p_auth_user_id: authUserId });
+        logIntranetAuditClientEvent('login', {
+          summary: 'Início de sessão',
+          details: { email: u.email },
+        });
         bumpAuthSessionRevision();
         return true;
       }
@@ -425,9 +430,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    if (isSupabaseConfigured() && supabase) supabase.auth.signOut();
-    setUser(null);
-    bumpAuthSessionRevision();
+    void (async () => {
+      if (isSupabaseConfigured() && supabase) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user) {
+          logIntranetAuditClientEvent('logout', { summary: 'Fim de sessão' });
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        await supabase.auth.signOut();
+      }
+      setUser(null);
+      bumpAuthSessionRevision();
+    })();
   }, [bumpAuthSessionRevision]);
 
   const createUserInSupabase = useCallback(

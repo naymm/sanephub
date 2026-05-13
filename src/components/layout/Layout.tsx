@@ -70,6 +70,10 @@ export function Layout() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  if (user?.perfil !== 'Admin' && pathname.startsWith('/configuracoes/auditoria')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const pathPrefix = '/' + pathname.split('/')[1];
   let moduleForPath = PATH_TO_MODULE[pathPrefix];
   // Rota legada: mesmo módulo que /gestao-documentos (whitelist por empresa)

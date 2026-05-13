@@ -240,6 +240,50 @@ export interface Database {
           updated_at?: string;
         };
       };
+      intranet_audit_events: {
+        Row: {
+          id: number;
+          created_at: string;
+          event_category: string;
+          action: string;
+          actor_profile_id: number | null;
+          actor_auth_uid: string | null;
+          resource_type: string | null;
+          resource_id: string | null;
+          empresa_id: number | null;
+          colaborador_id: number | null;
+          summary: string | null;
+          details: Json;
+        };
+        Insert: {
+          id?: number;
+          created_at?: string;
+          event_category: string;
+          action?: string;
+          actor_profile_id?: number | null;
+          actor_auth_uid?: string | null;
+          resource_type?: string | null;
+          resource_id?: string | null;
+          empresa_id?: number | null;
+          colaborador_id?: number | null;
+          summary?: string | null;
+          details?: Json;
+        };
+        Update: {
+          id?: number;
+          created_at?: string;
+          event_category?: string;
+          action?: string;
+          actor_profile_id?: number | null;
+          actor_auth_uid?: string | null;
+          resource_type?: string | null;
+          resource_id?: string | null;
+          empresa_id?: number | null;
+          colaborador_id?: number | null;
+          summary?: string | null;
+          details?: Json;
+        };
+      };
       comunicado_leituras: {
         Row: {
           comunicado_id: number;
@@ -260,6 +304,10 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      intranet_audit_client_event: {
+        Args: { p_category: string; p_action?: string; p_summary?: string | null; p_details?: Json };
+        Returns: undefined;
+      };
       intranet_chat_mark_conversation_read: {
         Args: { p_conversation_id: string };
         Returns: undefined;

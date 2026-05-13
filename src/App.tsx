@@ -51,6 +51,7 @@ import GestaoDocumentosPage from "@/modules/secretaria/GestaoDocumentosPage";
 import CorrespondenciasPage from "@/modules/secretaria/CorrespondenciasPage";
 import ArquivoPage from "@/modules/secretaria/ArquivoPage";
 import UtilizadoresPage from "@/modules/config/UtilizadoresPage";
+import AuditoriaPage from "@/modules/config/AuditoriaPage";
 import DepartamentosPage from "@/modules/config/DepartamentosPage";
 import ModulosRecursosPage from "@/modules/config/ModulosRecursosPage";
 import GenericModulePage from "@/modules/GenericModulePage";
@@ -225,6 +226,7 @@ const App = () => (
                   <Route path="/comunicacao-interna/aniversarios" element={<AniversariosPage />} />
                   {/* Config */}
                   <Route path="/configuracoes" element={<GenericModulePage title="Configurações" module="config" />} />
+                  <Route path="/configuracoes/auditoria" element={<AuditoriaPage />} />
                   <Route path="/configuracoes/utilizadores" element={<UtilizadoresPage />} />
                   <Route path="/configuracoes/utilizadores/novo" element={<UtilizadoresPage />} />
                   <Route path="/configuracoes/departamentos" element={<DepartamentosPage />} />

@@ -441,6 +441,10 @@ export function IntranetTopbar() {
                       <Users className="mr-2 h-4 w-4" />
                       Utilizadores
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => navigate('/configuracoes/auditoria')}>
+                      <ScrollText className="mr-2 h-4 w-4" />
+                      Auditoria
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => navigate('/configuracoes/modulos-recursos')}>
                       <Layers className="mr-2 h-4 w-4" />
                       Módulos e recursos

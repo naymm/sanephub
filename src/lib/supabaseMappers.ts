@@ -171,6 +171,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   produtividade_eventos: ['id', 'actividadeId', 'actorProfileId', 'actorColaboradorId'],
   produtividade_comentarios: ['id', 'actividadeId', 'autorColaboradorId'],
   produtividade_participantes: ['id', 'actividadeId', 'colaboradorId'],
+  intranet_audit_events: ['id', 'actorProfileId', 'empresaId', 'colaboradorId'],
 };
 
 export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Record<string, unknown>): T {
@@ -259,6 +260,15 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
       ...out,
       comportamentoViatura: Boolean(o.comportamentoViatura),
       comportamentoComputador: Boolean(o.comportamentoComputador),
+    };
+  }
+  if (tableName === 'intranet_audit_events') {
+    const o = out as Record<string, unknown>;
+    const d = o.details;
+    out = {
+      ...out,
+      details:
+        d && typeof d === 'object' && !Array.isArray(d) ? (d as Record<string, unknown>) : {},
     };
   }
   return out as T;

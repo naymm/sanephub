@@ -10,7 +10,8 @@ import {
   LayoutDashboard, Bell, Users, Palmtree, CalendarX, Receipt, FileText, UserCircle,
   DollarSign, FileCheck, Building2, BarChart3, CreditCard, AlertTriangle, FileSearch,
   Calendar, BookOpen, Stamp, Mail, Archive, Scale, Gavel, Clock,   ShieldAlert, FolderArchive, Layers,
-  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator, Package, HardDriveDownload
+  Settings, LogOut, ChevronDown, ChevronRight, Menu, X, Send, Crown, Target, Calculator, Package, HardDriveDownload,
+  ScrollText,
 } from 'lucide-react';
 
 interface NavItem {
@@ -306,6 +307,10 @@ export function Sidebar() {
       <div className="border-t border-sidebar-border px-2 py-3 space-y-0.5">
         {user.perfil === 'Admin' && (
           <>
+            <NavLink to="/configuracoes/auditoria" className={cn("sidebar-item", isActive('/configuracoes/auditoria') ? "sidebar-item-active" : "sidebar-item-inactive")}>
+              <ScrollText className="h-4 w-4" />
+              <span>Auditoria</span>
+            </NavLink>
             <NavLink to="/configuracoes/utilizadores" className={cn("sidebar-item", isActive('/configuracoes/utilizadores') ? "sidebar-item-active" : "sidebar-item-inactive")}>
               <Users className="h-4 w-4" />
               <span>Utilizadores</span>

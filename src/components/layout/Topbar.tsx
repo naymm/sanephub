@@ -56,6 +56,7 @@ const routeTitles: Record<string, string> = {
   '/juridico/riscos': 'Riscos Jurídicos',
   '/juridico/arquivo': 'Arquivo Documental',
   '/configuracoes': 'Configurações',
+  '/configuracoes/auditoria': 'Auditoria',
   '/configuracoes/utilizadores': 'Utilizadores',
   '/configuracoes/departamentos': 'Departamentos',
   '/configuracoes/modulos-recursos': 'Módulos e recursos',
