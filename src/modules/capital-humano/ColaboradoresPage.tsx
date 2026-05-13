@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
@@ -57,6 +58,8 @@ import { DataTablePagination } from '@/components/shared/DataTablePagination';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
+/** Lista paginada: cache em memória para não bater no Postgres a cada visita / realtime do contexto. */
+const COLABORADORES_PAGINATED_STALE_MS = 3 * 60 * 1000;
 
 const STATUS_OPTIONS: StatusColaborador[] = ['Activo', 'Inactivo', 'Suspenso', 'Em férias'];
 const TIPO_CONTRATO_OPTIONS: TipoContrato[] = ['Efectivo', 'Prazo Certo', 'Prestação', 'Estágio'];
@@ -312,6 +315,7 @@ function parseEmpresaIdGestao(...candidates: unknown[]): number {
 }
 
 export default function ColaboradoresPage() {
+  const queryClient = useQueryClient();
   const {
     colaboradores,
     addColaborador,
@@ -322,7 +326,6 @@ export default function ColaboradoresPage() {
     colaboradorGeofenceLinks,
     syncColaboradorGeofenceLinksForColaborador,
     departamentos: departamentosCatalogo,
-    refetch,
   } = useData();
   const { usuarios, user } = useAuth();
   const { currentEmpresaId } = useTenant();
@@ -423,12 +426,9 @@ export default function ColaboradoresPage() {
   const usePaginated = isSupabaseConfigured() && !!supabase;
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [totalCount, setTotalCount] = useState(0);
-  const [tableRows, setTableRows] = useState<Colaborador[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [departamentosList, setDepartamentosList] = useState<string[]>([]);
   const [searchDebounced, setSearchDebounced] = useState('');
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const colaboradoresListErrorToastRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!usePaginated) {
@@ -448,12 +448,30 @@ export default function ColaboradoresPage() {
     return typeof currentEmpresaId === 'number' ? [currentEmpresaId] : [];
   }, [currentEmpresaId, empresas]);
 
-  const fetchPaginated = useCallback(async () => {
-    if (!supabase || empresaIds.length === 0) return;
-    setLoading(true);
-    try {
+  const empresaIdsKey = useMemo(
+    () => [...empresaIds].sort((a, b) => a - b).join(','),
+    [empresaIds],
+  );
+
+  const colaboradoresPaginatedQuery = useQuery({
+    queryKey: [
+      'colaboradores',
+      'paginated',
+      empresaIdsKey,
+      page,
+      pageSize,
+      searchDebounced,
+      statusFilter,
+      deptFilter,
+    ] as const,
+    enabled: usePaginated && !!supabase && empresaIds.length > 0,
+    staleTime: COLABORADORES_PAGINATED_STALE_MS,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    placeholderData: previousData => previousData,
+    queryFn: async () => {
       const [res, depts] = await Promise.all([
-        fetchColaboradoresPaginated(supabase, {
+        fetchColaboradoresPaginated(supabase!, {
           empresaIds,
           page,
           pageSize,
@@ -461,27 +479,28 @@ export default function ColaboradoresPage() {
           status: statusFilter === 'todos' ? undefined : statusFilter,
           departamento: deptFilter === 'todos' ? undefined : deptFilter,
         }),
-        fetchColaboradoresDepartamentos(supabase, empresaIds),
+        fetchColaboradoresDepartamentos(supabase!, empresaIds),
       ]);
-      setTableRows(res.data);
-      setTotalCount(res.totalCount);
-      setDepartamentosList(depts);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao carregar colaboradores');
-      setTableRows([]);
-      setTotalCount(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [empresaIds, page, pageSize, searchDebounced, statusFilter, deptFilter]);
+      return { rows: res.data, totalCount: res.totalCount, departamentosList: depts };
+    },
+  });
 
   useEffect(() => {
-    if (usePaginated) {
-      fetchPaginated();
-    } else {
-      setDepartamentosList(Array.from(new Set(colaboradores.map(c => c.departamento))).sort());
+    if (!colaboradoresPaginatedQuery.isError) {
+      colaboradoresListErrorToastRef.current = null;
+      return;
     }
-  }, [usePaginated, fetchPaginated, colaboradores]);
+    const err = colaboradoresPaginatedQuery.error;
+    const msg =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erro ao carregar colaboradores';
+    if (colaboradoresListErrorToastRef.current === msg) return;
+    colaboradoresListErrorToastRef.current = msg;
+    toast.error(msg);
+  }, [colaboradoresPaginatedQuery.isError, colaboradoresPaginatedQuery.error]);
+
+  const tableRows = usePaginated ? (colaboradoresPaginatedQuery.data?.rows ?? []) : [];
+  const totalCount = usePaginated ? (colaboradoresPaginatedQuery.data?.totalCount ?? 0) : 0;
+  const loading = usePaginated && colaboradoresPaginatedQuery.isFetching;
 
   const filtered = useMemo(() => {
     if (usePaginated) return tableRows;
@@ -530,7 +549,9 @@ export default function ColaboradoresPage() {
   const sortedMobileRows = useSortedMobileSlice(paginatedSlice, mobileSort, mobileSortComparators);
 
   /** Nomes de departamento para o filtro da tabela (valores existentes nos colaboradores). */
-  const departamentosFiltroOpcoes = usePaginated ? departamentosList : Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
+  const departamentosFiltroOpcoes = usePaginated
+    ? (colaboradoresPaginatedQuery.data?.departamentosList ?? [])
+    : Array.from(new Set(colaboradores.map(c => c.departamento))).sort();
 
   const cargoSelectOptions = useMemo(() => {
     const set = new Set<string>([...CARGO_OPTIONS]);
@@ -974,8 +995,7 @@ export default function ColaboradoresPage() {
       setAssociarUtilizadorId(null);
       setNovoColaboradorAnexos([]);
       if (usePaginated) {
-        fetchPaginated();
-        refetch();
+        void queryClient.invalidateQueries({ queryKey: ['colaboradores', 'paginated'] });
       }
       const transferiu =
         Boolean(editing) &&
@@ -997,8 +1017,7 @@ export default function ColaboradoresPage() {
     try {
       await deleteColaborador(c.id);
       if (usePaginated) {
-        fetchPaginated();
-        refetch();
+        void queryClient.invalidateQueries({ queryKey: ['colaboradores', 'paginated'] });
       }
       toast.success('Colaborador removido.');
     } catch (e) {

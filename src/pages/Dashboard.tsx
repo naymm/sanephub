@@ -26,6 +26,7 @@ import {
   FolderArchive,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,6 +89,9 @@ function filterBirthdaysInLocalMonth(all: BirthdayPerson[], ref: Date): Birthday
 const DASHBOARD_NOTICIAS_MAX = 6;
 const DASHBOARD_COMUNICADOS_MAX = 4;
 
+/** KPI Receita: evita refetch contínuo ao re-renderizar / voltar ao dashboard. */
+const DASHBOARD_RECEITA_STALE_MS = 5 * 60 * 1000;
+
 const COLORS = ['#d4a926', '#a57e26', '#d4a926', '#10B981', '#F59E0B', '#64748B', '#8B5CF6'];
 
 export default function Dashboard() {
@@ -119,8 +123,6 @@ export default function Dashboard() {
   const [birthdaysMonth, setBirthdaysMonth] = useState<BirthdayPerson[]>([]);
   const [birthdaysLoading, setBirthdaysLoading] = useState(false);
   const [birthdaysError, setBirthdaysError] = useState<string | null>(null);
-  const [receitaFacturacao, setReceitaFacturacao] = useState<number>(0);
-  const [receitaFacturacaoLoading, setReceitaFacturacaoLoading] = useState(false);
   const [newsSlideIndex, setNewsSlideIndex] = useState(0);
   const [newsSliderPaused, setNewsSliderPaused] = useState(false);
 
@@ -228,39 +230,36 @@ export default function Dashboard() {
     }
   }, [eventos, addNotification]);
 
-  const activeClients = colaboradores.filter(c => c.status === 'Activo').length;
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (!isSupabaseConfigured() || !supabase) {
-        setReceitaFacturacao(0);
-        return;
-      }
-      setReceitaFacturacaoLoading(true);
+  const receitaFacturacaoQuery = useQuery({
+    queryKey: ['dashboard', 'receita-facturacao', currentEmpresaId] as const,
+    enabled:
+      !!user &&
+      hasModuleAccess(user, 'contabilidade') &&
+      isSupabaseConfigured() &&
+      !!supabase,
+    staleTime: DASHBOARD_RECEITA_STALE_MS,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: async () => {
       try {
-        let q = supabase.from('factura').select('total_factura, empresa_id').limit(2000);
+        let q = supabase!.from('factura').select('total_factura, empresa_id').limit(2000);
         if (currentEmpresaId !== 'consolidado') q = q.eq('empresa_id', currentEmpresaId);
         const { data, error } = await q;
         if (error) throw error;
-        const total = (Array.isArray(data) ? data : []).reduce((s, r) => {
+        return (Array.isArray(data) ? data : []).reduce((s, r) => {
           const v = (r as { total_factura?: unknown })?.total_factura;
           if (typeof v === 'number') return s + v;
           if (typeof v === 'string') return s + parseMonetaryAmount(v);
           return s;
         }, 0);
-        if (!cancelled) setReceitaFacturacao(total);
       } catch {
-        if (!cancelled) setReceitaFacturacao(0);
-      } finally {
-        if (!cancelled) setReceitaFacturacaoLoading(false);
+        return 0;
       }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentEmpresaId]);
+    },
+  });
+
+  const activeClients = colaboradores.filter(c => c.status === 'Activo').length;
 
   const despesas = requisicoes
     .filter(r => r.status === 'Pago')
@@ -651,7 +650,11 @@ export default function Dashboard() {
                 >
                   <KpiCard
                     title="Receita"
-                    value={receitaFacturacaoLoading ? 'A carregar…' : formatKz(receitaFacturacao)}
+                    value={
+                      receitaFacturacaoQuery.isFetching && receitaFacturacaoQuery.data === undefined
+                        ? 'A carregar…'
+                        : formatKz(receitaFacturacaoQuery.data ?? 0)
+                    }
                     icon={<TrendingUp className="h-5 w-5" />}
                     description="Facturação"
                   />
