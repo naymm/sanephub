@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useTenant } from '@/context/TenantContext';
@@ -70,6 +71,8 @@ import { nomeFicheiroParaDownload } from '@/utils/nomeFicheiroDownload';
 
 const BUCKET = 'gestao-documentos';
 const MOBILE_BG_LOCK_BYPASS_MS = 60_000;
+/** Pastas + ficheiros: cache em memória ao navegar fora/voltar a `/gestao-documentos`. */
+const GESTAO_DOCUMENTOS_TREE_STALE_MS = 3 * 60 * 1000;
 
 export type GestaoDocumentosPageProps = {
   /** Pasta de 1.º nível (nome exacto na BD, sem diferenciar maiúsculas); a vista abre directamente nessa pasta. */
@@ -462,6 +465,7 @@ export default function GestaoDocumentosPage({
   scopedRootFolderName,
   pageHeading,
 }: GestaoDocumentosPageProps = {}) {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { currentEmpresaId } = useTenant();
   const { departamentos } = useData();
@@ -470,10 +474,45 @@ export default function GestaoDocumentosPage({
   const empresaIdNum =
     currentEmpresaId === 'consolidado' ? null : (currentEmpresaId as number);
 
-  const [pastas, setPastas] = useState<GestaoDocumentoPasta[]>([]);
-  const [arquivos, setArquivos] = useState<GestaoDocumentoArquivo[]>([]);
+  const gestaoDocumentosTreeQuery = useQuery({
+    queryKey: ['gestao-documentos', 'tree', empresaIdNum] as const,
+    enabled: isSupabaseConfigured() && !!supabase && empresaIdNum != null,
+    staleTime: GESTAO_DOCUMENTOS_TREE_STALE_MS,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: async () => {
+      const [{ data: pRows, error: e1 }, { data: aRows, error: e2 }] = await Promise.all([
+        supabase!
+          .from('gestao_documentos_pastas')
+          .select('*')
+          .eq('empresa_id', empresaIdNum!)
+          .order('nome'),
+        supabase!.from('gestao_documentos_arquivos').select('*').eq('empresa_id', empresaIdNum!),
+      ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
+      return {
+        pastas: (pRows ?? []).map(r => mapPasta(r as Record<string, unknown>)),
+        arquivos: (aRows ?? []).map(r => mapArquivo(r as Record<string, unknown>)),
+      };
+    },
+  });
+
+  const pastas =
+    empresaIdNum == null ? [] : (gestaoDocumentosTreeQuery.data?.pastas ?? []);
+  const arquivos =
+    empresaIdNum == null ? [] : (gestaoDocumentosTreeQuery.data?.arquivos ?? []);
+  const loading =
+    empresaIdNum != null &&
+    gestaoDocumentosTreeQuery.isFetching &&
+    gestaoDocumentosTreeQuery.data === undefined;
+
+  const invalidateGestaoDocumentosTree = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['gestao-documentos', 'tree'] });
+  }, [queryClient]);
+
   const [selectedPastaId, setSelectedPastaId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const [qTitulo, setQTitulo] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
@@ -517,6 +556,7 @@ export default function GestaoDocumentosPage({
   const [savingPastaEdit, setSavingPastaEdit] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const scopeApplyKeyRef = useRef<string | null>(null);
+  const gestaoTreeErrorToastRef = useRef<string | null>(null);
 
   const [moverOpen, setMoverOpen] = useState(false);
   /** Um ou vários documentos a mover (fluxo único no diálogo). */
@@ -562,37 +602,18 @@ export default function GestaoDocumentosPage({
     [departamentos],
   );
 
-  const loadAll = useCallback(async () => {
-    if (!isSupabaseConfigured() || !supabase || empresaIdNum == null) {
-      setPastas([]);
-      setArquivos([]);
-      setLoading(false);
+  useEffect(() => {
+    if (!gestaoDocumentosTreeQuery.isError) {
+      gestaoTreeErrorToastRef.current = null;
       return;
     }
-    setLoading(true);
-    try {
-      const [{ data: pRows, error: e1 }, { data: aRows, error: e2 }] = await Promise.all([
-        supabase
-          .from('gestao_documentos_pastas')
-          .select('*')
-          .eq('empresa_id', empresaIdNum)
-          .order('nome'),
-        supabase.from('gestao_documentos_arquivos').select('*').eq('empresa_id', empresaIdNum),
-      ]);
-      if (e1) throw e1;
-      if (e2) throw e2;
-      setPastas((pRows ?? []).map(r => mapPasta(r as Record<string, unknown>)));
-      setArquivos((aRows ?? []).map(r => mapArquivo(r as Record<string, unknown>)));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao carregar dados');
-    } finally {
-      setLoading(false);
-    }
-  }, [empresaIdNum]);
-
-  useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
+    const err = gestaoDocumentosTreeQuery.error;
+    const msg =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erro ao carregar dados';
+    if (gestaoTreeErrorToastRef.current === msg) return;
+    gestaoTreeErrorToastRef.current = msg;
+    toast.error(msg);
+  }, [gestaoDocumentosTreeQuery.isError, gestaoDocumentosTreeQuery.error]);
 
   const gestaoScopedRootStatus = useMemo(() => {
     const name = scopedRootFolderName?.trim();
@@ -833,7 +854,7 @@ export default function GestaoDocumentosPage({
       if (error) throw error;
       toast.success('Documento eliminado.');
       setArquivosSelecionadosIds(prev => prev.filter(id => id !== a.id));
-      void loadAll();
+      void invalidateGestaoDocumentosTree();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao eliminar');
     }
@@ -886,7 +907,7 @@ export default function GestaoDocumentosPage({
         toDelete.length === 1 ? 'Documento eliminado.' : `${toDelete.length} documentos eliminados.`,
       );
       setArquivosSelecionadosIds(prev => prev.filter(id => !toDelete.some(a => a.id === id)));
-      void loadAll();
+      void invalidateGestaoDocumentosTree();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao eliminar');
     } finally {
@@ -963,7 +984,7 @@ export default function GestaoDocumentosPage({
           toast.error(
             `Não foi possível mover "${moverArquivo.titulo}". Confirme permissões de gestão documental e políticas RLS.`,
           );
-          void loadAll();
+          void invalidateGestaoDocumentosTree();
           return;
         }
         const auditErr = await logAudit(moverArquivo.id, 'move', {
@@ -989,7 +1010,7 @@ export default function GestaoDocumentosPage({
       setMoverOpen(false);
       setMoverArquivos([]);
       setArquivosSelecionadosIds(prev => prev.filter(id => !toMove.some(a => a.id === id)));
-      void loadAll();
+      void invalidateGestaoDocumentosTree();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao mover o documento');
     } finally {
@@ -1114,7 +1135,7 @@ export default function GestaoDocumentosPage({
       if (ok > 0) {
         setUploadOpen(false);
         resetFormUpload();
-        void loadAll();
+        void invalidateGestaoDocumentosTree();
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro no upload');
@@ -1140,7 +1161,7 @@ export default function GestaoDocumentosPage({
       setNovaPastaNome('');
       setNovaPastaModulos([]);
       setNovaPastaSectores([]);
-      void loadAll();
+      void invalidateGestaoDocumentosTree();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao criar pasta');
     }
@@ -1185,7 +1206,7 @@ export default function GestaoDocumentosPage({
       if (delP) throw delP;
       toast.success('Pasta eliminada.');
       setSelectedPastaId(prev => (prev != null && folderIds.includes(prev) ? null : prev));
-      void loadAll();
+      void invalidateGestaoDocumentosTree();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao eliminar pasta');
     } finally {
@@ -1265,7 +1286,7 @@ export default function GestaoDocumentosPage({
             });
             setEditPastaOpen(false);
             setEditPastaId(null);
-            void loadAll();
+            void invalidateGestaoDocumentosTree();
             return;
           }
         }
@@ -1305,7 +1326,7 @@ export default function GestaoDocumentosPage({
       toast.success('Pasta actualizada.');
       setEditPastaOpen(false);
       setEditPastaId(null);
-      void loadAll();
+      void invalidateGestaoDocumentosTree();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar a pasta');
     } finally {
