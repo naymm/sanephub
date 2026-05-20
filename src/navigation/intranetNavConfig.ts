@@ -42,6 +42,7 @@ export type MenuGroup = {
 export const GENERAL_ITEMS: MenuChild[] = [
   { label: 'Dashboard', path: '/dashboard', module: 'dashboard' },
   { label: 'Notificações', path: '/notificacoes', module: 'dashboard' },
+  { label: 'Tutoriais', path: '/ajuda/tutoriais', module: 'dashboard' },
 ];
 
 export const MODULE_GROUPS: MenuGroup[] = [

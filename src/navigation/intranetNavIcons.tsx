@@ -17,6 +17,7 @@ import {
   MapPin,
   Bell,
   MessageCircle,
+  CirclePlay,
   Package,
   ScrollText,
   Receipt,
@@ -29,6 +30,7 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
   const map: Record<string, React.ReactNode> = {
     '/dashboard': <span className="text-[11px] font-bold">D</span>,
     '/notificacoes': <Bell className="h-4 w-4 shrink-0" />,
+    '/ajuda/tutoriais': <CirclePlay className="h-4 w-4 shrink-0" />,
     '/portal/ferias': <Palmtree className="h-4 w-4 shrink-0" />,
     '/portal/faltas': <Target className="h-4 w-4 shrink-0" />,
     '/portal/assiduidade': <Clock className="h-4 w-4 shrink-0" />,

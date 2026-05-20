@@ -560,6 +560,23 @@ export interface PrazoLegal {
   observacoes?: string;
 }
 
+export interface TutorialVideo {
+  id: number;
+  /** Null = tutorial visível em todas as empresas. */
+  empresaId?: number | null;
+  titulo: string;
+  descricao: string;
+  videoUrl: string;
+  videoProvedor: 'youtube' | 'vimeo' | 'url';
+  /** Módulo da app (ex.: capital-humano) para filtrar na biblioteca. */
+  moduloRelacionado?: string | null;
+  ordem: number;
+  publicado: boolean;
+  duracaoMinutos?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Noticia {
   id: number;
   empresaId: number;

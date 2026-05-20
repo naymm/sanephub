@@ -143,6 +143,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
     'resultadoLiquido',
   ],
   notificacoes: ['destinatarioColaboradorId', 'empresaId'],
+  tutoriais_videos: ['id', 'empresaId', 'ordem', 'duracaoMinutos'],
   noticias: ['id', 'empresaId'],
   eventos: ['id', 'empresaId', 'alertarAntesHoras'],
   comunicados: ['id', 'empresaId'],

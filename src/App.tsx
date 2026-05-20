@@ -63,6 +63,7 @@ import PortalRequisicoesPage from "@/modules/portal/PortalRequisicoesPage";
 import PortalAssiduidadePage from "@/modules/portal/PortalAssiduidadePage";
 import PortalDadosPage from "@/modules/portal/PortalDadosPage";
 import ChatPage from "@/modules/chat/ChatPage";
+import TutoriaisPage from "@/modules/ajuda/TutoriaisPage";
 import ConselhoDashboardPage from "@/modules/conselho-administracao/ConselhoDashboardPage";
 import DecisoesInstitucionaisPage from "@/modules/conselho-administracao/DecisoesInstitucionaisPage";
 import AssinaturaActosPage from "@/modules/conselho-administracao/AssinaturaActosPage";
@@ -111,6 +112,7 @@ const App = () => (
                   <Route path="/perfil" element={<MobileProfileMenuPage />} />
                   <Route path="/chat" element={<ChatPage />} />
                   <Route path="/notificacoes" element={<GenericModulePage title="Centro de Notificações" module="notificacoes" />} />
+                  <Route path="/ajuda/tutoriais" element={<TutoriaisPage />} />
                   {/* Conselho de Administração (PCA) */}
                   <Route path="/conselho-administracao/decisoes" element={<DecisoesInstitucionaisPage />} />
                   <Route path="/conselho-administracao/assinatura-actos" element={<AssinaturaActosPage />} />

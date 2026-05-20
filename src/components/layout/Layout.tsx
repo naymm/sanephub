@@ -21,6 +21,7 @@ import { MobileWebPushBanner } from '@/components/mobile/MobileWebPushBanner';
 import { PwaGeolocationBanner } from '@/components/mobile/PwaGeolocationBanner';
 
 const PATH_TO_MODULE: Record<string, string> = {
+  '/ajuda': 'dashboard',
   '/portal': 'portal-colaborador',
   '/capital-humano': 'capital-humano',
   '/financas': 'financas',
