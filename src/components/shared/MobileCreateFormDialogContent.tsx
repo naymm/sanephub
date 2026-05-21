@@ -41,7 +41,7 @@ export function MobileCreateFormDialogContent({
   moduleKicker,
   screenTitle,
   step,
-  desktopContentClassName = 'max-w-lg max-h-[90vh] overflow-y-auto',
+  desktopContentClassName = 'max-w-lg',
   desktopHeader,
   desktopFooter,
   mobileFooter,
@@ -49,7 +49,14 @@ export function MobileCreateFormDialogContent({
 }: MobileCreateFormDialogContentProps) {
   return (
     <DialogContent
-      className={cn(showMobileCreate ? fullscreenDialogClasses : desktopContentClassName)}
+      className={cn(
+        showMobileCreate
+          ? fullscreenDialogClasses
+          : cn(
+              'grid max-h-[min(90dvh,90vh)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden',
+              desktopContentClassName,
+            ),
+      )}
       onPointerDownOutside={(e) => {
         if (showMobileCreate) e.preventDefault();
       }}
@@ -108,9 +115,9 @@ export function MobileCreateFormDialogContent({
         </>
       ) : (
         <>
-          {desktopHeader}
-          {formBody}
-          {desktopFooter}
+          <div className="shrink-0">{desktopHeader}</div>
+          <div className="min-h-0 overflow-y-auto overscroll-contain py-1 pr-1">{formBody}</div>
+          <div className="shrink-0 border-t border-border/80 bg-background pt-4">{desktopFooter}</div>
         </>
       )}
     </DialogContent>

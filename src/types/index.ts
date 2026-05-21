@@ -791,6 +791,10 @@ export interface Correspondencia {
   data: string;
   prioridade: 'Normal' | 'Urgente' | 'Confidencial';
   estadoResposta: 'Pendente' | 'Respondida' | 'Não requer' | 'Arquivada';
+  documentoStoragePath?: string | null;
+  documentoNomeFicheiro?: string | null;
+  protocoloStoragePath?: string | null;
+  protocoloNomeFicheiro?: string | null;
 }
 
 /** Pasta na árvore de gestão documental (multi-tenant). */

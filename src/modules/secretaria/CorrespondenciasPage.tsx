@@ -24,7 +24,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Pencil, Eye, Trash2 } from 'lucide-react';
+import { Search, Plus, Pencil, Eye, Trash2, ExternalLink } from 'lucide-react';
+import { FileDropZone } from '@/components/shared/FileDropZone';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import {
+  CORRESPONDENCIAS_ANEXOS_ACCEPT,
+  correspondenciaAnexoPublicUrl,
+  uploadCorrespondenciaAnexo,
+  validateCorrespondenciaAnexoFile,
+} from '@/lib/correspondenciaAnexos';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
@@ -47,44 +55,45 @@ export default function CorrespondenciasPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [editing, setEditing] = useState<Correspondencia | null>(null);
   const [viewItem, setViewItem] = useState<Correspondencia | null>(null);
-  const [form, setForm] = useState<Omit<Correspondencia, 'id'>>({
-    tipo: 'Entrada',
-    remetente: '',
-    destinatario: '',
-    assunto: '',
-    referencia: '',
-    data: new Date().toISOString().slice(0, 10),
-    prioridade: 'Normal',
-    estadoResposta: 'Pendente',
-  });
+  const emptyForm = useCallback(
+    (): Omit<Correspondencia, 'id'> => ({
+      tipo: 'Entrada',
+      remetente: '',
+      destinatario: '',
+      assunto: '',
+      referencia: '',
+      data: new Date().toISOString().slice(0, 10),
+      prioridade: 'Normal',
+      estadoResposta: 'Pendente',
+      documentoStoragePath: null,
+      documentoNomeFicheiro: null,
+      protocoloStoragePath: null,
+      protocoloNomeFicheiro: null,
+    }),
+    [],
+  );
+
+  const [form, setForm] = useState<Omit<Correspondencia, 'id'>>(emptyForm);
+  const [documentoFile, setDocumentoFile] = useState<File | null>(null);
+  const [protocoloFile, setProtocoloFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const clearAnexoPickers = useCallback(() => {
+    setDocumentoFile(null);
+    setProtocoloFile(null);
+  }, []);
 
   const prepareCreate = useCallback(() => {
     setEditing(null);
-    setForm({
-      tipo: 'Entrada',
-      remetente: '',
-      destinatario: '',
-      assunto: '',
-      referencia: '',
-      data: new Date().toISOString().slice(0, 10),
-      prioridade: 'Normal',
-      estadoResposta: 'Pendente',
-    });
-  }, []);
+    setForm(emptyForm());
+    clearAnexoPickers();
+  }, [clearAnexoPickers, emptyForm]);
 
   const resetModal = useCallback(() => {
     setEditing(null);
-    setForm({
-      tipo: 'Entrada',
-      remetente: '',
-      destinatario: '',
-      assunto: '',
-      referencia: '',
-      data: new Date().toISOString().slice(0, 10),
-      prioridade: 'Normal',
-      estadoResposta: 'Pendente',
-    });
-  }, []);
+    setForm(emptyForm());
+    clearAnexoPickers();
+  }, [clearAnexoPickers, emptyForm]);
 
   const {
     isNovoRoute,
@@ -138,23 +147,88 @@ export default function CorrespondenciasPage() {
       data: c.data,
       prioridade: c.prioridade,
       estadoResposta: c.estadoResposta,
+      documentoStoragePath: c.documentoStoragePath ?? null,
+      documentoNomeFicheiro: c.documentoNomeFicheiro ?? null,
+      protocoloStoragePath: c.protocoloStoragePath ?? null,
+      protocoloNomeFicheiro: c.protocoloNomeFicheiro ?? null,
     });
+    clearAnexoPickers();
     setDialogOpen(true);
   };
 
   const save = async () => {
     if (!form.remetente.trim() || !form.destinatario.trim() || !form.assunto.trim() || !form.data) return;
+    if (!hasDocumentoAnexo) {
+      toast.error('O documento é obrigatório. Anexe o ficheiro antes de guardar.');
+      return;
+    }
+    if (documentoFile) {
+      const err = validateCorrespondenciaAnexoFile(documentoFile);
+      if (err) {
+        toast.error(err);
+        return;
+      }
+    }
+    if (protocoloFile) {
+      const err = validateCorrespondenciaAnexoFile(protocoloFile);
+      if (err) {
+        toast.error(err);
+        return;
+      }
+    }
+    if ((documentoFile || protocoloFile) && (!isSupabaseConfigured() || !supabase)) {
+      toast.error(
+        !editing && documentoFile
+          ? 'O documento é obrigatório e requer ligação ao Supabase.'
+          : 'Anexos requerem ligação ao Supabase.',
+      );
+      return;
+    }
+    if (!editing && !documentoFile) {
+      toast.error('O documento é obrigatório. Anexe o ficheiro antes de guardar.');
+      return;
+    }
+
+    setSaving(true);
     try {
-      if (editing) await updateCorrespondencia(editing.id, form);
-      else await addCorrespondencia(form);
+      let payload: Omit<Correspondencia, 'id'> = { ...form };
+
+      if (editing) {
+        if (documentoFile && supabase) {
+          const patch = await uploadCorrespondenciaAnexo(supabase, editing.id, 'documento', documentoFile);
+          payload = { ...payload, ...patch };
+        }
+        if (protocoloFile && supabase) {
+          const patch = await uploadCorrespondenciaAnexo(supabase, editing.id, 'protocolo', protocoloFile);
+          payload = { ...payload, ...patch };
+        }
+        await updateCorrespondencia(editing.id, payload);
+      } else {
+        const created = await addCorrespondencia(payload);
+        const patch: Partial<Correspondencia> = {};
+        if (documentoFile && supabase) {
+          Object.assign(patch, await uploadCorrespondenciaAnexo(supabase, created.id, 'documento', documentoFile));
+        }
+        if (protocoloFile && supabase) {
+          Object.assign(patch, await uploadCorrespondenciaAnexo(supabase, created.id, 'protocolo', protocoloFile));
+        }
+        if (Object.keys(patch).length > 0) {
+          await updateCorrespondencia(created.id, patch);
+        }
+      }
+
       setDialogOpen(false);
       setEditing(null);
+      clearAnexoPickers();
+      toast.success(editing ? 'Correspondência actualizada.' : 'Correspondência registada.');
       if (isNovoRoute) {
         endMobileCreateFlow();
         navigate(LIST_PATH, { replace: true });
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -167,10 +241,19 @@ export default function CorrespondenciasPage() {
     }
   };
 
+  const hasDocumentoAnexo = Boolean(
+    documentoFile || (form.documentoStoragePath ?? editing?.documentoStoragePath)?.trim(),
+  );
+
   const title = editing ? 'Editar correspondência' : 'Nova correspondência';
   const showMobileForm = showMobileCreate || (isMobileViewport && dialogOpen);
   const saveDisabled =
-    !form.remetente.trim() || !form.destinatario.trim() || !form.assunto.trim() || !form.data;
+    saving ||
+    !form.remetente.trim() ||
+    !form.destinatario.trim() ||
+    !form.assunto.trim() ||
+    !form.data ||
+    !hasDocumentoAnexo;
 
   const formBody = (
     <div className="grid gap-4 py-2">
@@ -230,6 +313,34 @@ export default function CorrespondenciasPage() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
+        <FileDropZone
+          label="Documento"
+          required
+          showRequiredHint={!hasDocumentoAnexo}
+          accept={CORRESPONDENCIAS_ANEXOS_ACCEPT}
+          selectedFile={documentoFile}
+          onFileSelected={setDocumentoFile}
+          validateFile={validateCorrespondenciaAnexoFile}
+          existingFileName={form.documentoNomeFicheiro ?? editing?.documentoNomeFicheiro}
+          disabled={saving}
+          uploading={saving && Boolean(documentoFile)}
+          compact
+          idleSub="ou clique — PDF, Word, Excel ou imagem (máx. 25 MB)"
+        />
+        <FileDropZone
+          label="Protocolo"
+          accept={CORRESPONDENCIAS_ANEXOS_ACCEPT}
+          selectedFile={protocoloFile}
+          onFileSelected={setProtocoloFile}
+          validateFile={validateCorrespondenciaAnexoFile}
+          existingFileName={form.protocoloNomeFicheiro ?? editing?.protocoloNomeFicheiro}
+          disabled={saving}
+          uploading={saving && Boolean(protocoloFile)}
+          compact
+          idleSub="opcional — pode anexar depois na edição"
+        />
       </div>
     </div>
   );
@@ -379,7 +490,7 @@ export default function CorrespondenciasPage() {
           onCloseMobile={() => onDialogOpenChange(false)}
           moduleKicker="Secretaria Geral"
           screenTitle={title}
-          desktopContentClassName="max-w-lg"
+          desktopContentClassName="max-w-2xl"
           desktopHeader={mobileCreateDesktopHeader(title, 'Registo de entrada ou saída.')}
           formBody={formBody}
           desktopFooter={
@@ -388,7 +499,7 @@ export default function CorrespondenciasPage() {
                 Cancelar
               </Button>
               <Button onClick={save} disabled={saveDisabled}>
-                Guardar
+                {saving ? 'A guardar…' : 'Guardar'}
               </Button>
             </DialogFooter>
           }
@@ -403,7 +514,7 @@ export default function CorrespondenciasPage() {
                 Cancelar
               </Button>
               <Button type="button" className="min-h-11 flex-1 rounded-xl" disabled={saveDisabled} onClick={() => void save()}>
-                Guardar
+                {saving ? 'A guardar…' : 'Guardar'}
               </Button>
             </div>
           }
@@ -411,19 +522,49 @@ export default function CorrespondenciasPage() {
       </Dialog>
 
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="grid max-h-[min(90dvh,90vh)] max-w-lg grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{viewItem?.referencia}</DialogTitle>
             <DialogDescription>{viewItem?.assunto}</DialogDescription>
           </DialogHeader>
           {viewItem && (
-            <div className="space-y-3 text-sm">
+            <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain text-sm pr-1">
               <p><span className="text-muted-foreground">Tipo:</span> {viewItem.tipo}</p>
               <p><span className="text-muted-foreground">Remetente:</span> {viewItem.remetente}</p>
               <p><span className="text-muted-foreground">Destinatário:</span> {viewItem.destinatario}</p>
               <p><span className="text-muted-foreground">Data:</span> {formatDate(viewItem.data)}</p>
               <p><span className="text-muted-foreground">Prioridade:</span> {viewItem.prioridade}</p>
               <p><span className="text-muted-foreground">Estado:</span> <StatusBadge status={viewItem.estadoResposta} /></p>
+              <div className="space-y-2 border-t pt-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Anexos</p>
+                {(['documento', 'protocolo'] as const).map(campo => {
+                  const path =
+                    campo === 'documento' ? viewItem.documentoStoragePath : viewItem.protocoloStoragePath;
+                  const nome =
+                    campo === 'documento' ? viewItem.documentoNomeFicheiro : viewItem.protocoloNomeFicheiro;
+                  const label = campo === 'documento' ? 'Documento' : 'Protocolo';
+                  const url =
+                    supabase && path ? correspondenciaAnexoPublicUrl(supabase, path) : null;
+                  return (
+                    <div key={campo} className="flex flex-wrap items-center gap-2">
+                      <span className="text-muted-foreground min-w-[5.5rem]">{label}:</span>
+                      {url && nome ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                        >
+                          {nome}
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </DialogContent>

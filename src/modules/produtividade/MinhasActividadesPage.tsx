@@ -15,7 +15,12 @@ import type {
 import { mapRowFromDb } from '@/lib/supabaseMappers';
 import {
   canTransitionProdutividadeStatus,
-  produtividadeStatusSelectDisabled,
+  getProdutividadeTransitionFrom,
+  isProdutividadeOverdue,
+  isProdutividadeAtrasadaAberta,
+  produtividadeMetricsCounts,
+  produtividadeStatusFromKanbanColumn,
+  produtividadeStatusSelectDisabledForActivity,
   produtividadeTransitionBlockedMessage,
 } from '@/modules/produtividade/statusTransitions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -372,11 +377,7 @@ function canManageApprovalTransition(
 }
 
 function isOverdue(a: ProdutividadeActividade): boolean {
-  if (a.status === 'Concluída' || a.status === 'Cancelada') return false;
-  const today = new Date();
-  const t = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
-  const d = new Date(a.prazo + 'T00:00:00Z');
-  return d < t;
+  return isProdutividadeOverdue(a);
 }
 
 function effectiveStatus(a: ProdutividadeActividade): ProdutividadeStatus {
@@ -432,7 +433,8 @@ function kanbanColumnForActivity(a: ProdutividadeActividade): KanbanColumnId | n
   if (a.status === 'Cancelada') return null;
   if (a.status === 'Concluída') return 'Concluída';
   if (a.status === 'Em aprovação') return 'Em aprovação';
-  if (effectiveStatus(a) === 'Atrasada') return 'Atrasada';
+  // Coluna «Atrasada»: estado persistido ou Pendente com prazo vencido (evita Em Progresso preso na coluna errada).
+  if (a.status === 'Atrasada' || (isOverdue(a) && a.status === 'Pendente')) return 'Atrasada';
   if (a.status === 'Pendente') return 'Pendente';
   return 'Em Progresso';
 }
@@ -694,22 +696,48 @@ export default function MinhasActividadesPage({
   }, []);
 
   const [optimisticActivities, setOptimisticActivities] = useState<ProdutividadeActividade[]>([]);
+  /** Estado optimista após mudança de coluna/select (KPIs e Kanban até o realtime confirmar). */
+  const [statusPatches, setStatusPatches] = useState<Map<number, ProdutividadeStatus>>(new Map());
 
   const { rows: allRows, isLoading } = useRealtimeTable<ProdutividadeActividade>('produtividade_actividades', 'id', {
     mapRow,
   });
 
   const mergedAllRows = useMemo(() => {
-    if (!optimisticActivities.length) return allRows;
-    const ids = new Set<number>(allRows.map((r) => r.id));
-    return [...optimisticActivities.filter((r) => !ids.has(r.id)), ...allRows];
-  }, [allRows, optimisticActivities]);
+    let base: ProdutividadeActividade[];
+    if (!optimisticActivities.length) base = allRows;
+    else {
+      const ids = new Set<number>(allRows.map((r) => r.id));
+      base = [...optimisticActivities.filter((r) => !ids.has(r.id)), ...allRows];
+    }
+    if (!statusPatches.size) return base;
+    return base.map((r) => {
+      const patched = statusPatches.get(r.id);
+      return patched ? { ...r, status: patched } : r;
+    });
+  }, [allRows, optimisticActivities, statusPatches]);
 
   useEffect(() => {
     if (!optimisticActivities.length) return;
     const ids = new Set<number>(allRows.map((r) => r.id));
     setOptimisticActivities((prev) => prev.filter((r) => !ids.has(r.id)));
   }, [allRows, optimisticActivities.length]);
+
+  useEffect(() => {
+    if (!statusPatches.size) return;
+    setStatusPatches((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [id, status] of prev) {
+        const row = allRows.find((r) => r.id === id);
+        if (row?.status === status) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [allRows, statusPatches]);
 
   const mapEnt = useMemo(() => {
     return (row: Record<string, unknown>) => mapRowFromDb<ProdutividadeEntregavel>('produtividade_entregaveis', row);
@@ -953,8 +981,15 @@ export default function MinhasActividadesPage({
           const parts = participantesByActividade.get(a.id) ?? [];
           if (!parts.some(p => p.colaboradorId === colaboradorFilter)) return false;
         }
-        const s = effectiveStatus(a);
-        if (statusFilter !== 'all' && s !== statusFilter) return false;
+        if (statusFilter !== 'all') {
+          if (statusFilter === 'Atrasada') {
+            if (!isProdutividadeAtrasadaAberta(a)) return false;
+          } else if (statusFilter === 'Em Progresso') {
+            if (a.status !== 'Em Progresso') return false;
+          } else if (statusFilter === 'Pendente') {
+            if (a.status !== 'Pendente' || isProdutividadeOverdue(a)) return false;
+          } else if (effectiveStatus(a) !== statusFilter) return false;
+        }
         if (prioridadeFilter !== 'all' && a.prioridade !== prioridadeFilter) return false;
         if (categoriaFilter !== 'all' && a.categoria !== categoriaFilter) return false;
         if (dateFilter && a.dataActividade !== dateFilter) return false;
@@ -975,15 +1010,7 @@ export default function MinhasActividadesPage({
       });
   }, [myRows, search, statusFilter, prioridadeFilter, categoriaFilter, dateFilter, scope, colaboradorFilter, participantesByActividade]);
 
-  const metrics = useMemo(() => {
-    const total = myRows.length;
-    const concluida = myRows.filter(a => effectiveStatus(a) === 'Concluída').length;
-    const atrasada = myRows.filter(a => effectiveStatus(a) === 'Atrasada').length;
-    const emProgresso = myRows.filter(a => effectiveStatus(a) === 'Em Progresso').length;
-    const pendente = myRows.filter(a => effectiveStatus(a) === 'Pendente').length;
-    const pct = total === 0 ? 0 : Math.round((concluida / total) * 100);
-    return { total, concluida, atrasada, emProgresso, pendente, pct };
-  }, [myRows]);
+  const metrics = useMemo(() => produtividadeMetricsCounts(myRows), [myRows]);
 
   async function exportAreaReportPdf() {
     if (!canExportAreaReport) return;
@@ -1004,7 +1031,7 @@ export default function MinhasActividadesPage({
 
     const total = rows.length;
     const concluidas = rows.filter((a) => effectiveStatus(a) === 'Concluída').length;
-    const atrasadasAbertas = rows.filter((a) => effectiveStatus(a) === 'Atrasada').length;
+    const atrasadasAbertas = rows.filter((a) => isProdutividadeAtrasadaAberta(a)).length;
     const emAprovacao = rows.filter((a) => effectiveStatus(a) === 'Em aprovação').length;
     const pct = total === 0 ? 0 : Math.round((concluidas / total) * 100);
 
@@ -1797,12 +1824,21 @@ export default function MinhasActividadesPage({
   ): Promise<boolean> {
     if (!isSupabaseConfigured() || !supabase) return false;
     const current = activityById.get(id);
-    if (current?.status === next) return true;
+    if (current?.status === next) {
+      if (current && isOverdue(current) && next !== 'Concluída' && next !== 'Cancelada') {
+        toast.message(
+          `A actividade já está em «${next}». Com prazo vencido, avance para «Em aprovação» ou «Concluída», ou prolongue o prazo.`,
+        );
+      }
+      return true;
+    }
     if (next === 'Atrasada') {
       toast.error('O estado «Atrasada» resulta do prazo vencido; não pode ser escolhido manualmente.');
       return false;
     }
-    const from = current?.status;
+    const from = current
+      ? getProdutividadeTransitionFrom(current.status, { overdue: isOverdue(current) })
+      : undefined;
     if (from && !canTransitionProdutividadeStatus(from, next)) {
       toast.error(produtividadeTransitionBlockedMessage(from, next));
       return false;
@@ -1830,6 +1866,14 @@ export default function MinhasActividadesPage({
     if (error) {
       toast.error(error.message ?? 'Erro ao actualizar o estado.');
       return false;
+    }
+    setStatusPatches((prev) => {
+      const m = new Map(prev);
+      m.set(id, next);
+      return m;
+    });
+    if (current && (current.status === 'Atrasada' || isOverdue(current))) {
+      toast.success(`Estado actualizado para «${next}».`);
     }
     return true;
   }
@@ -1992,18 +2036,14 @@ export default function MinhasActividadesPage({
     }
     if (!toCol) return;
 
+    const targetStatus = produtividadeStatusFromKanbanColumn(toCol);
+
     if (fromCol !== toCol) {
       if (toCol === 'Atrasada') {
-        toast.error('O estado «Atrasada» resulta do prazo vencido; arraste para Pendente ou Em Progresso em vez disso.');
-        return;
-      }
-      if (toCol === 'Em aprovação' && fromCol !== 'Em aprovação') {
-        // Permite arrastar directamente para «Em aprovação» (respeita regras/validações em setStatus + triggers SQL).
-        void setStatus(active.id, 'Em aprovação');
+        toast.error('O estado «Atrasada» resulta do prazo vencido; arraste para Em Progresso, Em aprovação ou Concluída.');
         return;
       }
       if (toCol === 'Concluída') {
-        // Se está «Em aprovação», arrastar para «Concluída» significa APROVAR (apenas aprovador/gestão).
         if (fromCol === 'Em aprovação' || active.status === 'Em aprovação') {
           const ok = canManageApprovalTransition(
             active,
@@ -2015,61 +2055,72 @@ export default function MinhasActividadesPage({
             toast.error('Só o aprovador designado (ou gestão) pode aprovar e concluir a actividade.');
             return;
           }
-          void setStatus(active.id, 'Concluída');
+          const okStatus = await setStatus(active.id, 'Concluída');
+          if (!okStatus) return;
+        } else {
+          requestComplete(active);
           return;
         }
-
-        // Caso normal: concluir (pode abrir diálogo de entregável obrigatório)
-        requestComplete(active);
-        return;
-      }
-      if (fromCol === 'Em aprovação') {
-        const ok = canManageApprovalTransition(
-          active,
-          user?.colaboradorId ?? null,
-          user?.perfil ?? null,
-          governanceEmpresaId,
-        );
-        if (!ok) {
-          toast.error('Só o aprovador designado (ou gestão) pode mover a actividade desde «Em aprovação».');
+      } else if (toCol === 'Em aprovação') {
+        const okStatus = await setStatus(active.id, 'Em aprovação');
+        if (!okStatus) return;
+      } else if (targetStatus) {
+        if (fromCol === 'Em aprovação') {
+          const ok = canManageApprovalTransition(
+            active,
+            user?.colaboradorId ?? null,
+            user?.perfil ?? null,
+            governanceEmpresaId,
+          );
+          if (!ok) {
+            toast.error('Só o aprovador designado (ou gestão) pode mover a actividade desde «Em aprovação».');
+            return;
+          }
+        }
+        const fromStatus = getProdutividadeTransitionFrom(active.status, { overdue: isOverdue(active) });
+        if (!canTransitionProdutividadeStatus(fromStatus, targetStatus)) {
+          toast.error(produtividadeTransitionBlockedMessage(fromStatus, targetStatus));
           return;
         }
+        if (active.status === targetStatus) {
+          toast.message(
+            `A actividade já está em «${targetStatus}». Avance para «Em aprovação» ou «Concluída», ou actualize o prazo.`,
+          );
+          return;
+        }
+        const okStatus = await setStatus(active.id, targetStatus);
+        if (!okStatus) return;
       }
-    }
-
-    if (fromCol !== toCol) {
-      if (!canTransitionProdutividadeStatus(active.status, toCol)) {
-        toast.error(produtividadeTransitionBlockedMessage(active.status, toCol));
+    } else if (fromCol === 'Em aprovação') {
+      const ok = canManageApprovalTransition(
+        active,
+        user?.colaboradorId ?? null,
+        user?.perfil ?? null,
+        governanceEmpresaId,
+      );
+      if (!ok) {
+        toast.error('Só o aprovador designado (ou gestão) pode mover a actividade desde «Em aprovação».');
         return;
       }
     }
 
     const nextUi = { ...kanbanUi, [fromCol]: [...kanbanUi[fromCol]], [toCol]: fromCol === toCol ? [...kanbanUi[toCol]] : [...kanbanUi[toCol]] };
-    // remover do from
     nextUi[fromCol] = nextUi[fromCol].filter(x => x !== activeId);
-    // inserir no to
     const toIndex =
       overItemId && nextUi[toCol].includes(overItemId) ? nextUi[toCol].indexOf(overItemId) : nextUi[toCol].length;
     nextUi[toCol].splice(Math.max(0, toIndex), 0, activeId);
-    // se moveu entre colunas, garantir que não duplicou
     if (fromCol !== toCol) nextUi[fromCol] = nextUi[fromCol].filter(x => x !== activeId);
     setKanbanUi(nextUi);
 
-    // Persistência
     if (!isSupabaseConfigured() || !supabase) return;
 
-    if (fromCol !== toCol) {
-      await setStatus(active.id, toCol);
-    }
-
-    // Regravar ordens (em ambas colunas se mudou, senão apenas na coluna)
     const colsToPersist: KanbanColumnId[] = fromCol === toCol ? [toCol] : [fromCol, toCol];
     await Promise.all(
       colsToPersist.flatMap((col) =>
         nextUi[col].slice(0, 120).map((dndId, idx) => {
-          const id = parseDndItemId(dndId);
-          if (!id) return Promise.resolve();
-          return (supabase.from('produtividade_actividades') as any).update({ kanban_order: idx }).eq('id', id);
+          const actId = parseDndItemId(dndId);
+          if (!actId) return Promise.resolve();
+          return (supabase.from('produtividade_actividades') as any).update({ kanban_order: idx }).eq('id', actId);
         }),
       ),
     );
@@ -2453,7 +2504,19 @@ export default function MinhasActividadesPage({
                             </Button>
                           </div>
                         ) : null}
-                        {s !== 'Concluída' && s !== 'Cancelada' && a.status !== 'Em aprovação' ? (
+                        {s === 'Atrasada' && a.status !== 'Em aprovação' ? (
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            <Button size="sm" variant="outline" onClick={() => void setStatus(a.id, 'Em Progresso')}>
+                              Em Progresso
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => void setStatus(a.id, 'Em aprovação')}>
+                              Em aprovação
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => requestComplete(a)}>
+                              Concluir
+                            </Button>
+                          </div>
+                        ) : s !== 'Concluída' && s !== 'Cancelada' && a.status !== 'Em aprovação' ? (
                           <Button size="sm" variant="secondary" onClick={() => requestComplete(a)}>
                             Concluir
                           </Button>
@@ -3027,35 +3090,36 @@ export default function MinhasActividadesPage({
                             <SelectContent>
                               <SelectItem
                                 value="Pendente"
-                                disabled={produtividadeStatusSelectDisabled(detailsActivity.status, 'Pendente')}
+                                disabled={produtividadeStatusSelectDisabledForActivity(detailsActivity, 'Pendente')}
                               >
                                 Pendente
                               </SelectItem>
                               <SelectItem
                                 value="Em Progresso"
-                                disabled={produtividadeStatusSelectDisabled(detailsActivity.status, 'Em Progresso')}
+                                disabled={produtividadeStatusSelectDisabledForActivity(detailsActivity, 'Em Progresso')}
                               >
                                 Em Progresso
                               </SelectItem>
                               <SelectItem
                                 value="Em aprovação"
-                                disabled={produtividadeStatusSelectDisabled(
-                                  detailsActivity.status,
+                                disabled={produtividadeStatusSelectDisabledForActivity(
+                                  detailsActivity,
                                   'Em aprovação',
                                   blockManualEmAprovacaoPorEntregavel,
                                 )}
                               >
                                 Em aprovação
                               </SelectItem>
-                              {detailsActivity.status === 'Atrasada' ? (
+                              {detailsActivity.status === 'Atrasada' ||
+                              (isOverdue(detailsActivity) && detailsActivity.status === 'Pendente') ? (
                                 <SelectItem value="Atrasada" disabled>
                                   Atrasada (automático)
                                 </SelectItem>
                               ) : null}
                               <SelectItem
                                 value="Concluída"
-                                disabled={produtividadeStatusSelectDisabled(
-                                  detailsActivity.status,
+                                disabled={produtividadeStatusSelectDisabledForActivity(
+                                  detailsActivity,
                                   'Concluída',
                                   mustCompleteViaApprovalFlow(detailsActivity) || blockSeleccionarConcluidaPorEntregavel,
                                 )}
@@ -3069,7 +3133,7 @@ export default function MinhasActividadesPage({
                               </SelectItem>
                               <SelectItem
                                 value="Cancelada"
-                                disabled={produtividadeStatusSelectDisabled(detailsActivity.status, 'Cancelada')}
+                                disabled={produtividadeStatusSelectDisabledForActivity(detailsActivity, 'Cancelada')}
                               >
                                 Cancelada
                               </SelectItem>

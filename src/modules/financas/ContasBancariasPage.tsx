@@ -7,17 +7,17 @@ import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import { ContaBancariaCard } from '@/modules/financas/ContaBancariaCard';
 import {
   MobileCreateFormDialogContent,
   mobileCreateDesktopHeader,
 } from '@/components/shared/MobileCreateFormDialogContent';
 import type { ContaBancaria } from '@/types';
-import { formatKz } from '@/utils/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogFooter } from '@/components/ui/dialog';
-import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -25,8 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
-import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
 const LIST_PATH = '/financas/contas-bancarias';
 const NOVO_PATH = '/financas/contas-bancarias/novo';
@@ -34,15 +32,18 @@ const NOVO_PATH = '/financas/contas-bancarias/novo';
 export default function ContasBancariasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { bancos, contasBancarias, empresas, addContaBancaria, updateContaBancaria, deleteContaBancaria } = useData();
+  const { bancos, contasBancarias, empresas, addContaBancaria, updateContaBancaria, deleteContaBancaria, refetch } =
+    useData();
   const { currentEmpresaId } = useTenant();
   const canAccessFinancas = hasModuleAccess(user, 'financas');
+  const showEmpresaOnCards = currentEmpresaId === 'consolidado';
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
 
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ContaBancaria | null>(null);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [form, setForm] = useState({
     empresaId: empresaIdForNew,
     bancoId: 0,
@@ -103,24 +104,23 @@ export default function ContasBancariasPage() {
       (c.descricao ?? '').toLowerCase().includes(q)
     );
   });
-  const pagination = useClientSidePagination({ items: filtered, pageSize: 20 });
+  const pagination = useClientSidePagination({ items: filtered, pageSize: 12 });
 
   const bancoNome = (id: number) => bancos.find(b => b.id === id)?.nome ?? `#${id}`;
+  const bancoCodigo = (id: number) => bancos.find(b => b.id === id)?.codigo;
   const empresaNome = (id: number) => empresas.find(e => e.id === id)?.nome ?? String(id);
 
-  const { sortState: mobileSort, toggleSort: toggleMobileSort } = useMobileListSort('empresa');
-  const mobileComparators = useMemo(
-    () => ({
-      empresa: (a: ContaBancaria, b: ContaBancaria) =>
-        empresaNome(a.empresaId).localeCompare(empresaNome(b.empresaId), 'pt', { sensitivity: 'base' }),
-      banco: (a: ContaBancaria, b: ContaBancaria) =>
-        bancoNome(a.bancoId).localeCompare(bancoNome(b.bancoId), 'pt', { sensitivity: 'base' }),
-      conta: (a: ContaBancaria, b: ContaBancaria) => a.numeroConta.localeCompare(b.numeroConta, 'pt', { sensitivity: 'base' }),
-      saldo: (a: ContaBancaria, b: ContaBancaria) => a.saldoActual - b.saldoActual,
-    }),
-    [bancos, empresas],
-  );
-  const sortedMobileRows = useSortedMobileSlice(pagination.slice, mobileSort, mobileComparators);
+  const refreshSaldos = useCallback(async () => {
+    setRefreshingAll(true);
+    try {
+      await refetch();
+      toast.success('Saldos actualizados.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao actualizar.');
+    } finally {
+      setRefreshingAll(false);
+    }
+  }, [refetch]);
 
   const openCreate = () => openCreateNavigateOrDialog();
 
@@ -182,13 +182,18 @@ export default function ContasBancariasPage() {
     }
   };
 
+  const totalSaldo = useMemo(
+    () => filtered.reduce((s, c) => s + c.saldoActual, 0),
+    [filtered],
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="page-header">Contas bancárias</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Por empresa: o mesmo banco pode ter <strong className="text-foreground font-medium">várias contas</strong> (cada uma com número distinto). O <strong className="text-foreground">saldo actual</strong> actualiza-se com os movimentos de tesouraria em que essa conta está seleccionada (e com o saldo inicial ao criar a conta). Quem tem acesso a Finanças pode gerir contas.
+          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+            Visão por cartão de cada conta. O saldo reflecte movimentos de tesouraria e o saldo inicial definido ao criar a conta.
           </p>
         </div>
         {canAccessFinancas && (
@@ -204,75 +209,48 @@ export default function ContasBancariasPage() {
         </p>
       )}
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Pesquisar conta, banco..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Pesquisar conta, banco..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9 h-9"
+          />
+        </div>
+        {filtered.length > 0 ? (
+          <p className="text-xs text-muted-foreground sm:text-right">
+            {filtered.length} conta{filtered.length === 1 ? '' : 's'}
+            {showEmpresaOnCards ? '' : ` · saldo total filtrado: ${new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalSaldo)} Kz`}
+          </p>
+        ) : null}
       </div>
 
-      <div className="hidden md:block table-container overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/80">
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase">Empresa</th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase">Banco</th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase">N.º conta</th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground uppercase">Saldo actual</th>
-              {/* <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground uppercase">Acções</th> */}
-            </tr>
-          </thead>
-          <tbody>
-            {pagination.slice.map(c => (
-              <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
-                <td className="py-3 px-4">{empresaNome(c.empresaId)}</td>
-                <td className="py-3 px-4">{bancoNome(c.bancoId)}</td>
-                <td className="py-3 px-4 font-mono text-xs">{c.numeroConta}</td>
-                <td className="py-3 px-4 text-right font-mono">{formatKz(c.saldoActual)}</td>
-                {/* <td className="py-3 px-4 text-right">
-                  {canAccessFinancas && (
-                    <>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                </td> */}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {filtered.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-14 text-center">
+          <p className="text-sm font-medium text-muted-foreground">Nenhuma conta neste contexto.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {pagination.slice.map(c => (
+            <ContaBancariaCard
+              key={c.id}
+              conta={c}
+              bancoNome={bancoNome(c.bancoId)}
+              bancoCodigo={bancoCodigo(c.bancoId)}
+              empresaNome={empresaNome(c.empresaId)}
+              showEmpresa={showEmpresaOnCards}
+              canManage={canAccessFinancas}
+              onRefresh={() => void refreshSaldos()}
+              refreshing={refreshingAll}
+              onEdit={() => openEdit(c)}
+              onDelete={() => void remove(c)}
+            />
+          ))}
+        </div>
+      )}
 
-      <div className="md:hidden">
-        <MobileExpandableList
-          items={sortedMobileRows}
-          rowId={c => c.id}
-          sortBar={{
-            options: [
-              { key: 'empresa', label: 'Empresa' },
-              { key: 'banco', label: 'Banco' },
-              { key: 'conta', label: 'N.º conta' },
-              { key: 'saldo', label: 'Saldo' },
-            ],
-            state: mobileSort,
-            onToggle: toggleMobileSort,
-          }}
-          renderSummary={c => ({
-            title: `${bancoNome(c.bancoId)} · ${c.numeroConta}`,
-            trailing: <span className="text-xs font-mono text-muted-foreground">{formatKz(c.saldoActual)}</span>,
-          })}
-          renderDetails={c => [
-            { label: 'Empresa', value: empresaNome(c.empresaId) },
-            { label: 'Banco', value: bancoNome(c.bancoId) },
-            { label: 'N.º conta', value: <span className="font-mono text-xs">{c.numeroConta}</span> },
-            { label: 'Saldo actual', value: formatKz(c.saldoActual) },
-          ]}
-        />
-      </div>
-
-      {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Nenhuma conta neste contexto.</p>}
       <DataTablePagination {...pagination.paginationProps} />
 
       <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
@@ -321,13 +299,18 @@ export default function ContasBancariasPage() {
                 </Select>
                 {!editing && (
                   <p className="text-xs text-muted-foreground">
-                    O mesmo banco pode ter várias contas nesta empresa: escolha o banco e use um <strong className="text-foreground">número de conta diferente</strong> em cada registo.
+                    O mesmo banco pode ter várias contas nesta empresa: escolha o banco e use um{' '}
+                    <strong className="text-foreground">número de conta diferente</strong> em cada registo.
                   </p>
                 )}
               </div>
               <div className="space-y-2">
                 <Label>Número da conta</Label>
-                <Input value={form.numeroConta} onChange={e => setForm(f => ({ ...f, numeroConta: e.target.value }))} placeholder="IBAN ou número interno (único por banco e empresa)" />
+                <Input
+                  value={form.numeroConta}
+                  onChange={e => setForm(f => ({ ...f, numeroConta: e.target.value }))}
+                  placeholder="IBAN ou número interno (único por banco e empresa)"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Saldo actual (Kz)</Label>
@@ -339,7 +322,11 @@ export default function ContasBancariasPage() {
               </div>
               <div className="space-y-2">
                 <Label>Descrição (opcional)</Label>
-                <Input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Ex.: Conta principal" />
+                <Input
+                  value={form.descricao}
+                  onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+                  placeholder="Ex.: Conta principal"
+                />
               </div>
             </div>
           }
