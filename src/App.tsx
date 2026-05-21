@@ -86,6 +86,16 @@ import FacturacaoPage from "@/modules/facturacao/FacturacaoPage";
 import ReceitaPage from "@/modules/facturacao/ReceitaPage";
 import MinhasActividadesPage from "@/modules/produtividade/MinhasActividadesPage";
 import ProdutividadeAprovacoesPage from "@/modules/produtividade/ProdutividadeAprovacoesPage";
+import { ControloInternoLayout } from "@/modules/controlo-interno/ControloInternoLayout";
+import ControloInternoDashboardPage from "@/modules/controlo-interno/ControloInternoDashboardPage";
+import PlanoAuditoriasPage, { PlaneamentoAuditoriasRedirect } from "@/modules/controlo-interno/PlanoAuditoriasPage";
+import InspeccoesPage from "@/modules/controlo-interno/InspeccoesPage";
+import ExecucaoAuditoriaPage from "@/modules/controlo-interno/ExecucaoAuditoriaPage";
+import NaoConformidadesPage from "@/modules/controlo-interno/NaoConformidadesPage";
+import PlanoAccaoPage from "@/modules/controlo-interno/PlanoAccaoPage";
+import RiscosCorporativosPage from "@/modules/controlo-interno/RiscosCorporativosPage";
+import LogsRastreabilidadePage from "@/modules/controlo-interno/LogsRastreabilidadePage";
+import RelatoriosControloInternoPage from "@/modules/controlo-interno/RelatoriosPage";
 
 const queryClient = createAppQueryClient();
 
@@ -166,6 +176,19 @@ const App = () => (
                   <Route path="/produtividade/actividades" element={<MinhasActividadesPage />} />
                   <Route path="/produtividade/direccao" element={<MinhasActividadesPage scope="area" />} />
                   <Route path="/produtividade/aprovacoes" element={<ProdutividadeAprovacoesPage />} />
+                  {/* Controlo Interno */}
+                  <Route path="/controlo-interno" element={<ControloInternoLayout />}>
+                    <Route index element={<ControloInternoDashboardPage />} />
+                    <Route path="plano-auditorias" element={<PlanoAuditoriasPage />} />
+                    <Route path="planeamento" element={<PlaneamentoAuditoriasRedirect />} />
+                    <Route path="inspeccoes" element={<InspeccoesPage />} />
+                    <Route path="execucao" element={<ExecucaoAuditoriaPage />} />
+                    <Route path="nao-conformidades" element={<NaoConformidadesPage />} />
+                    <Route path="plano-accao" element={<PlanoAccaoPage />} />
+                    <Route path="riscos" element={<RiscosCorporativosPage />} />
+                    <Route path="logs" element={<LogsRastreabilidadePage />} />
+                    <Route path="relatorios" element={<RelatoriosControloInternoPage />} />
+                  </Route>
                   {/* Contabilidade */}
                   <Route path="/contabilidade/pagamentos" element={<PagamentosPage />} />
                   <Route path="/contabilidade/pendencias" element={<PendenciasPage />} />

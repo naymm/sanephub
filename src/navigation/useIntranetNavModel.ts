@@ -2,7 +2,11 @@ import { useMemo } from 'react';
 import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
-import { getModulosAtivosForContext, empresaTemFacturacaoActiva, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import {
+  getModulosAtivosForContext,
+  empresaTemFacturacaoActiva,
+  intranetModuloVisivelParaUtilizador,
+} from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import {
   GENERAL_ITEMS,
@@ -48,8 +52,7 @@ export function useIntranetNavModel(): IntranetNavModel | null {
       if (user.perfil === 'Colaborador' && moduleId === 'comunicacao-interna') return true;
       if (!hasModuleAccess(user, moduleId)) return false;
       if (user.perfil === 'Colaborador') return true;
-      if (modulosAtivos == null) return true;
-      return empresaTemModuloActivado(modulosAtivos, moduleId);
+      return intranetModuloVisivelParaUtilizador(user.perfil, modulosAtivos, moduleId);
     };
 
     const isColaborador = user.perfil === 'Colaborador';

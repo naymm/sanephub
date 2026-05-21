@@ -129,6 +129,13 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
   processos_disciplinares: ['id', 'empresaId', 'colaboradorId'],
   rescisoes_contrato: ['id', 'contratoId', 'empresaId'],
   correspondencias: ['id'],
+  ci_auditorias: ['id', 'empresaId', 'auditorResponsavelColaboradorId'],
+  ci_inspecoes: ['id', 'empresaId', 'inspetorColaboradorId'],
+  ci_checklist_itens: ['id', 'auditoriaId', 'ordem'],
+  ci_checklist_evidencias: ['id', 'checklistItemId', 'tamanhoBytes'],
+  ci_nao_conformidades: ['id', 'empresaId', 'auditoriaId', 'checklistItemId'],
+  ci_planos_accao: ['id', 'naoConformidadeId', 'responsavelColaboradorId'],
+  ci_riscos: ['id', 'empresaId', 'probabilidade', 'impacto', 'score', 'responsavelColaboradorId'],
   documentos_oficiais: ['id', 'empresaId', 'colaboradorId'],
   pendencias_documentais: ['id', 'entidadeId'],
   relatorios_planeamento: [

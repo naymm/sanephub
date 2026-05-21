@@ -1185,6 +1185,8 @@ export interface PatrimonioVerificacao {
   createdAt: string;
 }
 
+export * from './controloInterno';
+
 export interface PatrimonioVerificacaoItem {
   id: number;
   verificacaoId: number;

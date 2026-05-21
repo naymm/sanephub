@@ -23,6 +23,7 @@ import {
   Search,
   ScrollText,
   Settings,
+  ShieldCheck,
   Stamp,
   Target,
   User,
@@ -46,7 +47,11 @@ import { formatRelative } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
 import { userAvatarFallbackLabel, userAvatarImageSrc } from '@/utils/userAvatar';
 import type { NotificationAudienceOptions } from '@/context/NotificationContext';
-import { getModulosAtivosForContext, empresaTemFacturacaoActiva, empresaTemModuloActivado } from '@/utils/empresaModulos';
+import {
+  getModulosAtivosForContext,
+  empresaTemFacturacaoActiva,
+  intranetModuloVisivelParaUtilizador,
+} from '@/utils/empresaModulos';
 import { orgModuloEstaActivado, rotaBloqueadaPorRecursosDesactivados } from '@/utils/orgFeatureAccess';
 import { useMemo, useState } from 'react';
 
@@ -91,8 +96,7 @@ export function IntranetTopbar() {
     if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
     if (!hasModuleAccess(user, moduleId)) return false;
     if (user.perfil === 'Colaborador') return true;
-    if (modulosAtivos == null) return true;
-    return empresaTemModuloActivado(modulosAtivos, moduleId);
+    return intranetModuloVisivelParaUtilizador(user.perfil, modulosAtivos, moduleId);
   };
 
   const principalModules = useMemo(() => {
@@ -110,6 +114,7 @@ export function IntranetTopbar() {
       { moduleId: 'secretaria', label: 'Secretaria Geral', icon: <Stamp className="h-4 w-4" /> },
       { moduleId: 'gestao-documentos', label: 'Gestão documental', icon: <FolderArchive className="h-4 w-4" /> },
       { moduleId: 'patrimonio', label: 'Património', icon: <Package className="h-4 w-4" /> },
+      { moduleId: 'controlo-interno', label: 'Controlo Interno', icon: <ShieldCheck className="h-4 w-4" /> },
       { moduleId: 'juridico', label: 'Jurídico', icon: <Scale className="h-4 w-4" /> },
       { moduleId: 'planeamento', label: 'Planeamento', icon: <Target className="h-4 w-4" /> },
     ];
@@ -171,6 +176,17 @@ export function IntranetTopbar() {
         { key: 'gestao-documentos-minutas', label: 'Minutas', path: '/gestao-documentos/minutas' },
       ],
       patrimonio: [{ key: 'patrimonio-main', label: 'Activos e verificação', path: '/patrimonio' }],
+      'controlo-interno': [
+        { key: 'ci-dashboard', label: 'Dashboard', path: '/controlo-interno' },
+        { key: 'ci-plano', label: 'Plano de Auditorias', path: '/controlo-interno/plano-auditorias' },
+        { key: 'ci-inspeccoes', label: 'Inspecções', path: '/controlo-interno/inspeccoes' },
+        { key: 'ci-execucao', label: 'Execução', path: '/controlo-interno/execucao' },
+        { key: 'ci-nc', label: 'Não Conformidades', path: '/controlo-interno/nao-conformidades' },
+        { key: 'ci-plano', label: 'Plano de Acção', path: '/controlo-interno/plano-accao' },
+        { key: 'ci-riscos', label: 'Riscos', path: '/controlo-interno/riscos' },
+        { key: 'ci-logs', label: 'Logs', path: '/controlo-interno/logs' },
+        { key: 'ci-relatorios', label: 'Relatórios', path: '/controlo-interno/relatorios' },
+      ],
       juridico: [
         { key: 'juridico-contratos', label: 'Contratos', path: '/juridico/contratos' },
         { key: 'juridico-processos', label: 'Processos Judiciais', path: '/juridico/processos' },

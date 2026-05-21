@@ -34,6 +34,7 @@ const PATH_TO_MODULE: Record<string, string> = {
   '/planeamento': 'planeamento',
   '/conselho-administracao': 'conselho-administracao',
   '/comunicacao-interna': 'comunicacao-interna',
+  '/controlo-interno': 'controlo-interno',
   '/configuracoes': 'configuracoes',
 };
 

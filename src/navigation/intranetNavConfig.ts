@@ -18,6 +18,7 @@ import {
   Package,
   Receipt,
   ListChecks,
+  ShieldCheck,
 } from 'lucide-react';
 import { PORTAL_MENU_ITEMS } from '@/navigation/portalMenu';
 
@@ -138,6 +139,22 @@ export const MODULE_GROUPS: MenuGroup[] = [
     module: 'patrimonio',
     icon: Package,
     children: [{ label: 'Activos e verificação', path: '/patrimonio', module: 'patrimonio' }],
+  },
+  {
+    label: 'Controlo Interno',
+    module: 'controlo-interno',
+    icon: ShieldCheck,
+    children: [
+      { label: 'Dashboard', path: '/controlo-interno', module: 'controlo-interno' },
+      { label: 'Plano de Auditorias', path: '/controlo-interno/plano-auditorias', module: 'controlo-interno' },
+      { label: 'Inspecções', path: '/controlo-interno/inspeccoes', module: 'controlo-interno' },
+      { label: 'Execução', path: '/controlo-interno/execucao', module: 'controlo-interno' },
+      { label: 'Não Conformidades', path: '/controlo-interno/nao-conformidades', module: 'controlo-interno' },
+      { label: 'Plano de Acção', path: '/controlo-interno/plano-accao', module: 'controlo-interno' },
+      { label: 'Riscos', path: '/controlo-interno/riscos', module: 'controlo-interno' },
+      { label: 'Logs', path: '/controlo-interno/logs', module: 'controlo-interno' },
+      { label: 'Relatórios', path: '/controlo-interno/relatorios', module: 'controlo-interno' },
+    ],
   },
   {
     label: 'Jurídico',

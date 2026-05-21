@@ -23,6 +23,7 @@ import {
   Receipt,
   ListChecks,
   ClipboardList,
+  ShieldCheck,
 } from 'lucide-react';
 
 /** Ícones partilhados entre menu horizontal e drawer mobile (evita duplicar JSX). */
@@ -83,6 +84,16 @@ export function intranetNavIconForPath(path: string): React.ReactNode {
     '/facturacao/receita': <Receipt className="h-4 w-4 shrink-0" />,
     '/produtividade/actividades': <ListChecks className="h-4 w-4 shrink-0" />,
     '/produtividade/direccao': <ListChecks className="h-4 w-4 shrink-0" />,
+    '/controlo-interno': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/plano-auditorias': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/inspeccoes': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/planeamento': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/execucao': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/nao-conformidades': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/plano-accao': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/riscos': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/logs': <ShieldCheck className="h-4 w-4 shrink-0" />,
+    '/controlo-interno/relatorios': <ShieldCheck className="h-4 w-4 shrink-0" />,
   };
   return map[path] ?? null;
 }

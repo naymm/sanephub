@@ -13,6 +13,7 @@ export const MODULOS_ATIVOS_PADRAO_GRUPO: readonly string[] = [
   'gestao-documentos',
   'patrimonio',
   'juridico',
+  'controlo-interno',
   'conselho-administracao',
   'portal-colaborador',
   'comunicacao-interna',
@@ -49,6 +50,20 @@ export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleI
   if (moduleId === 'gestao-documentos' && modulosAtivos.includes('secretaria')) return true;
   if (moduleId === 'patrimonio' && modulosAtivos.includes('secretaria')) return true;
   return false;
+}
+
+/**
+ * Visibilidade de módulo no menu intranet (barra horizontal, «Mais», launcher).
+ * Admin ignora a whitelist por empresa (como em `Layout`); outros perfis respeitam `modulos_ativos`.
+ */
+export function intranetModuloVisivelParaUtilizador(
+  perfil: string,
+  modulosAtivos: string[] | null,
+  moduleId: string,
+): boolean {
+  if (perfil === 'Admin') return true;
+  if (modulosAtivos == null) return true;
+  return empresaTemModuloActivado(modulosAtivos, moduleId);
 }
 
 /** Facturação depende do flag específico da empresa (não é universal no grupo). */

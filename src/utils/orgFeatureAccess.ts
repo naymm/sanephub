@@ -41,6 +41,7 @@ export const MODULOS_DESACTIVAVEIS_PELA_ORG: { id: string; label: string }[] = [
   { id: 'conselho-administracao', label: 'Conselho de Administração' },
   { id: 'portal-colaborador', label: 'Portal Colaborador' },
   { id: 'comunicacao-interna', label: 'Comunicação interna' },
+  { id: 'controlo-interno', label: 'Controlo Interno' },
 ];
 
 /** Itens de menu não listados no agrupador horizontal (ex.: só na sidebar). */
