@@ -61,3 +61,38 @@ export function ciEvidenciaPublicUrl(supabase: SupabaseClient, path: string): st
   const { data } = supabase.storage.from(CI_EVIDENCIAS_BUCKET).getPublicUrl(path);
   return data?.publicUrl ?? null;
 }
+
+export type CiRelatorioFinalMeta = {
+  relatorioFinalStoragePath: string;
+  relatorioFinalNomeFicheiro: string;
+  relatorioFinalMimeType: string;
+  relatorioFinalTamanhoBytes: number;
+};
+
+export async function uploadCiAuditoriaRelatorioFinal(
+  supabase: SupabaseClient,
+  auditoriaId: number,
+): Promise<(file: File) => Promise<CiRelatorioFinalMeta>> {
+  return async (file: File) => {
+    const err = validateCiEvidenciaFile(file);
+    if (err) throw new Error(err);
+    const safe = file.name.replace(/[^\w.\-() ]+/g, '_').slice(0, 120);
+    const storagePath = `auditoria-${auditoriaId}/relatorio-final-${Date.now()}-${safe}`;
+    const { error: upErr } = await supabase.storage.from(CI_EVIDENCIAS_BUCKET).upload(storagePath, file, {
+      upsert: true,
+      contentType: file.type || 'application/octet-stream',
+    });
+    if (upErr) throw new Error(upErr.message);
+    return {
+      relatorioFinalStoragePath: storagePath,
+      relatorioFinalNomeFicheiro: file.name,
+      relatorioFinalMimeType: file.type || 'application/octet-stream',
+      relatorioFinalTamanhoBytes: file.size,
+    };
+  };
+}
+
+export function ciAuditoriaRelatorioFinalUrl(supabase: SupabaseClient, path: string | null | undefined): string | null {
+  if (!path) return null;
+  return ciEvidenciaPublicUrl(supabase, path);
+}

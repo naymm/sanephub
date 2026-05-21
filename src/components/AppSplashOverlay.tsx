@@ -6,6 +6,8 @@ import { Loader2 } from 'lucide-react';
 /** Evita um flash quase imperceptível se a sessão restaurar instantaneamente. */
 const MIN_VISIBLE_MS = 520;
 const FADE_MS = 320;
+/** Nunca bloquear o UI se a auth demorar (rede / Supabase). */
+const AUTH_READY_MAX_MS = 12_000;
 
 /**
  * Ecrã de arranque (mobile e desktop): cobre o carregamento inicial e a restauração da sessão.
@@ -26,6 +28,18 @@ export function AppSplashOverlay() {
     const elapsed = Date.now() - mountTimeRef.current;
     const wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
     const t = window.setTimeout(() => setExiting(true), wait);
+    return () => clearTimeout(t);
+  }, [isAuthReady]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (!isAuthReady) {
+        if (import.meta.env.DEV) {
+          console.warn('[sanep] Auth não ficou pronta a tempo; a remover splash.');
+        }
+        setExiting(true);
+      }
+    }, AUTH_READY_MAX_MS);
     return () => clearTimeout(t);
   }, [isAuthReady]);
 

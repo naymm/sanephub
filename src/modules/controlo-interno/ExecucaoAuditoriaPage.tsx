@@ -2,15 +2,22 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plus } from 'lucide-react';
+import { Plus, CheckCircle2, ExternalLink } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useCiEmpresaId } from '@/modules/controlo-interno/useCiEmpresaId';
-import { mapCiChecklistItem, mapCiEvidencia } from '@/modules/controlo-interno/ciMappers';
+import { mapCiAuditoria, mapCiChecklistItem, mapCiEvidencia } from '@/modules/controlo-interno/ciMappers';
+import { CiConcluirAuditoriaDialog } from '@/modules/controlo-interno/CiConcluirAuditoriaDialog';
 import { CI_RESULTADOS_CHECKLIST } from '@/modules/controlo-interno/constants';
 import type { CiChecklistResultado } from '@/types/controloInterno';
 import { FileDropZone } from '@/components/shared/FileDropZone';
-import { CI_EVIDENCIAS_ACCEPT, uploadCiChecklistEvidencia, validateCiEvidenciaFile, ciEvidenciaPublicUrl } from '@/lib/ciEvidencias';
+import {
+  CI_EVIDENCIAS_ACCEPT,
+  uploadCiChecklistEvidencia,
+  validateCiEvidenciaFile,
+  ciEvidenciaPublicUrl,
+  ciAuditoriaRelatorioFinalUrl,
+} from '@/lib/ciEvidencias';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,7 +31,6 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink } from 'lucide-react';
 
 export default function ExecucaoAuditoriaPage() {
   const empresaId = useCiEmpresaId();
@@ -36,6 +42,7 @@ export default function ExecucaoAuditoriaPage() {
   const [newCriterio, setNewCriterio] = useState('');
   const [uploadItemId, setUploadItemId] = useState<number | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [concluirOpen, setConcluirOpen] = useState(false);
 
   const { data: auditorias = [] } = useQuery({
     queryKey: ['ci', 'auditorias', 'exec', empresaId],
@@ -48,6 +55,17 @@ export default function ExecucaoAuditoriaPage() {
   });
 
   const selectedId = auditoriaId && auditorias.some(a => a.id === auditoriaId) ? auditoriaId : auditorias[0]?.id ?? null;
+
+  const { data: auditoriaSeleccionada } = useQuery({
+    queryKey: ['ci', 'auditoria', selectedId],
+    enabled: isSupabaseConfigured() && selectedId != null,
+    queryFn: async () => {
+      if (!supabase || selectedId == null) return null;
+      const { data, error } = await supabase.from('ci_auditorias').select('*').eq('id', selectedId).maybeSingle();
+      if (error) throw error;
+      return data ? mapCiAuditoria(data as Record<string, unknown>) : null;
+    },
+  });
 
   const { data: itens = [], refetch: refetchItens } = useQuery({
     queryKey: ['ci', 'checklist', selectedId],
@@ -127,8 +145,8 @@ export default function ExecucaoAuditoriaPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1 min-w-[240px]">
+      <div className="flex flex-wrap items-end gap-3 justify-between">
+        <div className="space-y-1 min-w-[240px] flex-1">
           <Label>Auditoria</Label>
           <Select
             value={selectedId?.toString() ?? ''}
@@ -138,12 +156,30 @@ export default function ExecucaoAuditoriaPage() {
             <SelectContent>
               {auditorias.map(a => (
                 <SelectItem key={a.id} value={String(a.id)}>
-                  {a.codigo} — {a.titulo}
+                  {a.codigo} — {a.titulo} ({a.estado})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+        {auditoriaSeleccionada?.estado === 'Em Execução' ? (
+          <Button variant="default" onClick={() => setConcluirOpen(true)}>
+            <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir auditoria
+          </Button>
+        ) : null}
+        {auditoriaSeleccionada?.estado === 'Concluída' &&
+        auditoriaSeleccionada.relatorioFinalStoragePath &&
+        supabase ? (
+          <a
+            href={ciAuditoriaRelatorioFinalUrl(supabase, auditoriaSeleccionada.relatorioFinalStoragePath) ?? '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline pb-2"
+          >
+            Relatório final
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
       </div>
 
       {!selectedId ? (
@@ -261,6 +297,13 @@ export default function ExecucaoAuditoriaPage() {
           </div>
         </>
       )}
+
+      <CiConcluirAuditoriaDialog
+        open={concluirOpen}
+        onOpenChange={setConcluirOpen}
+        auditoria={auditoriaSeleccionada ?? null}
+        onConcluida={() => setConcluirOpen(false)}
+      />
     </div>
   );
 }

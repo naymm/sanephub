@@ -68,6 +68,11 @@ export interface CiInspecao {
   estado: CiInspecaoEstado;
   inspetorColaboradorId: number | null;
   observacoes: string;
+  relatorioFinalStoragePath: string | null;
+  relatorioFinalNomeFicheiro: string | null;
+  relatorioFinalMimeType: string | null;
+  relatorioFinalTamanhoBytes: number | null;
+  relatorioFinalUploadedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

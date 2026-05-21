@@ -2,8 +2,16 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plus, Play } from 'lucide-react';
+import { Plus, Play, CheckCircle2, ExternalLink } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import {
+  CI_EVIDENCIAS_ACCEPT,
+  ciAuditoriaRelatorioFinalUrl,
+  uploadCiAuditoriaRelatorioFinal,
+  validateCiEvidenciaFile,
+} from '@/lib/ciEvidencias';
+import { FileDropZone } from '@/components/shared/FileDropZone';
+import { CiConcluirAuditoriaDialog } from '@/modules/controlo-interno/CiConcluirAuditoriaDialog';
 import { useData } from '@/context/DataContext';
 import { useCiEmpresaId } from '@/modules/controlo-interno/useCiEmpresaId';
 import { useCiCanManage } from '@/modules/controlo-interno/useCiCanManage';
@@ -70,6 +78,9 @@ export default function PlanoAuditoriasPage() {
   const [estado, setEstado] = useState<CiAuditoriaEstado>('Planeada');
   const [objectivo, setObjectivo] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  const [relatorioFile, setRelatorioFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [concluirAuditoria, setConcluirAuditoria] = useState<CiAuditoria | null>(null);
 
   const empresasActivas = useMemo(
     () => empresas.filter(e => e.activo !== false).map(e => ({ id: e.id, nome: e.nome, codigo: e.codigo })),
@@ -103,6 +114,7 @@ export default function PlanoAuditoriasPage() {
     setEstado('Planeada');
     setObjectivo('');
     setObservacoes('');
+    setRelatorioFile(null);
     setOpen(true);
   };
 
@@ -119,6 +131,7 @@ export default function PlanoAuditoriasPage() {
     setEstado(a.estado);
     setObjectivo(a.objectivo);
     setObservacoes(a.observacoes);
+    setRelatorioFile(null);
     setOpen(true);
   };
 
@@ -129,6 +142,15 @@ export default function PlanoAuditoriasPage() {
       return;
     }
     if (!supabase) return;
+
+    const precisaRelatorio =
+      estado === 'Concluída' &&
+      !relatorioFile &&
+      !(editing?.relatorioFinalStoragePath);
+    if (precisaRelatorio) {
+      toast.error('Anexe o Relatório Final para concluir a auditoria.');
+      return;
+    }
 
     const areaDept =
       core.natureza === 'Orgânica' ? core.areaDepartamento.trim() : core.areaDireccionada.trim();
@@ -148,20 +170,50 @@ export default function PlanoAuditoriasPage() {
       observacoes,
     };
 
+    setSaving(true);
     try {
+      let auditoriaId = editing?.id;
+
       if (editing) {
         const { error } = await supabase.from('ci_auditorias').update(payload).eq('id', editing.id);
         if (error) throw error;
-        toast.success('Plano actualizado.');
       } else {
-        const { error } = await supabase.from('ci_auditorias').insert({ ...payload, codigo: '' });
+        if (estado === 'Concluída') {
+          toast.error('Crie o plano antes de concluir; use «Concluir» após iniciar a execução.');
+          return;
+        }
+        const { data, error } = await supabase
+          .from('ci_auditorias')
+          .insert({ ...payload, codigo: '' })
+          .select('id')
+          .single();
         if (error) throw error;
-        toast.success('Plano de auditoria criado.');
+        auditoriaId = data?.id as number;
       }
+
+      if (estado === 'Concluída' && relatorioFile && auditoriaId) {
+        const upload = await uploadCiAuditoriaRelatorioFinal(supabase, auditoriaId);
+        const meta = await upload(relatorioFile);
+        const { error: relErr } = await supabase
+          .from('ci_auditorias')
+          .update({
+            relatorio_final_storage_path: meta.relatorioFinalStoragePath,
+            relatorio_final_nome_ficheiro: meta.relatorioFinalNomeFicheiro,
+            relatorio_final_mime_type: meta.relatorioFinalMimeType,
+            relatorio_final_tamanho_bytes: meta.relatorioFinalTamanhoBytes,
+            relatorio_final_uploaded_at: new Date().toISOString(),
+          })
+          .eq('id', auditoriaId);
+        if (relErr) throw relErr;
+      }
+
+      toast.success(editing ? 'Plano actualizado.' : 'Plano de auditoria criado.');
       setOpen(false);
       void qc.invalidateQueries({ queryKey: ['ci'] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao guardar');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -203,6 +255,7 @@ export default function PlanoAuditoriasPage() {
               <th className="text-left py-2 px-3">Data</th>
               <th className="text-left py-2 px-3">Prazo</th>
               <th className="text-left py-2 px-3">Estado</th>
+              <th className="text-left py-2 px-3">Relatório</th>
               <th className="text-right py-2 px-3">Acções</th>
             </tr>
           </thead>
@@ -224,10 +277,32 @@ export default function PlanoAuditoriasPage() {
                 <td className="py-2 px-3">
                   <Badge variant={a.estado === 'Em Execução' ? 'default' : 'secondary'}>{a.estado}</Badge>
                 </td>
+                <td className="py-2 px-3 text-xs">
+                  {a.relatorioFinalStoragePath && supabase ? (
+                    <a
+                      href={ciAuditoriaRelatorioFinalUrl(supabase, a.relatorioFinalStoragePath) ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                    >
+                      {a.relatorioFinalNomeFicheiro ?? 'Relatório'}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : a.estado === 'Concluída' ? (
+                    <span className="text-destructive">Em falta</span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td className="py-2 px-3 text-right space-x-1">
                   {a.estado === 'Planeada' ? (
                     <Button size="sm" variant="outline" onClick={() => void startExecucao(a.id)}>
                       <Play className="h-3 w-3 mr-1" /> Iniciar
+                    </Button>
+                  ) : null}
+                  {a.estado === 'Em Execução' ? (
+                    <Button size="sm" variant="outline" onClick={() => setConcluirAuditoria(a)}>
+                      <CheckCircle2 className="h-3 w-3 mr-1" /> Concluir
                     </Button>
                   ) : null}
                   <Button size="sm" variant="ghost" asChild>
@@ -252,7 +327,18 @@ export default function PlanoAuditoriasPage() {
             <CiEmpresaNaturezaFields empresas={empresasActivas} values={core} onChange={patch => setCore(c => ({ ...c, ...patch }))} />
             <div className="space-y-1">
               <Label>Estado do plano</Label>
-              <Select value={estado} onValueChange={v => setEstado(v as CiAuditoriaEstado)}>
+              <Select
+                value={estado}
+                onValueChange={v => {
+                  const next = v as CiAuditoriaEstado;
+                  if (next === 'Concluída' && !editing) {
+                    toast.message('Guarde o plano e use «Concluir» após iniciar a execução.');
+                    return;
+                  }
+                  setEstado(next);
+                  if (next !== 'Concluída') setRelatorioFile(null);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -265,6 +351,23 @@ export default function PlanoAuditoriasPage() {
                 </SelectContent>
               </Select>
             </div>
+            {estado === 'Concluída' ? (
+              <FileDropZone
+                label="Relatório Final"
+                accept={CI_EVIDENCIAS_ACCEPT}
+                selectedFile={relatorioFile}
+                onFileSelected={setRelatorioFile}
+                validateFile={validateCiEvidenciaFile}
+                existingFileName={
+                  relatorioFile ? null : (editing?.relatorioFinalNomeFicheiro ?? null)
+                }
+                required={!editing?.relatorioFinalStoragePath}
+                showRequiredHint={!editing?.relatorioFinalStoragePath && !relatorioFile}
+                uploading={saving}
+                idleTitle="Arraste o relatório final para aqui"
+                idleSub="PDF, Word, Excel ou imagem (máx. 25 MB)"
+              />
+            ) : null}
             <div className="space-y-1">
               <Label>Objectivo (opcional)</Label>
               <Textarea value={objectivo} onChange={e => setObjectivo(e.target.value)} rows={2} />
@@ -278,10 +381,21 @@ export default function PlanoAuditoriasPage() {
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => void save()}>Guardar</Button>
+            <Button onClick={() => void save()} disabled={saving}>
+              Guardar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CiConcluirAuditoriaDialog
+        open={concluirAuditoria != null}
+        onOpenChange={o => {
+          if (!o) setConcluirAuditoria(null);
+        }}
+        auditoria={concluirAuditoria}
+        onConcluida={() => setConcluirAuditoria(null)}
+      />
     </div>
   );
 }

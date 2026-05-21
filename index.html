@@ -53,6 +53,40 @@
       />
     </div>
     <div id="root"></div>
+    <!-- Remove SW legado antes do bundle (evita JS em cache que impede o arranque). -->
+    <script>
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) {
+            r.unregister();
+          });
+        });
+        if ('caches' in window) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (k) {
+              caches.delete(k);
+            });
+          });
+        }
+      })();
+    </script>
+    <script>
+      window.addEventListener('error', function (ev) {
+        var splash = document.getElementById('sanep-static-splash');
+        if (splash) splash.remove();
+        var root = document.getElementById('root');
+        if (!root || root.children.length) return;
+        var msg = (ev && ev.message) ? String(ev.message) : 'Erro ao carregar a aplicação.';
+        root.innerHTML =
+          '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#101828;color:#e2e8f0;font-family:system-ui,sans-serif;text-align:center">' +
+          '<div><p style="font-size:1rem;margin:0 0 8px">Não foi possível iniciar a aplicação.</p>' +
+          '<p style="font-size:0.8rem;margin:0 0 12px;opacity:0.75;word-break:break-word;max-width:28rem">' +
+          msg +
+          '</p>' +
+          '<p style="font-size:0.875rem;margin:0;opacity:0.85">Recarregue com Cmd+Shift+R (Mac) ou Ctrl+Shift+R. Em DevTools → Application, limpe «Storage» / service workers deste site.</p></div></div>';
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
