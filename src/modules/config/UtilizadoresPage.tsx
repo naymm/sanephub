@@ -50,6 +50,7 @@ export const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'secretaria', label: 'Secretaria Geral' },
   { id: 'gestao-documentos', label: 'Gestão de Documentos' },
   { id: 'juridico', label: 'Jurídico' },
+  { id: 'controlo-interno', label: 'Controlo Interno' },
   { id: 'conselho-administracao', label: 'Conselho de Administração' },
   { id: 'portal-colaborador', label: 'Portal Colaborador' },
   { id: 'configuracoes', label: 'Configurações' },

@@ -59,6 +59,7 @@ import GenericModulePage from "@/modules/GenericModulePage";
 import PortalRecibosPage from "@/modules/portal/PortalRecibosPage";
 import PortalDeclaracoesPage from "@/modules/portal/PortalDeclaracoesPage";
 import PortalFeriasPage from "@/modules/portal/PortalFeriasPage";
+import PortalFaltasPage from "@/modules/portal/PortalFaltasPage";
 import PortalRequisicoesPage from "@/modules/portal/PortalRequisicoesPage";
 import PortalAssiduidadePage from "@/modules/portal/PortalAssiduidadePage";
 import PortalDadosPage from "@/modules/portal/PortalDadosPage";
@@ -233,7 +234,7 @@ const App = () => (
                   <Route path="/portal/dados" element={<PortalDadosPage />} />
                   <Route path="/portal/ferias" element={<PortalFeriasPage />} />
                   <Route path="/portal/ferias/novo" element={<PortalFeriasPage />} />
-                  <Route path="/portal/faltas" element={<GenericModulePage title="As Minhas Faltas" module="portal" />} />
+                  <Route path="/portal/faltas" element={<PortalFaltasPage />} />
                   <Route path="/portal/assiduidade" element={<PortalAssiduidadePage />} />
                   <Route path="/portal/recibos" element={<PortalRecibosPage />} />
                   <Route path="/portal/declaracoes" element={<PortalDeclaracoesPage />} />

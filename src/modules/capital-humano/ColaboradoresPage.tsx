@@ -328,6 +328,7 @@ export default function ColaboradoresPage() {
     departamentos: departamentosCatalogo,
   } = useData();
   const { usuarios, user } = useAuth();
+  const canEliminar = user?.perfil === 'Admin';
   const { currentEmpresaId } = useTenant();
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? (empresas.find(e => e.activo)?.id ?? 1) : currentEmpresaId;
   const location = useLocation();
@@ -1013,6 +1014,10 @@ export default function ColaboradoresPage() {
   };
 
   const remove = async (c: Colaborador) => {
+    if (!canEliminar) {
+      toast.error('Apenas administradores podem eliminar colaboradores.');
+      return;
+    }
     if (!window.confirm(`Remover o colaborador "${c.nome}"? Esta acção não pode ser desfeita.`)) return;
     try {
       await deleteColaborador(c.id);
@@ -1800,7 +1805,9 @@ export default function ColaboradoresPage() {
                   <td className="py-3 px-5 text-right">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void openViewDetalhes(c)}><Eye className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
+                    {canEliminar && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(c)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
+                    )}
                   </td>
                 </tr>
               ))
@@ -1868,16 +1875,18 @@ export default function ColaboradoresPage() {
               >
                 <Pencil className="h-4 w-4" />
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => remove(c)}
-                aria-label="Remover colaborador"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {canEliminar && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => remove(c)}
+                  aria-label="Remover colaborador"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </>
           )}
         />

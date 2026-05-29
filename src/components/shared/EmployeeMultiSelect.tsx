@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import { comboboxPopoverContentProps } from '@/components/shared/comboboxPopoverProps';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { EmployeeOption, EmployeeSelection } from '@/components/shared/EmployeeSelect';
 
@@ -291,6 +292,7 @@ export function EmployeeMultiSelect({
       ) : null}
 
       <Popover
+        modal={false}
         open={open}
         onOpenChange={(v) => {
           setOpen(v);
@@ -316,9 +318,9 @@ export function EmployeeMultiSelect({
             </span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" {...comboboxPopoverContentProps}>
           <Command shouldFilter={false} className="rounded-md border-0 shadow-none">
-            <CommandInput value={query} onValueChange={setQuery} placeholder={placeholder} disabled={loading} autoFocus />
+            <CommandInput value={query} onValueChange={setQuery} placeholder={placeholder} autoFocus />
             <CommandList className={cn('overflow-y-auto overscroll-contain', listMaxClass)}>
               <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
                 {helperText ??
@@ -332,7 +334,7 @@ export function EmployeeMultiSelect({
                       return (
                         <CommandItem
                           key={`${selection}-${o.id}`}
-                          value={`${o.id}-${o.nome}`}
+                          value={`emp-${o.id}`}
                           keywords={[String(o.id), o.nome, o.email ?? ''].filter(Boolean)}
                           onSelect={() => {
                             if (already) {

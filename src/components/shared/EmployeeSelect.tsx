@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { comboboxPopoverContentProps } from '@/components/shared/comboboxPopoverProps';
 
 export type EmployeeSelection = 'colaborador' | 'profile';
 
@@ -249,6 +250,7 @@ export function EmployeeSelect({
   return (
     <div className={cn('w-full', className)}>
       <Popover
+        modal={false}
         open={open}
         onOpenChange={(v) => {
           setOpen(v);
@@ -276,13 +278,16 @@ export function EmployeeSelect({
             </span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className={cn('w-[--radix-popover-trigger-width] p-0', popoverContentClassName)} align="start">
+        <PopoverContent
+          className={cn('w-[--radix-popover-trigger-width] p-0', popoverContentClassName)}
+          align="start"
+          {...comboboxPopoverContentProps}
+        >
           <Command shouldFilter={false} className="rounded-md border-0 shadow-none">
             <CommandInput
               value={query}
               onValueChange={(v) => setQuery(v)}
               placeholder={placeholder}
-              disabled={loading}
               autoFocus
             />
             <CommandList className={cn('overflow-y-auto overscroll-contain', listMaxClass)}>
@@ -308,7 +313,7 @@ export function EmployeeSelect({
                   ? options.map((o) => (
                       <CommandItem
                         key={`${selection}-${o.id}`}
-                        value={`${o.id}-${o.nome}`}
+                        value={`emp-${o.id}`}
                         keywords={[String(o.id), o.nome, o.email ?? ''].filter(Boolean)}
                         onSelect={() => {
                           setSelected(o);

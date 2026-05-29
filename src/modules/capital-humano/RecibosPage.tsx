@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
@@ -44,7 +44,8 @@ export default function RecibosPage() {
   const isMobile = useIsMobileViewport();
   const { user } = useAuth();
   const { recibos, addRecibo, updateRecibo, deleteRecibo, colaboradores, irtEscalaes } = useData();
-  const canEliminar = user?.perfil === 'Admin';
+  const canEmitir = user?.perfil === 'Admin';
+  const canEliminar = canEmitir;
   const [search, setSearch] = useState('');
   const [mesFilter, setMesFilter] = useState<string>('todos');
   const [anoFilter, setAnoFilter] = useState<string>(String(ANO_ACTUAL));
@@ -130,6 +131,13 @@ export default function RecibosPage() {
     resetModal,
   });
 
+  useEffect(() => {
+    if (!canEmitir && (isNovoRoute || dialogOpen)) {
+      setDialogOpen(false);
+      if (isNovoRoute) navigate(LIST_PATH, { replace: true });
+    }
+  }, [canEmitir, isNovoRoute, dialogOpen, navigate]);
+
   const getColabName = (id: number) => colaboradores.find(c => c.id === id)?.nome ?? 'N/A';
 
   const handleGerarPdf = async (r: ReciboSalario) => {
@@ -193,9 +201,19 @@ export default function RecibosPage() {
     return Math.max(0, bruto - deducoes);
   };
 
-  const openCreate = () => openCreateNavigateOrDialog();
+  const openCreate = () => {
+    if (!canEmitir) {
+      toast.error('Apenas administradores podem emitir recibos.');
+      return;
+    }
+    openCreateNavigateOrDialog();
+  };
 
   const save = async () => {
+    if (!canEmitir) {
+      toast.error('Apenas administradores podem emitir recibos.');
+      return;
+    }
     if (!form.colaboradorId || !form.mesAno || form.vencimentoBase <= 0) return;
     const existente = recibos.find(r => r.colaboradorId === form.colaboradorId && r.mesAno === form.mesAno);
     if (existente) {
@@ -243,9 +261,11 @@ export default function RecibosPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h1 className="page-header">Recibos de Salário</h1>
-        <Button onClick={openCreate} className="bg-primary text-primary-foreground">
-          <Plus className="h-4 w-4 mr-2" /> Emitir Recibo
-        </Button>
+        {canEmitir && (
+          <Button onClick={openCreate} className="bg-primary text-primary-foreground">
+            <Plus className="h-4 w-4 mr-2" /> Emitir Recibo
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

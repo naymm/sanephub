@@ -51,6 +51,7 @@ type FeriasFormState = Omit<Ferias, 'id' | 'colaboradorId'> & {
 export default function FeriasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const canEliminar = user?.perfil === 'Admin';
   const { currentEmpresaId } = useTenant();
   const { ferias, addFerias, updateFerias, deleteFerias, colaboradores } = useData();
 
@@ -228,6 +229,10 @@ export default function FeriasPage() {
   };
 
   const remove = async (f: Ferias) => {
+    if (!canEliminar) {
+      toast.error('Apenas administradores podem eliminar pedidos de férias.');
+      return;
+    }
     if (!window.confirm(`Remover o pedido de férias de ${getColabName(f.colaboradorId)} (${f.dataInicio}–${f.dataFim})?`)) return;
     try {
       await deleteFerias(f.id);
@@ -300,7 +305,9 @@ export default function FeriasPage() {
                     {f.status === 'Pendente' && (
                       <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => handleCancel(f)}>Cancelar</Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(f)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
+                    {canEliminar && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(f)} title="Remover"><Trash2 className="h-4 w-4" /></Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -344,16 +351,18 @@ export default function FeriasPage() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                 )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => remove(f)}
-                  aria-label="Remover"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {canEliminar && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => remove(f)}
+                    aria-label="Remover"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
               {f.status === 'Pendente' && (
                 <div className="flex flex-wrap gap-2">

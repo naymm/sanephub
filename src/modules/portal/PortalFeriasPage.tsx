@@ -120,10 +120,11 @@ export default function PortalFeriasPage() {
     resetModal,
   });
 
-  const updateDias = (inicio: string, fim: string) => {
-    const d = diasEntre(inicio, fim);
-    setForm(prev => ({ ...prev, dias: d >= 0 ? d : 0 }));
-  };
+  const diasCalculados = useMemo(() => {
+    if (!form.dataInicio || !form.dataFim) return 0;
+    const d = diasEntre(form.dataInicio, form.dataFim);
+    return d >= 0 ? d : 0;
+  }, [form.dataInicio, form.dataFim]);
 
   const openCreate = () => {
     if (colaboradorId == null) return;
@@ -131,9 +132,14 @@ export default function PortalFeriasPage() {
   };
 
   const save = async () => {
-    if (!form.colaboradorId || !form.dataInicio || !form.dataFim || form.dias <= 0) return;
+    if (!form.colaboradorId || !form.dataInicio || !form.dataFim || diasCalculados <= 0) {
+      if (form.dataInicio && form.dataFim && diasCalculados <= 0) {
+        toast.error('A data de fim deve ser igual ou posterior à data de início.');
+      }
+      return;
+    }
     try {
-      await addFerias(form);
+      await addFerias({ ...form, dias: diasCalculados });
       setDialogOpen(false);
       if (isNovoRoute) {
         endMobileCreateFlow();
@@ -253,16 +259,35 @@ export default function PortalFeriasPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Data início</Label>
-                <Input type="date" value={form.dataInicio} onChange={e => { setForm(f => ({ ...f, dataInicio: e.target.value })); updateDias(e.target.value, form.dataFim); }} />
+                <Input
+                  type="date"
+                  value={form.dataInicio}
+                  onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Data fim</Label>
-                <Input type="date" value={form.dataFim} onChange={e => { setForm(f => ({ ...f, dataFim: e.target.value })); updateDias(form.dataInicio, e.target.value); }} />
+                <Input
+                  type="date"
+                  min={form.dataInicio || undefined}
+                  value={form.dataFim}
+                  onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))}
+                />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Dias (calculado)</Label>
-              <Input type="number" min={1} value={form.dias} readOnly className="bg-muted/50" />
+              <div
+                className="flex h-10 w-full items-center rounded-md border border-input bg-muted/50 px-3 text-sm text-foreground"
+                aria-live="polite"
+              >
+                {diasCalculados > 0
+                  ? `${diasCalculados} ${diasCalculados === 1 ? 'dia' : 'dias'}`
+                  : '—'}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Contagem inclusiva entre a data de início e a data de fim.
+              </p>
             </div>
           </div>
           }
@@ -271,7 +296,7 @@ export default function PortalFeriasPage() {
               <Button variant="outline" onClick={() => onDialogOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button onClick={() => void save()} disabled={!form.dataInicio || !form.dataFim || form.dias <= 0}>
+              <Button onClick={() => void save()} disabled={!form.dataInicio || !form.dataFim || diasCalculados <= 0}>
                 Enviar pedido
               </Button>
             </DialogFooter>
@@ -284,7 +309,7 @@ export default function PortalFeriasPage() {
               <Button
                 type="button"
                 className="min-h-11 flex-1 rounded-xl"
-                disabled={!form.dataInicio || !form.dataFim || form.dias <= 0}
+                disabled={!form.dataInicio || !form.dataFim || diasCalculados <= 0}
                 onClick={() => void save()}
               >
                 Enviar pedido
