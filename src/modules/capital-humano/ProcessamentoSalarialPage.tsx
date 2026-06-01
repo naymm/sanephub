@@ -12,6 +12,7 @@ import {
   IRT_ESCALOES_FALLBACK,
 } from '@/lib/irtCalculo';
 import { formatKz } from '@/utils/formatters';
+import { formatRetencaoPercentLabel } from '@/utils/colaboradorRemuneracao';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -277,6 +278,11 @@ export default function ProcessamentoSalarialPage() {
     outrasDeducoes,
   ]);
 
+  const previewAvencado = useMemo(() => {
+    if (modo !== 'singular' || colaboradorIdSingular == null) return false;
+    return getColaboradorActivo(colaboradorIdSingular)?.isAvencado === true;
+  }, [modo, colaboradorIdSingular, getColaboradorActivo]);
+
   const abrirConfirmacao = () => {
     if (!validarAntesProcessar()) return;
     if (!irtEscalaes?.length && !warnedIrtFallbackRef.current) {
@@ -301,18 +307,20 @@ export default function ProcessamentoSalarialPage() {
         const ass = calc.detalheAssiduidade;
         const mat = ass.modo === 'licenca_maternidade';
 
+        const avencado = col.isAvencado === true;
         const payload: Partial<ReciboSalario> = {
           colaboradorId: col.id,
           mesAno,
-          vencimentoBase: col.salarioBase,
-          subsidioAlimentacao: mat ? 0 : col.subsidioAlimentacao ?? 0,
-          subsidioTransporte: mat ? 0 : col.subsidioTransporte ?? 0,
-          outrosSubsidios: mat ? 0 : col.outrosSubsidios ?? 0,
-          descontoFaltas: calc.descontoFaltas,
-          diasFaltaDesconto: calc.diasFaltaDesconto,
-          inss: calc.inss,
-          irt: calc.irt,
-          outrasDeducoes: outrasDeducoes,
+          vencimentoBase: avencado ? col.salarioBase : col.salarioBase,
+          subsidioAlimentacao: avencado || mat ? 0 : col.subsidioAlimentacao ?? 0,
+          subsidioTransporte: avencado || mat ? 0 : col.subsidioTransporte ?? 0,
+          outrosSubsidios: avencado || mat ? 0 : col.outrosSubsidios ?? 0,
+          descontoFaltas: avencado ? 0 : calc.descontoFaltas,
+          diasFaltaDesconto: avencado ? 0 : calc.diasFaltaDesconto,
+          inss: avencado ? 0 : calc.inss,
+          irt: avencado ? 0 : calc.irt,
+          retencao: avencado ? (calc.retencao ?? 0) : 0,
+          outrasDeducoes: avencado ? 0 : outrasDeducoes,
           liquido: calc.liquido,
           status: 'Emitido',
         };
@@ -541,7 +549,20 @@ export default function ProcessamentoSalarialPage() {
             </Badge>
           </div>
 
-          {(() => {
+          {previewAvencado ? (
+            <p className="text-sm text-muted-foreground rounded-md border border-dashed bg-muted/20 px-3 py-2">
+              Colaborador avençado: vencimento igual ao salário líquido cadastrado (
+              {formatKz(previewSingular.salarioBruto)}). Retenção{' '}
+              {formatRetencaoPercentLabel(previewSingular.retencaoPercent ?? 6.5)}:{' '}
+              <span className="font-mono font-medium text-foreground">
+                {formatKz(previewSingular.retencao ?? 0)}
+              </span>
+              . O colaborador recebe o líquido integral; sem INSS nem IRT.
+            </p>
+          ) : null}
+
+          {!previewAvencado &&
+          (() => {
             const d = previewSingular.detalheAssiduidade;
             if (d.modo === 'licenca_maternidade') {
               return (
@@ -639,30 +660,47 @@ export default function ProcessamentoSalarialPage() {
                         const c = r.componentes;
                         const per = r.periodoLabel;
                         const d = r.diasUteisReferencia;
-                        const rows: { cod: string; desc: string; qtd: string; unit: string; total: number }[] = [
-                          { cod: 'R01', desc: 'Vencimento base', qtd: '1', unit: formatKz(c.salarioBaseEfetivo), total: c.salarioBaseEfetivo },
-                          {
-                            cod: 'R11',
-                            desc: 'Subsídio de alimentação',
-                            qtd: String(d),
-                            unit: formatKz(d > 0 ? c.subsidioAlimentacaoNominal / d : 0),
-                            total: c.subsidioAlimentacaoEfetivo,
-                          },
-                          {
-                            cod: 'R12',
-                            desc: 'Subsídio de transporte',
-                            qtd: String(d),
-                            unit: formatKz(d > 0 ? c.subsidioTransporteNominal / d : 0),
-                            total: c.subsidioTransporteEfetivo,
-                          },
-                          {
-                            cod: 'R13',
-                            desc: 'Outros subsídios (incl. risco e disponibilidade)',
-                            qtd: String(d),
-                            unit: formatKz(d > 0 ? c.outrosSubsidiosAgregadoNominal / d : 0),
-                            total: c.outrosSubsidiosEfetivo,
-                          },
-                        ];
+                        const rows: { cod: string; desc: string; qtd: string; unit: string; total: number }[] =
+                          previewAvencado
+                            ? [
+                                {
+                                  cod: 'R01',
+                                  desc: 'Vencimento',
+                                  qtd: '1',
+                                  unit: formatKz(c.salarioBaseEfetivo),
+                                  total: c.salarioBaseEfetivo,
+                                },
+                              ]
+                            : [
+                                {
+                                  cod: 'R01',
+                                  desc: 'Vencimento base',
+                                  qtd: '1',
+                                  unit: formatKz(c.salarioBaseEfetivo),
+                                  total: c.salarioBaseEfetivo,
+                                },
+                                {
+                                  cod: 'R11',
+                                  desc: 'Subsídio de alimentação',
+                                  qtd: String(d),
+                                  unit: formatKz(d > 0 ? c.subsidioAlimentacaoNominal / d : 0),
+                                  total: c.subsidioAlimentacaoEfetivo,
+                                },
+                                {
+                                  cod: 'R12',
+                                  desc: 'Subsídio de transporte',
+                                  qtd: String(d),
+                                  unit: formatKz(d > 0 ? c.subsidioTransporteNominal / d : 0),
+                                  total: c.subsidioTransporteEfetivo,
+                                },
+                                {
+                                  cod: 'R13',
+                                  desc: 'Outros subsídios (incl. risco e disponibilidade)',
+                                  qtd: String(d),
+                                  unit: formatKz(d > 0 ? c.outrosSubsidiosAgregadoNominal / d : 0),
+                                  total: c.outrosSubsidiosEfetivo,
+                                },
+                              ];
                         return rows.map(row => (
                           <tr key={row.cod} className="border-b border-border/60 last:border-0">
                             <td className="py-2 px-3 font-mono text-muted-foreground">{row.cod}</td>
@@ -713,38 +751,59 @@ export default function ProcessamentoSalarialPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="border-b border-border/60">
-                        <td className="py-2 px-3 font-mono text-muted-foreground">D01</td>
-                        <td className="py-2 px-3">Segurança social (INSS)</td>
-                        <td className="py-2 px-3 font-mono tabular-nums text-muted-foreground">
-                          {previewSingular.resumoIndividual.periodoLabel}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
-                        <td className="py-2 px-3 text-right font-mono tabular-nums">3%</td>
-                        <td className="py-2 px-3 text-right font-mono tabular-nums">{formatKz(previewSingular.inss)}</td>
-                      </tr>
-                      <tr className="border-b border-border/60">
-                        <td className="py-2 px-3 font-mono text-muted-foreground">D02</td>
-                        <td className="py-2 px-3">IRT (sobre matéria colectável)</td>
-                        <td className="py-2 px-3 font-mono tabular-nums text-muted-foreground">
-                          {previewSingular.resumoIndividual.periodoLabel}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
-                        <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
-                        <td className="py-2 px-3 text-right font-mono tabular-nums">{formatKz(previewSingular.irt)}</td>
-                      </tr>
-                      {outrasDeducoes > 0 ? (
+                      {previewAvencado ? (
                         <tr className="border-b border-border/60">
-                          <td className="py-2 px-3 font-mono text-muted-foreground">D03</td>
-                          <td className="py-2 px-3">Outras deduções (manual)</td>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">D01</td>
+                          <td className="py-2 px-3">
+                            Retenção ({formatRetencaoPercentLabel(previewSingular.retencaoPercent ?? 6.5)})
+                          </td>
                           <td className="py-2 px-3 font-mono tabular-nums text-muted-foreground">
                             {previewSingular.resumoIndividual.periodoLabel}
                           </td>
                           <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
-                          <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
-                          <td className="py-2 px-3 text-right font-mono tabular-nums">{formatKz(outrasDeducoes)}</td>
+                          <td className="py-2 px-3 text-right font-mono tabular-nums">
+                            {formatRetencaoPercentLabel(previewSingular.retencaoPercent ?? 6.5)}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono tabular-nums">
+                            {formatKz(previewSingular.retencao ?? 0)}
+                          </td>
                         </tr>
-                      ) : null}
+                      ) : (
+                        <>
+                          <tr className="border-b border-border/60">
+                            <td className="py-2 px-3 font-mono text-muted-foreground">D01</td>
+                            <td className="py-2 px-3">Segurança social (INSS)</td>
+                            <td className="py-2 px-3 font-mono tabular-nums text-muted-foreground">
+                              {previewSingular.resumoIndividual.periodoLabel}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
+                            <td className="py-2 px-3 text-right font-mono tabular-nums">3%</td>
+                            <td className="py-2 px-3 text-right font-mono tabular-nums">{formatKz(previewSingular.inss)}</td>
+                          </tr>
+                          <tr className="border-b border-border/60">
+                            <td className="py-2 px-3 font-mono text-muted-foreground">D02</td>
+                            <td className="py-2 px-3">IRT (sobre matéria colectável)</td>
+                            <td className="py-2 px-3 font-mono tabular-nums text-muted-foreground">
+                              {previewSingular.resumoIndividual.periodoLabel}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
+                            <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
+                            <td className="py-2 px-3 text-right font-mono tabular-nums">{formatKz(previewSingular.irt)}</td>
+                          </tr>
+                          {outrasDeducoes > 0 ? (
+                            <tr className="border-b border-border/60">
+                              <td className="py-2 px-3 font-mono text-muted-foreground">D03</td>
+                              <td className="py-2 px-3">Outras deduções (manual)</td>
+                              <td className="py-2 px-3 font-mono tabular-nums text-muted-foreground">
+                                {previewSingular.resumoIndividual.periodoLabel}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
+                              <td className="py-2 px-3 text-right font-mono text-muted-foreground">—</td>
+                              <td className="py-2 px-3 text-right font-mono tabular-nums">{formatKz(outrasDeducoes)}</td>
+                            </tr>
+                          ) : null}
+                        </>
+                      )}
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/30 font-medium">
@@ -752,12 +811,21 @@ export default function ProcessamentoSalarialPage() {
                           Total descontos
                         </td>
                         <td className="py-2 px-3 text-right font-mono tabular-nums">
-                          {formatKz(previewSingular.inss + previewSingular.irt + outrasDeducoes)}
+                          {formatKz(
+                            previewAvencado
+                              ? previewSingular.retencao ?? 0
+                              : previewSingular.inss + previewSingular.irt + outrasDeducoes,
+                          )}
                         </td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
+                {previewAvencado ? (
+                  <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                    Retenção informativa no recibo; o total líquido pago ao colaborador não subtrai este valor.
+                  </p>
+                ) : (
                 <p className="border-t px-3 py-2 text-xs text-muted-foreground">
                   Matéria colectável (referência IRT):{' '}
                   <span className="font-mono text-foreground">{formatKz(previewSingular.resumoIndividual.materiaColetavel)}</span>
@@ -768,6 +836,7 @@ export default function ProcessamentoSalarialPage() {
                     </>
                   ) : null}
                 </p>
+                )}
               </div>
             </div>
 
@@ -788,7 +857,11 @@ export default function ProcessamentoSalarialPage() {
                 <div className="flex justify-between gap-4 border-b pb-2">
                   <span className="text-muted-foreground">Total descontos</span>
                   <span className="font-mono tabular-nums font-medium">
-                    {formatKz(previewSingular.inss + previewSingular.irt + outrasDeducoes)}
+                    {formatKz(
+                      previewAvencado
+                        ? previewSingular.retencao ?? 0
+                        : previewSingular.inss + previewSingular.irt + outrasDeducoes,
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between gap-4 pt-1 text-base">

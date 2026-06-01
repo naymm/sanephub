@@ -7,7 +7,12 @@ import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTenant } from '@/context/TenantContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { fetchColaboradoresPaginated, fetchColaboradoresDepartamentos } from '@/lib/supabaseData';
+import {
+  fetchColaboradorById,
+  fetchColaboradoresPaginated,
+  fetchColaboradoresDepartamentos,
+} from '@/lib/supabaseData';
+import { COLABORADORES_DETAIL_SELECT } from '@/lib/realtimeTableSelects';
 import type { Colaborador, StatusColaborador, TipoContrato, Genero } from '@/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -55,6 +60,8 @@ import {
 } from '@/lib/colaboradorGestaoDocumentos';
 import { uploadColaboradorFotoPerfil } from '@/lib/colaboradorFotoPerfil';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
+import { GENERO_OPTIONS, labelGenero } from '@/utils/colaboradorGenero';
+import { salarioLiquidoColaborador } from '@/utils/colaboradorRemuneracao';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
@@ -63,8 +70,6 @@ const COLABORADORES_PAGINATED_STALE_MS = 3 * 60 * 1000;
 
 const STATUS_OPTIONS: StatusColaborador[] = ['Activo', 'Inactivo', 'Suspenso', 'Em férias'];
 const TIPO_CONTRATO_OPTIONS: TipoContrato[] = ['Efectivo', 'Prazo Certo', 'Prestação', 'Estágio'];
-const GENERO_OPTIONS: Genero[] = ['M', 'F', 'Outro'];
-
 const ESTADO_CIVIL_OPTIONS = [
   'Solteiro(a)',
   'Casado(a)',
@@ -112,12 +117,14 @@ function nacionalidadeParaSelect(valorGuardado: string): string {
   return v || 'Angola';
 }
 
-const emptyForm: Omit<Colaborador, 'id'> = {
+type ColaboradorFormState = Omit<Colaborador, 'id' | 'genero'> & { genero: Genero | '' };
+
+const emptyForm: ColaboradorFormState = {
   empresaId: 1,
   numeroMec: '',
   nome: '',
   dataNascimento: '',
-  genero: 'M',
+  genero: '',
   estadoCivil: 'Solteiro(a)',
   bi: '',
   nif: '',
@@ -130,6 +137,8 @@ const emptyForm: Omit<Colaborador, 'id'> = {
   dataAdmissao: '',
   tipoContrato: 'Efectivo',
   salarioBase: 0,
+  isAvencado: false,
+  retencaoPercent: 6.5,
   subsidioAlimentacao: 0,
   subsidioTransporte: 0,
   outrosSubsidios: 0,
@@ -243,12 +252,6 @@ function partesNomeCompleto(nomeCompleto: string): { primeiro: string; meios: st
   return { primeiro: parts[0], meios: parts.slice(1, -1).join(' '), ultimo: parts[parts.length - 1] };
 }
 
-function labelGenero(g: Genero): string {
-  if (g === 'M') return 'Masculino';
-  if (g === 'F') return 'Feminino';
-  return 'Outro';
-}
-
 function ColaboradorDetailField({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="min-w-0 space-y-1">
@@ -351,7 +354,7 @@ export default function ColaboradoresPage() {
   const [editing, setEditing] = useState<Colaborador | null>(null);
   const [viewItem, setViewItem] = useState<Colaborador | null>(null);
   const [viewDetalhesLoading, setViewDetalhesLoading] = useState(false);
-  const [form, setForm] = useState<Omit<Colaborador, 'id'>>(emptyForm);
+  const [form, setForm] = useState<ColaboradorFormState>(emptyForm);
   const [salarioBaseText, setSalarioBaseText] = useState(() => formatKzInput(emptyForm.salarioBase ?? 0));
   const [subsidioTextByKey, setSubsidioTextByKey] = useState<Record<string, string>>({});
   const [subsidiosAtivos, setSubsidiosAtivos] = useState<SubsidioKey[]>(() => []);
@@ -690,57 +693,71 @@ export default function ColaboradoresPage() {
     setEditing(c);
     const usuarioLinked = usuarios.find(u => u.colaboradorId === c.id);
     setAssociarUtilizadorId(usuarioLinked?.id ?? null);
+    const applyFormFromColaborador = (row: Colaborador) => {
     setForm({
-      empresaId: c.empresaId,
-      numeroMec: c.numeroMec?.trim() ?? '',
-      nome: c.nome,
-      dataNascimento: c.dataNascimento,
-      genero: c.genero,
-      estadoCivil: c.estadoCivil?.trim() || 'Solteiro(a)',
-      bi: c.bi,
-      nif: c.nif,
-      niss: c.niss,
-      nacionalidade: nacionalidadeParaSelect(c.nacionalidade ?? ''),
-      nivelAcademico: c.nivelAcademico?.trim() || 'Ensino Secundário',
-      fotoPerfilUrl: c.fotoPerfilUrl ?? undefined,
-      endereco: c.endereco,
-      cargo: c.cargo?.trim() || 'Técnico',
-      departamento: c.departamento,
-      dataAdmissao: c.dataAdmissao,
-      tipoContrato: c.tipoContrato,
-      dataFimContrato: c.dataFimContrato,
-      salarioBase: c.salarioBase,
-      subsidioAlimentacao: c.subsidioAlimentacao ?? 25000,
-      subsidioTransporte: c.subsidioTransporte ?? 20000,
-      outrosSubsidios: c.outrosSubsidios ?? 0,
-      subsidioNatal: c.subsidioNatal ?? 0,
-      abonoFamilia: c.abonoFamilia ?? 0,
-      subsidioTurno: c.subsidioTurno ?? 0,
-      subsidioDisponibilidade: c.subsidioDisponibilidade ?? 0,
-      subsidioRisco: c.subsidioRisco ?? 0,
-      subsidioAtavio: c.subsidioAtavio ?? 0,
-      subsidioRepresentacao: c.subsidioRepresentacao ?? 0,
-      iban: c.iban,
-      emailCorporativo: c.emailCorporativo,
-      emailPessoal: c.emailPessoal,
-      telefonePrincipal: c.telefonePrincipal,
-      telefoneAlternativo: c.telefoneAlternativo,
-      contactoEmergenciaNome: c.contactoEmergenciaNome,
-      contactoEmergenciaTelefone: c.contactoEmergenciaTelefone,
-      status: c.status,
-      horarioEntrada: horarioParaInput(c.horarioEntrada, '08:00'),
-      horarioSaida: horarioParaInput(c.horarioSaida, '17:00'),
-      isencaoHorario: c.isencaoHorario === true,
+      empresaId: row.empresaId,
+      numeroMec: row.numeroMec?.trim() ?? '',
+      nome: row.nome,
+      dataNascimento: row.dataNascimento,
+      genero: row.genero,
+      estadoCivil: row.estadoCivil?.trim() || 'Solteiro(a)',
+      bi: row.bi,
+      nif: row.nif,
+      niss: row.niss,
+      nacionalidade: nacionalidadeParaSelect(row.nacionalidade ?? ''),
+      nivelAcademico: row.nivelAcademico?.trim() || 'Ensino Secundário',
+      fotoPerfilUrl: row.fotoPerfilUrl ?? undefined,
+      endereco: row.endereco,
+      cargo: row.cargo?.trim() || 'Técnico',
+      departamento: row.departamento,
+      dataAdmissao: row.dataAdmissao,
+      tipoContrato: row.tipoContrato,
+      dataFimContrato: row.dataFimContrato,
+      salarioBase: row.salarioBase,
+      isAvencado: row.isAvencado === true,
+      retencaoPercent: row.retencaoPercent === 2 ? 2 : 6.5,
+      subsidioAlimentacao: row.subsidioAlimentacao ?? 25000,
+      subsidioTransporte: row.subsidioTransporte ?? 20000,
+      outrosSubsidios: row.outrosSubsidios ?? 0,
+      subsidioNatal: row.subsidioNatal ?? 0,
+      abonoFamilia: row.abonoFamilia ?? 0,
+      subsidioTurno: row.subsidioTurno ?? 0,
+      subsidioDisponibilidade: row.subsidioDisponibilidade ?? 0,
+      subsidioRisco: row.subsidioRisco ?? 0,
+      subsidioAtavio: row.subsidioAtavio ?? 0,
+      subsidioRepresentacao: row.subsidioRepresentacao ?? 0,
+      iban: row.iban,
+      emailCorporativo: row.emailCorporativo,
+      emailPessoal: row.emailPessoal,
+      telefonePrincipal: row.telefonePrincipal,
+      telefoneAlternativo: row.telefoneAlternativo,
+      contactoEmergenciaNome: row.contactoEmergenciaNome,
+      contactoEmergenciaTelefone: row.contactoEmergenciaTelefone,
+      status: row.status,
+      horarioEntrada: horarioParaInput(row.horarioEntrada, '08:00'),
+      horarioSaida: horarioParaInput(row.horarioSaida, '17:00'),
+      isencaoHorario: row.isencaoHorario === true,
     });
-    setSalarioBaseText(formatKzInput(c.salarioBase ?? 0));
+    setSalarioBaseText(formatKzInput(row.salarioBase ?? 0));
     setSubsidioTextByKey({});
-    const activos = SUBSIDIOS_ALL_KEYS.filter(k => Number((c as any)[k] ?? 0) > 0);
+    const activos = SUBSIDIOS_ALL_KEYS.filter(k => Number((row as any)[k] ?? 0) > 0);
     setSubsidiosAtivos(activos);
     setSubsidioParaAdicionar('__none__');
     setEditandoSubsidio(null);
-    setFormGeofenceIds(geofenceIdsByColaborador.get(c.id) ?? []);
+    setFormGeofenceIds(geofenceIdsByColaborador.get(row.id) ?? []);
     setMobileWizardStep(1);
     setDialogOpen(true);
+    };
+    applyFormFromColaborador(c);
+    if (isSupabaseConfigured() && supabase) {
+      void fetchColaboradorById(supabase, c.id)
+        .then(full => {
+          if (full) applyFormFromColaborador(full);
+        })
+        .catch(() => {
+          /* mantém dados da listagem */
+        });
+    }
   };
 
   /** Abre o preview e, com Supabase, recarrega o registo para incluir `foto_perfil_url` e demais campos actualizados. */
@@ -750,7 +767,11 @@ export default function ColaboradoresPage() {
     if (!isSupabaseConfigured() || !supabase) return;
     setViewDetalhesLoading(true);
     try {
-      const { data, error } = await supabase.from('colaboradores').select('*').eq('id', c.id).maybeSingle();
+      const { data, error } = await supabase
+        .from('colaboradores')
+        .select(COLABORADORES_DETAIL_SELECT)
+        .eq('id', c.id)
+        .maybeSingle();
       if (error) {
         console.warn('[colaboradores] preview', error.message);
         return;
@@ -818,30 +839,53 @@ export default function ColaboradoresPage() {
 
   const save = async () => {
     if (!form.nome.trim() || !form.emailCorporativo.trim()) return;
+    if (!form.genero) {
+      toast.error('Seleccione o género.');
+      return;
+    }
     if (!Number.isFinite(form.empresaId) || form.empresaId <= 0) {
       toast.error('Seleccione a empresa do colaborador.');
       return;
     }
     if (!Number.isFinite(form.salarioBase) || form.salarioBase <= 0) {
-      toast.error('Informe um salário base válido (maior que 0).');
+      toast.error(
+        form.isAvencado
+          ? 'Informe um salário líquido válido (maior que 0).'
+          : 'Informe um salário base válido (maior que 0).',
+      );
       return;
     }
     const payloadColaborador: Omit<Colaborador, 'id'> = {
       ...form,
+      genero: form.genero,
       empresaId: form.empresaId ?? empresaIdForNew,
       numeroMec: (form.numeroMec ?? '').trim() || null,
+      isAvencado: form.isAvencado === true,
+      retencaoPercent: form.isAvencado ? (form.retencaoPercent === 2 ? 2 : 6.5) : undefined,
     };
-    // Mantém compatibilidade com o campo legado `outros_subsidios` na BD:
-    // passa a ser sempre a soma dos subsídios detalhados (exceto Alimentação/Transporte).
-    const detailedSum =
-      (form.subsidioNatal ?? 0) +
-      (form.abonoFamilia ?? 0) +
-      (form.subsidioTurno ?? 0) +
-      (form.subsidioDisponibilidade ?? 0) +
-      (form.subsidioRisco ?? 0) +
-      (form.subsidioAtavio ?? 0) +
-      (form.subsidioRepresentacao ?? 0);
-    payloadColaborador.outrosSubsidios = detailedSum;
+    if (payloadColaborador.isAvencado) {
+      payloadColaborador.subsidioAlimentacao = 0;
+      payloadColaborador.subsidioTransporte = 0;
+      payloadColaborador.subsidioNatal = 0;
+      payloadColaborador.abonoFamilia = 0;
+      payloadColaborador.subsidioTurno = 0;
+      payloadColaborador.subsidioDisponibilidade = 0;
+      payloadColaborador.subsidioRisco = 0;
+      payloadColaborador.subsidioAtavio = 0;
+      payloadColaborador.subsidioRepresentacao = 0;
+      payloadColaborador.outrosSubsidios = 0;
+    } else {
+      // Mantém compatibilidade com o campo legado `outros_subsidios` na BD:
+      const detailedSum =
+        (form.subsidioNatal ?? 0) +
+        (form.abonoFamilia ?? 0) +
+        (form.subsidioTurno ?? 0) +
+        (form.subsidioDisponibilidade ?? 0) +
+        (form.subsidioRisco ?? 0) +
+        (form.subsidioAtavio ?? 0) +
+        (form.subsidioRepresentacao ?? 0);
+      payloadColaborador.outrosSubsidios = detailedSum;
+    }
     if (fotoPerfilPendente) {
       delete payloadColaborador.fotoPerfilUrl;
     } else if (fotoPerfilRemovida) {
@@ -1122,11 +1166,18 @@ export default function ColaboradoresPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="min-w-0 space-y-2">
           <Label>Género</Label>
-          <Select value={form.genero} onValueChange={v => setForm(f => ({ ...f, genero: v as Genero }))}>
-            <SelectTrigger className="min-w-0"><SelectValue /></SelectTrigger>
+          <Select
+            value={form.genero || undefined}
+            onValueChange={v => setForm(f => ({ ...f, genero: v as Genero }))}
+          >
+            <SelectTrigger className="min-w-0">
+              <SelectValue placeholder="Seleccionar género" />
+            </SelectTrigger>
             <SelectContent>
               {GENERO_OPTIONS.map(g => (
-                <SelectItem key={g} value={g}>{g === 'M' ? 'Masculino' : g === 'F' ? 'Feminino' : 'Outro'}</SelectItem>
+                <SelectItem key={g} value={g}>
+                  {labelGenero(g)}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1368,7 +1419,70 @@ export default function ColaboradoresPage() {
       )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="min-w-0 space-y-2">
-          <Label>Salário base (Kz)</Label>
+          <Label>Avençado</Label>
+          <Select
+            value={form.isAvencado ? 'sim' : 'nao'}
+            onValueChange={v => {
+              const av = v === 'sim';
+              setForm(f => ({
+                ...f,
+                isAvencado: av,
+                retencaoPercent: av ? (f.retencaoPercent === 2 ? 2 : 6.5) : f.retencaoPercent,
+              }));
+              if (av) {
+                setSubsidiosAtivos([]);
+                setEditandoSubsidio(null);
+                setForm(f => ({
+                  ...f,
+                  isAvencado: true,
+                  subsidioAlimentacao: 0,
+                  subsidioTransporte: 0,
+                  subsidioNatal: 0,
+                  abonoFamilia: 0,
+                  subsidioTurno: 0,
+                  subsidioDisponibilidade: 0,
+                  subsidioRisco: 0,
+                  subsidioAtavio: 0,
+                  subsidioRepresentacao: 0,
+                  outrosSubsidios: 0,
+                }));
+              }
+            }}
+          >
+            <SelectTrigger className="min-w-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nao">Não</SelectItem>
+              <SelectItem value="sim">Sim</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {form.isAvencado ? (
+          <div className="min-w-0 space-y-2">
+            <Label>Retenção</Label>
+            <Select
+              value={form.retencaoPercent === 2 ? '2' : '6.5'}
+              onValueChange={v =>
+                setForm(f => ({ ...f, retencaoPercent: v === '2' ? 2 : 6.5 }))
+              }
+            >
+              <SelectTrigger className="min-w-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2">2%</SelectItem>
+                <SelectItem value="6.5">6,5%</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div className="hidden sm:block" />
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-2">
+          <Label>{form.isAvencado ? 'Salário líquido (Kz)' : 'Salário base (Kz)'}</Label>
           <Input
             inputMode="decimal"
             placeholder="Ex: 400.000,00"
@@ -1391,7 +1505,7 @@ export default function ColaboradoresPage() {
               }
               const parsed = parseKzInput(salarioBaseText);
               if (!Number.isFinite(parsed) || parsed < 0) {
-                toast.error('Salário base inválido.');
+                toast.error(form.isAvencado ? 'Salário líquido inválido.' : 'Salário base inválido.');
                 setSalarioBaseText(formatKzInput(form.salarioBase ?? 0));
                 return;
               }
@@ -1405,6 +1519,7 @@ export default function ColaboradoresPage() {
           <Input value={form.iban} onChange={e => setForm(f => ({ ...f, iban: e.target.value }))} className="min-w-0" />
         </div>
       </div>
+      {!form.isAvencado ? (
       <div className="space-y-3">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
           {subsidiosAtivos.length === 0 && (
@@ -1538,6 +1653,12 @@ export default function ColaboradoresPage() {
           </Select>
         </div>
       </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Colaborador avençado: o valor indicado é o líquido acordado. No processamento salarial aplica-se retenção na
+          fonte ({form.retencaoPercent === 2 ? '2%' : '6,5%'}) em vez de INSS e IRT.
+        </p>
+      )}
       </>
       )}
       {showWizardStep(3) && (
@@ -1680,26 +1801,6 @@ export default function ColaboradoresPage() {
           )}
         </div>
       )}
-      {isSupabaseConfigured() && usuarios.length > 0 && (
-        <div className="space-y-2 border-t border-border/80 pt-4">
-          <Label>Associar a utilizador (opcional)</Label>
-          <Select
-            value={associarUtilizadorId != null ? String(associarUtilizadorId) : 'nenhum'}
-            onValueChange={v => setAssociarUtilizadorId(v === 'nenhum' ? null : Number(v))}
-          >
-            <SelectTrigger><SelectValue placeholder="Nenhum — colaborador sem conta de acesso" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="nenhum">Nenhum</SelectItem>
-              {usuarios.map(u => (
-                <SelectItem key={u.id} value={String(u.id)}>{u.nome} — {u.email}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Se associar a um utilizador, ele verá no Portal (Meus Recibos, Férias, etc.) os dados deste colaborador.
-          </p>
-        </div>
-      )}
       </>
       )}
     </div>
@@ -1758,7 +1859,7 @@ export default function ColaboradoresPage() {
               )}
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Cargo</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Departamento</th>
-              <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Salário Base</th>
+              <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Salário Líquido</th>
               <th className="text-left py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
               <th className="text-right py-3 px-5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Acções</th>
             </tr>
@@ -1800,7 +1901,7 @@ export default function ColaboradoresPage() {
                   )}
                   <td className="py-3 px-5 text-muted-foreground">{c.cargo}</td>
                   <td className="py-3 px-5 text-muted-foreground">{c.departamento}</td>
-                  <td className="py-3 px-5 text-right font-mono">{formatKz(c.salarioBase)}</td>
+                  <td className="py-3 px-5 text-right font-mono">{formatKz(salarioLiquidoColaborador(c))}</td>
                   <td className="py-3 px-5"><StatusBadge status={c.status} /></td>
                   <td className="py-3 px-5 text-right">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void openViewDetalhes(c)}><Eye className="h-4 w-4" /></Button>
@@ -1854,7 +1955,7 @@ export default function ColaboradoresPage() {
               ...(currentEmpresaId === 'consolidado' ? [{ label: 'Empresa', value: empresaNome ?? '—' }] : []),
               { label: 'Cargo', value: c.cargo },
               { label: 'Departamento', value: c.departamento || '—' },
-              { label: 'Salário base', value: formatKz(c.salarioBase) },
+              { label: 'Salário líquido', value: formatKz(salarioLiquidoColaborador(c)) },
               { label: 'Email', value: c.emailCorporativo?.trim() ? c.emailCorporativo : '—' },
             ];
             return fields;
@@ -2014,7 +2115,13 @@ export default function ColaboradoresPage() {
                         type="button"
                         className="min-h-11 flex-[1.2] rounded-xl gap-1.5"
                         disabled={saving}
-                        onClick={() => setMobileWizardStep(s => Math.min(3, s + 1))}
+                        onClick={() => {
+                          if (!form.genero) {
+                            toast.error('Seleccione o género.');
+                            return;
+                          }
+                          setMobileWizardStep(s => Math.min(3, s + 1));
+                        }}
                       >
                         Continuar
                         <ArrowRight className="h-4 w-4" />
@@ -2023,7 +2130,7 @@ export default function ColaboradoresPage() {
                       <Button
                         type="button"
                         className="min-h-11 flex-[1.2] rounded-xl"
-                        disabled={!form.nome.trim() || !form.emailCorporativo.trim() || saving}
+                        disabled={!form.nome.trim() || !form.emailCorporativo.trim() || !form.genero || saving}
                         onClick={() => void save()}
                       >
                         {saving ? 'A guardar…' : 'Guardar'}
@@ -2050,7 +2157,7 @@ export default function ColaboradoresPage() {
                 </Button>
                 <Button
                   onClick={save}
-                  disabled={!form.nome.trim() || !form.emailCorporativo.trim() || saving}
+                  disabled={!form.nome.trim() || !form.emailCorporativo.trim() || !form.genero || saving}
                 >
                   {saving ? 'A guardar…' : 'Guardar'}
                 </Button>
@@ -2175,7 +2282,16 @@ export default function ColaboradoresPage() {
                         label="Fim do contrato"
                         value={viewItem.dataFimContrato ? formatDate(viewItem.dataFimContrato) : '—'}
                       />
-                      <ColaboradorDetailField label="Salário base" value={formatKz(viewItem.salarioBase)} />
+                      <ColaboradorDetailField
+                        label={viewItem.isAvencado ? 'Salário líquido' : 'Salário base'}
+                        value={formatKz(viewItem.salarioBase)}
+                      />
+                      {viewItem.isAvencado ? (
+                        <ColaboradorDetailField
+                          label="Retenção"
+                          value={viewItem.retencaoPercent === 2 ? '2%' : '6,5%'}
+                        />
+                      ) : null}
                       <ColaboradorDetailField
                         label="Subs. alimentação"
                         value={formatKz(viewItem.subsidioAlimentacao ?? 0)}
@@ -2260,11 +2376,21 @@ export default function ColaboradoresPage() {
                       <ColaboradorDetailField label="Nº colaborador" value={String(viewItem.id)} />
                       <ColaboradorDetailField label="Data de admissão" value={formatDate(viewItem.dataAdmissao)} />
                       <ColaboradorDetailField label="Contrato" value={viewItem.tipoContrato} />
+                      <ColaboradorDetailField label="Avençado" value={viewItem.isAvencado ? 'Sim' : 'Não'} />
                       <ColaboradorDetailField
                         label="Data fim do contrato"
                         value={viewItem.dataFimContrato ? formatDate(viewItem.dataFimContrato) : '—'}
                       />
-                      <ColaboradorDetailField label="Salário base" value={formatKz(viewItem.salarioBase)} />
+                      <ColaboradorDetailField
+                        label={viewItem.isAvencado ? 'Salário líquido' : 'Salário base'}
+                        value={formatKz(viewItem.salarioBase)}
+                      />
+                      {viewItem.isAvencado ? (
+                        <ColaboradorDetailField
+                          label="Retenção"
+                          value={viewItem.retencaoPercent === 2 ? '2%' : '6,5%'}
+                        />
+                      ) : null}
                       <ColaboradorDetailField label="IBAN" value={viewItem.iban?.trim() || '—'} />
                       <ColaboradorDetailField label="Status" value={<StatusBadge status={viewItem.status} />} />
                     </div>

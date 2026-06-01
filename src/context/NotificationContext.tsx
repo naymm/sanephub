@@ -5,6 +5,9 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRealtimeTable } from '@/hooks/useRealtimeTable';
 import { mapRowFromDb } from '@/lib/supabaseMappers';
 import { useTenant } from '@/context/TenantContext';
+import { useLocation } from 'react-router-dom';
+import { NOTIFICACOES_SELECT } from '@/lib/realtimeTableSelects';
+import { shouldLoadNotificationsOnRoute } from '@/lib/realtimeRoutePolicy';
 
 const STORAGE_NOTIFICACOES = 'sanep_notifications_v1';
 
@@ -56,6 +59,8 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const realtimeEnabled = isSupabaseConfigured() && !!supabase;
   const { currentEmpresaId } = useTenant();
+  const { pathname } = useLocation();
+  const notificationsFetchEnabled = realtimeEnabled && shouldLoadNotificationsOnRoute(pathname);
 
   // Em ambiente com Supabase ligado, evita mostrar notificações seed/mocked.
   // Neste projecto as notificações são ainda em estado client-side (sem persistência em DB).
@@ -96,7 +101,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { rows: dbNotifications, isLoading: dbLoading } = useRealtimeTable<Notificacao>(
     'notificacoes',
     'id',
-    { mapRow: mapNotificacaoRow },
+    { mapRow: mapNotificacaoRow, enabled: notificationsFetchEnabled, select: NOTIFICACOES_SELECT },
   );
 
   const prevCountRef = useRef<number>(notifications.length);

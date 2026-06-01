@@ -206,7 +206,7 @@ export default function PlaneamentoRelatoriosPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => gerarPdfRelatorioMensal(r, empresaNome(r.empresaId))}
+                      onClick={() => void gerarPdfRelatorioMensal(r, empresaNome(r.empresaId))}
                       title="Exportar PDF"
                     >
                       <FileText className="h-4 w-4" />
@@ -300,7 +300,7 @@ export default function PlaneamentoRelatoriosPage() {
                 variant="outline"
                 size="icon"
                 className="h-11 w-11 shrink-0"
-                onClick={() => gerarPdfRelatorioMensal(r, empresaNome(r.empresaId))}
+                onClick={() => void gerarPdfRelatorioMensal(r, empresaNome(r.empresaId))}
                 aria-label="Exportar PDF"
                 title="Exportar PDF"
               >

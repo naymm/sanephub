@@ -18,85 +18,91 @@ import Dashboard from "@/pages/Dashboard";
 import MobileMoreMenuPage from "@/pages/MobileMoreMenuPage";
 import MobileProfileMenuPage from "@/pages/MobileProfileMenuPage";
 import NotFound from "./pages/NotFound";
-import ColaboradoresPage from "@/modules/capital-humano/ColaboradoresPage";
-import FeriasPage from "@/modules/capital-humano/FeriasPage";
-import FaltasPage from "@/modules/capital-humano/FaltasPage";
-import RecibosPage from "@/modules/capital-humano/RecibosPage";
-import DeclaracoesPage from "@/modules/capital-humano/DeclaracoesPage";
-import ProcessamentoSalarialPage from "@/modules/capital-humano/ProcessamentoSalarialPage";
-import AssiduidadePage from "@/modules/capital-humano/AssiduidadePage";
-const TimePunchesPage = lazy(() => import("@/modules/capital-humano/TimePunchesPage"));
-const BackupsAdminPage = lazy(() => import("@/modules/config/BackupsAdminPage"));
-import GeofencesPage from "@/modules/capital-humano/GeofencesPage";
-import RequisicoesPage from "@/modules/financas/RequisicoesPage";
-import TesourariaPage from "@/modules/financas/TesourariaPage";
-import BancosPage from "@/modules/financas/BancosPage";
-import ContasBancariasPage from "@/modules/financas/ContasBancariasPage";
-import CentrosCustoPage from "@/modules/financas/CentrosCustoPage";
-import ProjectosPage from "@/modules/financas/ProjectosPage";
-import RelatoriosPage from "@/modules/financas/RelatoriosPage";
-import DespesasPage from "@/modules/financas/DespesasPage";
-import PagamentosPage from "@/modules/contabilidade/PagamentosPage";
-import PendenciasPage from "@/modules/contabilidade/PendenciasPage";
-import ContratosPage from "@/modules/juridico/ContratosPage";
-import PrazosPage from "@/modules/juridico/PrazosPage";
-import ProcessosJudiciaisPage from "@/modules/juridico/ProcessosJudiciaisPage";
-import ProcessosDisciplinaresPage from "@/modules/juridico/ProcessosDisciplinaresPage";
-import RescisoesContratuaisPage from "@/modules/juridico/RescisoesContratuaisPage";
-import RiscosJuridicosPage from "@/modules/juridico/RiscosJuridicosPage";
-import ArquivoJuridicoPage from "@/modules/juridico/ArquivoJuridicoPage";
-import ReunioesPage from "@/modules/secretaria/ReunioesPage";
-import ActasPage from "@/modules/secretaria/ActasPage";
-import DocumentosOficiaisPage from "@/modules/secretaria/DocumentosOficiaisPage";
-import GestaoDocumentosPage from "@/modules/secretaria/GestaoDocumentosPage";
-import CorrespondenciasPage from "@/modules/secretaria/CorrespondenciasPage";
-import ArquivoPage from "@/modules/secretaria/ArquivoPage";
-import UtilizadoresPage from "@/modules/config/UtilizadoresPage";
-import AuditoriaPage from "@/modules/config/AuditoriaPage";
-import DepartamentosPage from "@/modules/config/DepartamentosPage";
-import ModulosRecursosPage from "@/modules/config/ModulosRecursosPage";
 import GenericModulePage from "@/modules/GenericModulePage";
-import PortalRecibosPage from "@/modules/portal/PortalRecibosPage";
-import PortalDeclaracoesPage from "@/modules/portal/PortalDeclaracoesPage";
-import PortalFeriasPage from "@/modules/portal/PortalFeriasPage";
-import PortalFaltasPage from "@/modules/portal/PortalFaltasPage";
-import PortalRequisicoesPage from "@/modules/portal/PortalRequisicoesPage";
-import PortalAssiduidadePage from "@/modules/portal/PortalAssiduidadePage";
-import PortalDadosPage from "@/modules/portal/PortalDadosPage";
-import ChatPage from "@/modules/chat/ChatPage";
-import TutoriaisPage from "@/modules/ajuda/TutoriaisPage";
-import ConselhoDashboardPage from "@/modules/conselho-administracao/ConselhoDashboardPage";
-import DecisoesInstitucionaisPage from "@/modules/conselho-administracao/DecisoesInstitucionaisPage";
-import AssinaturaActosPage from "@/modules/conselho-administracao/AssinaturaActosPage";
-import SaudeFinanceiraPage from "@/modules/conselho-administracao/SaudeFinanceiraPage";
-import ActividadeOrganizacionalPage from "@/modules/conselho-administracao/ActividadeOrganizacionalPage";
-import EmpresasPage from "@/modules/conselho-administracao/EmpresasPage";
-import PlaneamentoRelatoriosPage from "@/modules/planeamento/PlaneamentoRelatoriosPage";
-import PlaneamentoRelatorioFormPage from "@/modules/planeamento/PlaneamentoRelatorioFormPage";
-import PlaneamentoConsolidacaoPage from "@/modules/planeamento/PlaneamentoConsolidacaoPage";
-import PlaneamentoDashboardPage from "@/modules/planeamento/PlaneamentoDashboardPage";
-import NoticiasPage from "@/modules/comunicacao-interna/NoticiasPage";
-import NoticiaDetalhePage from "@/modules/comunicacao-interna/NoticiaDetalhePage";
-import EventosPage from "@/modules/comunicacao-interna/EventosPage";
-import EventoDetalhePage from "@/modules/comunicacao-interna/EventoDetalhePage";
-import AniversariosPage from "@/modules/comunicacao-interna/AniversariosPage";
-import ComunicadosPage from "@/modules/comunicacao-interna/ComunicadosPage";
-import ComunicadoDetalhePage from "@/modules/comunicacao-interna/ComunicadoDetalhePage";
-import PatrimonioPage from "@/modules/patrimonio/PatrimonioPage";
-import FacturacaoPage from "@/modules/facturacao/FacturacaoPage";
-import ReceitaPage from "@/modules/facturacao/ReceitaPage";
-import MinhasActividadesPage from "@/modules/produtividade/MinhasActividadesPage";
-import ProdutividadeAprovacoesPage from "@/modules/produtividade/ProdutividadeAprovacoesPage";
-import { ControloInternoLayout } from "@/modules/controlo-interno/ControloInternoLayout";
-import ControloInternoDashboardPage from "@/modules/controlo-interno/ControloInternoDashboardPage";
-import PlanoAuditoriasPage, { PlaneamentoAuditoriasRedirect } from "@/modules/controlo-interno/PlanoAuditoriasPage";
-import InspeccoesPage from "@/modules/controlo-interno/InspeccoesPage";
-import ExecucaoAuditoriaPage from "@/modules/controlo-interno/ExecucaoAuditoriaPage";
-import NaoConformidadesPage from "@/modules/controlo-interno/NaoConformidadesPage";
-import PlanoAccaoPage from "@/modules/controlo-interno/PlanoAccaoPage";
-import RiscosCorporativosPage from "@/modules/controlo-interno/RiscosCorporativosPage";
-import LogsRastreabilidadePage from "@/modules/controlo-interno/LogsRastreabilidadePage";
-import RelatoriosControloInternoPage from "@/modules/controlo-interno/RelatoriosPage";
+
+const FeriasPage = lazy(() => import("@/modules/capital-humano/FeriasPage"));
+const FaltasPage = lazy(() => import("@/modules/capital-humano/FaltasPage"));
+const RecibosPage = lazy(() => import("@/modules/capital-humano/RecibosPage"));
+const DeclaracoesPage = lazy(() => import("@/modules/capital-humano/DeclaracoesPage"));
+const ProcessamentoSalarialPage = lazy(() => import("@/modules/capital-humano/ProcessamentoSalarialPage"));
+const AssiduidadePage = lazy(() => import("@/modules/capital-humano/AssiduidadePage"));
+const TimePunchesPage = lazy(() => import("@/modules/capital-humano/TimePunchesPage"));
+const GeofencesPage = lazy(() => import("@/modules/capital-humano/GeofencesPage"));
+const ColaboradoresPage = lazy(() => import("@/modules/capital-humano/ColaboradoresPage"));
+const RequisicoesPage = lazy(() => import("@/modules/financas/RequisicoesPage"));
+const TesourariaPage = lazy(() => import("@/modules/financas/TesourariaPage"));
+const BancosPage = lazy(() => import("@/modules/financas/BancosPage"));
+const ContasBancariasPage = lazy(() => import("@/modules/financas/ContasBancariasPage"));
+const CentrosCustoPage = lazy(() => import("@/modules/financas/CentrosCustoPage"));
+const ProjectosPage = lazy(() => import("@/modules/financas/ProjectosPage"));
+const RelatoriosPage = lazy(() => import("@/modules/financas/RelatoriosPage"));
+const DespesasPage = lazy(() => import("@/modules/financas/DespesasPage"));
+const PagamentosPage = lazy(() => import("@/modules/contabilidade/PagamentosPage"));
+const PendenciasPage = lazy(() => import("@/modules/contabilidade/PendenciasPage"));
+const ContratosPage = lazy(() => import("@/modules/juridico/ContratosPage"));
+const PrazosPage = lazy(() => import("@/modules/juridico/PrazosPage"));
+const ProcessosJudiciaisPage = lazy(() => import("@/modules/juridico/ProcessosJudiciaisPage"));
+const ProcessosDisciplinaresPage = lazy(() => import("@/modules/juridico/ProcessosDisciplinaresPage"));
+const RescisoesContratuaisPage = lazy(() => import("@/modules/juridico/RescisoesContratuaisPage"));
+const RiscosJuridicosPage = lazy(() => import("@/modules/juridico/RiscosJuridicosPage"));
+const ArquivoJuridicoPage = lazy(() => import("@/modules/juridico/ArquivoJuridicoPage"));
+const ReunioesPage = lazy(() => import("@/modules/secretaria/ReunioesPage"));
+const ActasPage = lazy(() => import("@/modules/secretaria/ActasPage"));
+const DocumentosOficiaisPage = lazy(() => import("@/modules/secretaria/DocumentosOficiaisPage"));
+const GestaoDocumentosPage = lazy(() => import("@/modules/secretaria/GestaoDocumentosPage"));
+const CorrespondenciasPage = lazy(() => import("@/modules/secretaria/CorrespondenciasPage"));
+const ArquivoPage = lazy(() => import("@/modules/secretaria/ArquivoPage"));
+const UtilizadoresPage = lazy(() => import("@/modules/config/UtilizadoresPage"));
+const AuditoriaPage = lazy(() => import("@/modules/config/AuditoriaPage"));
+const DepartamentosPage = lazy(() => import("@/modules/config/DepartamentosPage"));
+const ModulosRecursosPage = lazy(() => import("@/modules/config/ModulosRecursosPage"));
+const BackupsAdminPage = lazy(() => import("@/modules/config/BackupsAdminPage"));
+const PortalRecibosPage = lazy(() => import("@/modules/portal/PortalRecibosPage"));
+const PortalDeclaracoesPage = lazy(() => import("@/modules/portal/PortalDeclaracoesPage"));
+const PortalFeriasPage = lazy(() => import("@/modules/portal/PortalFeriasPage"));
+const PortalFaltasPage = lazy(() => import("@/modules/portal/PortalFaltasPage"));
+const PortalRequisicoesPage = lazy(() => import("@/modules/portal/PortalRequisicoesPage"));
+const PortalAssiduidadePage = lazy(() => import("@/modules/portal/PortalAssiduidadePage"));
+const PortalDadosPage = lazy(() => import("@/modules/portal/PortalDadosPage"));
+const ChatPage = lazy(() => import("@/modules/chat/ChatPage"));
+const TutoriaisPage = lazy(() => import("@/modules/ajuda/TutoriaisPage"));
+const ConselhoDashboardPage = lazy(() => import("@/modules/conselho-administracao/ConselhoDashboardPage"));
+const DecisoesInstitucionaisPage = lazy(() => import("@/modules/conselho-administracao/DecisoesInstitucionaisPage"));
+const AssinaturaActosPage = lazy(() => import("@/modules/conselho-administracao/AssinaturaActosPage"));
+const SaudeFinanceiraPage = lazy(() => import("@/modules/conselho-administracao/SaudeFinanceiraPage"));
+const ActividadeOrganizacionalPage = lazy(() => import("@/modules/conselho-administracao/ActividadeOrganizacionalPage"));
+const EmpresasPage = lazy(() => import("@/modules/conselho-administracao/EmpresasPage"));
+const PlaneamentoRelatoriosPage = lazy(() => import("@/modules/planeamento/PlaneamentoRelatoriosPage"));
+const PlaneamentoRelatorioFormPage = lazy(() => import("@/modules/planeamento/PlaneamentoRelatorioFormPage"));
+const PlaneamentoConsolidacaoPage = lazy(() => import("@/modules/planeamento/PlaneamentoConsolidacaoPage"));
+const PlaneamentoDashboardPage = lazy(() => import("@/modules/planeamento/PlaneamentoDashboardPage"));
+const NoticiasPage = lazy(() => import("@/modules/comunicacao-interna/NoticiasPage"));
+const NoticiaDetalhePage = lazy(() => import("@/modules/comunicacao-interna/NoticiaDetalhePage"));
+const EventosPage = lazy(() => import("@/modules/comunicacao-interna/EventosPage"));
+const EventoDetalhePage = lazy(() => import("@/modules/comunicacao-interna/EventoDetalhePage"));
+const AniversariosPage = lazy(() => import("@/modules/comunicacao-interna/AniversariosPage"));
+const ComunicadosPage = lazy(() => import("@/modules/comunicacao-interna/ComunicadosPage"));
+const ComunicadoDetalhePage = lazy(() => import("@/modules/comunicacao-interna/ComunicadoDetalhePage"));
+const FacturacaoPage = lazy(() => import("@/modules/facturacao/FacturacaoPage"));
+const ReceitaPage = lazy(() => import("@/modules/facturacao/ReceitaPage"));
+const MinhasActividadesPage = lazy(() => import("@/modules/produtividade/MinhasActividadesPage"));
+const ProdutividadeAprovacoesPage = lazy(() => import("@/modules/produtividade/ProdutividadeAprovacoesPage"));
+const PatrimonioPage = lazy(() => import("@/modules/patrimonio/PatrimonioPage"));
+const ControloInternoLayout = lazy(() =>
+  import("@/modules/controlo-interno/ControloInternoLayout").then(m => ({ default: m.ControloInternoLayout })),
+);
+const ControloInternoDashboardPage = lazy(() => import("@/modules/controlo-interno/ControloInternoDashboardPage"));
+const PlanoAuditoriasPage = lazy(() => import("@/modules/controlo-interno/PlanoAuditoriasPage"));
+const PlaneamentoAuditoriasRedirect = lazy(() =>
+  import("@/modules/controlo-interno/PlanoAuditoriasPage").then(m => ({ default: m.PlaneamentoAuditoriasRedirect })),
+);
+const InspeccoesPage = lazy(() => import("@/modules/controlo-interno/InspeccoesPage"));
+const ExecucaoAuditoriaPage = lazy(() => import("@/modules/controlo-interno/ExecucaoAuditoriaPage"));
+const NaoConformidadesPage = lazy(() => import("@/modules/controlo-interno/NaoConformidadesPage"));
+const PlanoAccaoPage = lazy(() => import("@/modules/controlo-interno/PlanoAccaoPage"));
+const RiscosCorporativosPage = lazy(() => import("@/modules/controlo-interno/RiscosCorporativosPage"));
+const LogsRastreabilidadePage = lazy(() => import("@/modules/controlo-interno/LogsRastreabilidadePage"));
+const RelatoriosControloInternoPage = lazy(() => import("@/modules/controlo-interno/RelatoriosPage"));
 
 const queryClient = createAppQueryClient();
 
@@ -106,13 +112,13 @@ const App = () => (
     <AuthProvider>
       <AppSplashOverlay />
       <TenantProvider>
+              <BrowserRouter>
         <DataProvider>
         <NotificationProvider>
           <ChatProvider>
             <TooltipProvider>
               <Toaster />
               <Sonner />
-              <BrowserRouter>
               <MobileSessionLockProvider>
               <Routes>
                 <Route path="/login" element={<Login />} />
@@ -264,11 +270,11 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </MobileSessionLockProvider>
-              </BrowserRouter>
             </TooltipProvider>
           </ChatProvider>
         </NotificationProvider>
         </DataProvider>
+              </BrowserRouter>
       </TenantProvider>
     </AuthProvider>
     </div>

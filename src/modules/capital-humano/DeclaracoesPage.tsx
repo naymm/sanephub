@@ -34,9 +34,10 @@ import { toast } from 'sonner';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { EmployeeSelect } from '@/components/shared/EmployeeSelect';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
+import { DeclaracaoPedidoFields, validateDeclaracaoPedido } from '@/modules/declaracoes/DeclaracaoPedidoFields';
+import { DECLARACAO_STATUS_OPTIONS } from '@/modules/declaracoes/declaracaoConstants';
 
-const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
-const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
+const STATUS_OPTIONS = DECLARACAO_STATUS_OPTIONS;
 
 const LIST_PATH = '/capital-humano/declaracoes';
 const NOVO_PATH = '/capital-humano/declaracoes/novo';
@@ -80,6 +81,9 @@ export default function DeclaracoesPage() {
     setForm({
       colaboradorId: null,
       tipo: 'Para Banco',
+      descricao: undefined,
+      banco: undefined,
+      paisEmbaixada: undefined,
       dataPedido: new Date().toISOString().slice(0, 10),
       status: 'Pendente',
     });
@@ -90,6 +94,9 @@ export default function DeclaracoesPage() {
     setForm({
       colaboradorId: null,
       tipo: 'Para Banco',
+      descricao: undefined,
+      banco: undefined,
+      paisEmbaixada: undefined,
       dataPedido: new Date().toISOString().slice(0, 10),
       status: 'Pendente',
     });
@@ -182,7 +189,12 @@ export default function DeclaracoesPage() {
 
   const save = async () => {
     const cid = form.colaboradorId;
-    if (cid == null || Number.isNaN(cid) || !form.dataPedido) return;
+    if (cid == null || Number.isNaN(cid)) return;
+    const validationError = validateDeclaracaoPedido(form);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     const payload: Omit<Declaracao, 'id'> = { ...form, colaboradorId: cid };
     try {
       if (editing) await updateDeclaracao(editing.id, payload);
@@ -412,13 +424,15 @@ export default function DeclaracoesPage() {
           onCloseMobile={closeMobileCreate}
           moduleKicker="Capital Humano"
           screenTitle={editing ? 'Editar declaração' : 'Nova declaração'}
-          desktopContentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+          desktopContentClassName="max-w-lg max-h-[90vh] flex flex-col p-6"
           desktopHeader={mobileCreateDesktopHeader(
             editing ? 'Editar declaração' : 'Nova declaração',
-            'Pedido de declaração para o colaborador.',
+            editing
+              ? 'Actualize o pedido e o estado da declaração.'
+              : 'Registe um pedido de declaração de serviço para o colaborador (igual ao portal).',
           )}
           formBody={
-            <div className="grid gap-4 py-2">
+            <div className="grid min-w-0 gap-4 py-2 overflow-y-auto min-h-0">
               <div className="space-y-2">
                 <Label>Colaborador</Label>
                 <EmployeeSelect
@@ -445,25 +459,7 @@ export default function DeclaracoesPage() {
                   </p>
                 ) : null}
               </div>
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={v => setForm(f => ({ ...f, tipo: v as TipoDeclaracao }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPO_OPTIONS.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Descrição (opcional)</Label>
-                <Input value={form.descricao ?? ''} onChange={e => setForm(f => ({ ...f, descricao: e.target.value || undefined }))} placeholder="ex: Crédito habitação" />
-              </div>
-              <div className="space-y-2">
-                <Label>Data pedido</Label>
-                <Input type="date" value={form.dataPedido} onChange={e => setForm(f => ({ ...f, dataPedido: e.target.value }))} />
-              </div>
+              <DeclaracaoPedidoFields form={form} onChange={patch => setForm(f => ({ ...f, ...patch }))} />
               {editing && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -500,7 +496,7 @@ export default function DeclaracoesPage() {
             </div>
           }
           desktopFooter={
-            <DialogFooter>
+            <DialogFooter className="shrink-0 border-t border-border/80 pt-4 mt-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
@@ -508,7 +504,7 @@ export default function DeclaracoesPage() {
                 onClick={() => void save()}
                 disabled={form.colaboradorId == null || !form.dataPedido}
               >
-                Guardar
+                {editing ? 'Guardar' : 'Registar pedido'}
               </Button>
             </DialogFooter>
           }
@@ -523,7 +519,7 @@ export default function DeclaracoesPage() {
                 disabled={form.colaboradorId == null || !form.dataPedido}
                 onClick={() => void save()}
               >
-                Guardar
+                {editing ? 'Guardar' : 'Registar pedido'}
               </Button>
             </div>
           }

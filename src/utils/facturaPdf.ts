@@ -1,5 +1,5 @@
-import jsPDF from 'jspdf';
-import { autoTable } from 'jspdf-autotable';
+import type { jsPDF } from 'jspdf';
+import { loadJsPDFWithAutoTable } from '@/lib/jspdfLoader';
 
 const MARGIN = 14;
 const PAGE_W = 210;
@@ -92,7 +92,8 @@ function fmtOrDash(v?: string | null) {
  * PDF de pré-visualização alinhado ao modelo típico Primavera (factura comercial AO).
  * Valores monetários vêm como texto (formato ERP) sempre que possível.
  */
-export function generateFacturaPdfBlob(input: FacturaPdfInput): Blob {
+export async function generateFacturaPdfBlob(input: FacturaPdfInput): Promise<Blob> {
+  const { jsPDF, autoTable } = await loadJsPDFWithAutoTable();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }) as JsPDFWithAutoTable;
   let y = MARGIN;
 

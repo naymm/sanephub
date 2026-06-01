@@ -5,7 +5,7 @@ import { useColaboradorId } from '@/hooks/useColaboradorId';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
-import type { Declaracao, TipoDeclaracao, StatusDeclaracao } from '@/types';
+import type { Declaracao, StatusDeclaracao } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatDate } from '@/utils/formatters';
 import { gerarPdfDeclaracaoServicoBlob, assinaturaPdfFromDeclaracao } from '@/utils/declaracaoServicoPdf';
@@ -33,31 +33,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import { Plus, Eye, FileDown, Check, ChevronsUpDown } from 'lucide-react';
+import { Plus, Eye, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
+import { DeclaracaoPedidoFields, validateDeclaracaoPedido } from '@/modules/declaracoes/DeclaracaoPedidoFields';
+import { DECLARACAO_STATUS_OPTIONS } from '@/modules/declaracoes/declaracaoConstants';
 
-const TIPO_OPTIONS: TipoDeclaracao[] = ['Para Banco', 'Embaixada', 'Rendimentos', 'Outro'];
-const STATUS_OPTIONS: StatusDeclaracao[] = ['Pendente', 'Emitida', 'Entregue'];
-
-const BANCOS = ['BAI', 'BANC', 'BIC', 'BCA', 'BCI', 'BDA', 'BE', 'BFA', 'BIR', 'BPA', 'BPC', 'BNI', 'KEVE', 'BPR', 'BSOL', 'BCGA', 'BMA', 'VTB', 'ACCESS', 'BMF', 'BKI', 'BCH', 'SBA', 'BPPH', 'BVB'];
-
-const PAISES_EMBAIXADA = ['ESPANHA', 'PORTUGAL', 'CHINA', 'EUA', 'BRASIL'];
+const STATUS_OPTIONS = DECLARACAO_STATUS_OPTIONS;
 
 export default function PortalDeclaracoesPage() {
   const colaboradorId = useColaboradorId();
@@ -74,8 +57,6 @@ export default function PortalDeclaracoesPage() {
     dataPedido: new Date().toISOString().slice(0, 10),
     status: 'Pendente',
   });
-  const [bancoOpen, setBancoOpen] = useState(false);
-  const [paisOpen, setPaisOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
 
@@ -132,23 +113,14 @@ export default function PortalDeclaracoesPage() {
       dataPedido: new Date().toISOString().slice(0, 10),
       status: 'Pendente',
     });
-    setBancoOpen(false);
-    setPaisOpen(false);
     setDialogOpen(true);
   };
 
-  const setTipo = (v: TipoDeclaracao) => {
-    setForm(f => ({ ...f, tipo: v, banco: undefined, paisEmbaixada: undefined }));
-  };
-
   const save = async () => {
-    if (!form.colaboradorId || !form.dataPedido) return;
-    if (form.tipo === 'Para Banco' && !form.banco) {
-      toast.error('Seleccione o banco.');
-      return;
-    }
-    if (form.tipo === 'Embaixada' && !form.paisEmbaixada) {
-      toast.error('Seleccione o país da embaixada.');
+    if (!form.colaboradorId) return;
+    const validationError = validateDeclaracaoPedido(form);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     try {
@@ -283,117 +255,7 @@ export default function PortalDeclaracoesPage() {
           )}
           formBody={
             <div className="grid min-w-0 gap-4 py-2 overflow-y-auto min-h-0">
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={v => setTipo(v as TipoDeclaracao)}>
-                  <SelectTrigger className="min-w-0"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPO_OPTIONS.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.tipo === 'Para Banco' && (
-                <div className="space-y-2">
-                  <Label>Banco</Label>
-                  <Popover open={bancoOpen} onOpenChange={setBancoOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={bancoOpen}
-                        className="w-full justify-between font-normal"
-                      >
-                        {form.banco ?? 'Seleccionar banco...'}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Pesquisar banco..." />
-                        <CommandList>
-                          <CommandEmpty>Nenhum banco encontrado.</CommandEmpty>
-                          <CommandGroup>
-                            {BANCOS.map((b) => (
-                              <CommandItem
-                                key={b}
-                                value={b}
-                                onSelect={() => {
-                                  setForm(f => ({ ...f, banco: b }));
-                                  setBancoOpen(false);
-                                }}
-                              >
-                                <Check className={cn('mr-2 h-4 w-4', form.banco === b ? 'opacity-100' : 'opacity-0')} />
-                                {b}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              )}
-              {form.tipo === 'Embaixada' && (
-                <div className="space-y-2">
-                  <Label>País da Embaixada</Label>
-                  <Popover open={paisOpen} onOpenChange={setPaisOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={paisOpen}
-                        className="w-full justify-between font-normal"
-                      >
-                        {form.paisEmbaixada ?? 'Seleccionar país...'}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Pesquisar país..." />
-                        <CommandList>
-                          <CommandEmpty>Nenhum país encontrado.</CommandEmpty>
-                          <CommandGroup>
-                            {PAISES_EMBAIXADA.map((p) => (
-                              <CommandItem
-                                key={p}
-                                value={p}
-                                onSelect={() => {
-                                  setForm(f => ({ ...f, paisEmbaixada: p }));
-                                  setPaisOpen(false);
-                                }}
-                              >
-                                <Check className={cn('mr-2 h-4 w-4', form.paisEmbaixada === p ? 'opacity-100' : 'opacity-0')} />
-                                {p}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              )}
-              <div className="space-y-2 min-w-0">
-                <Label>Descrição (opcional)</Label>
-                <Input
-                  value={form.descricao ?? ''}
-                  onChange={e => setForm(f => ({ ...f, descricao: e.target.value || undefined }))}
-                  placeholder="ex: Crédito habitação"
-                  className="min-w-0"
-                />
-              </div>
-              <div className="space-y-2 min-w-0">
-                <Label>Data pedido</Label>
-                <Input
-                  type="date"
-                  value={form.dataPedido}
-                  onChange={e => setForm(f => ({ ...f, dataPedido: e.target.value }))}
-                  className="min-w-0"
-                />
-              </div>
+              <DeclaracaoPedidoFields form={form} onChange={patch => setForm(f => ({ ...f, ...patch }))} />
             </div>
           }
           desktopFooter={

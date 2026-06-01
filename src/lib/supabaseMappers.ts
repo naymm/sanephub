@@ -63,6 +63,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
     'subsidioRisco',
     'subsidioAtavio',
     'subsidioRepresentacao',
+    'retencaoPercent',
   ],
   centros_custo: ['id', 'empresaId', 'orcamentoMensal', 'orcamentoAnual', 'gastoActual'],
   projectos: ['id', 'empresaId', 'orcamentoTotal', 'gasto'],
@@ -119,6 +120,7 @@ export const NUMERIC_KEYS: Record<string, string[]> = {
     'diasFaltaDesconto',
     'inss',
     'irt',
+    'retencao',
     'outrasDeducoes',
     'liquido',
   ],
@@ -192,6 +194,18 @@ export function mapRowFromDb<T>(tableName: keyof typeof NUMERIC_KEYS, row: Recor
       ...out,
       descontoFaltas: Number(o.descontoFaltas ?? 0),
       diasFaltaDesconto: Number(o.diasFaltaDesconto ?? 0),
+      retencao: Number(o.retencao ?? 0),
+    };
+  }
+  if (tableName === 'colaboradores') {
+    const o = out as Record<string, unknown>;
+    out = {
+      ...out,
+      isAvencado: o.isAvencado === true,
+      retencaoPercent:
+        o.retencaoPercent != null && Number.isFinite(Number(o.retencaoPercent))
+          ? Number(o.retencaoPercent)
+          : undefined,
     };
   }
   if (tableName === 'actas') {

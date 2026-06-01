@@ -109,9 +109,9 @@ export default function RelatoriosPage() {
       ? 'Todos'
       : `${centroRef} — ${centrosCusto.find(c => c.codigo === centroRef)?.nome ?? ''}`;
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     try {
-      exportRelatorioFinanceiroPdf({
+      await exportRelatorioFinanceiroPdf({
         ano: anoNum,
         mesInicio: mesINum,
         mesFim: mesFNum,

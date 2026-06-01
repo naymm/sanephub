@@ -3,6 +3,7 @@ import {
   calculateAttendanceImpact,
   type AttendancePayrollImpactDetalhe,
 } from '@/services/assiduidade/attendanceImpact';
+import { calcularProcessamentoAvencado, retencaoPercentColaborador } from '@/utils/colaboradorRemuneracao';
 
 const LIMITE_SUBSIDIO_TRIBUTAVEL = 30000;
 const TAXA_SEGURANCA_SOCIAL = 0.03;
@@ -189,6 +190,9 @@ export interface ProcessamentoSalarialResultado {
   inss: number; // segurança social
   irt: number;
   liquido: number;
+  /** Retenção na fonte (avençado); não reduz o líquido pago. */
+  retencao?: number;
+  retencaoPercent?: number;
   escalonIrt?: IRTEscalao | null;
   descontoFaltas: number;
   diasFaltaDesconto: number;
@@ -268,6 +272,26 @@ function labelPeriodoMesAno(mesAno: string): string {
   return `${m[2]}-${m[1]}`;
 }
 
+function detalheAssiduidadeVazio(): AttendancePayrollImpactDetalhe {
+  return {
+    modo: 'normal',
+    diasInjustificados: 0,
+    diasJustificadosSoSubsidios: 0,
+    descontoSalarioBase: 0,
+    descontoAlimentacao: 0,
+    descontoTransporte: 0,
+    descontoOutrosSubsidios: 0,
+    descontoRisco: 0,
+    descontoDisponibilidade: 0,
+    totalDescontoBruto: 0,
+    descontoMontanteRegraCompleta: 0,
+    descontoMontanteSoSubsidios: 0,
+    faltasContagemPorTipo: [],
+    inssApenasSalarioBaseNominal: false,
+    subsidiosRemovidos: false,
+  };
+}
+
 export function calcularInssIrtLiquidoComAssiduidade(
   colaborador: Colaborador,
   mesAno: string,
@@ -277,9 +301,42 @@ export function calcularInssIrtLiquidoComAssiduidade(
   extra?: { outrasDeducoes?: number },
 ): ProcessamentoSalarialComAssiduidadeResultado {
   const outrasDeducoes = extra?.outrasDeducoes ?? 0;
-  const detalhe = calculateAttendanceImpact(colaborador, { mesAno, faltas, licencas });
   const periodoLabel = labelPeriodoMesAno(mesAno);
   const horasMesRef = Math.max(1, DIAS_UTEIS_MES_NORMA_TRABALHO * 8);
+
+  if (colaborador.isAvencado) {
+    const av = calcularProcessamentoAvencado(
+      Math.max(0, colaborador.salarioBase ?? 0),
+      retencaoPercentColaborador(colaborador),
+      outrasDeducoes,
+    );
+    const venc = av.salarioBruto;
+    return {
+      ...av,
+      escalonIrt: null,
+      detalheAssiduidade: detalheAssiduidadeVazio(),
+      resumoIndividual: {
+        periodoLabel,
+        diasUteisReferencia: DIAS_UTEIS_MES_NORMA_TRABALHO,
+        salarioHoraAprox: arredondar2(venc / horasMesRef),
+        materiaColetavel: 0,
+        componentes: {
+          salarioBaseNominal: venc,
+          salarioBaseEfetivo: venc,
+          subsidioAlimentacaoNominal: 0,
+          subsidioAlimentacaoEfetivo: 0,
+          subsidioTransporteNominal: 0,
+          subsidioTransporteEfetivo: 0,
+          outrosSubsidiosAgregadoNominal: 0,
+          outrosSubsidiosEfetivo: 0,
+          subsidioRiscoNominal: 0,
+          subsidioDisponibilidadeNominal: 0,
+        },
+      },
+    };
+  }
+
+  const detalhe = calculateAttendanceImpact(colaborador, { mesAno, faltas, licencas });
 
   if (detalhe.modo === 'licenca_maternidade') {
     const salarioBase = Math.max(0, colaborador.salarioBase ?? 0);

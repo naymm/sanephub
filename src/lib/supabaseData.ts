@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { COLABORADORES_DETAIL_SELECT, COLABORADORES_LIST_SELECT } from '@/lib/realtimeTableSelects';
 import { mapRowFromDb, mapRowsFromDb, mapToDb } from './supabaseMappers';
 import { NUMERIC_KEYS } from './supabaseMappers';
 import { serializePlaneamentoTextList } from '@/utils/planeamentoTextLists';
@@ -465,6 +466,21 @@ export interface ColaboradoresPaginatedResult {
   totalCount: number;
 }
 
+/** Registo completo para edição / ficha (um único pedido por colaborador). */
+export async function fetchColaboradorById(
+  supabase: SupabaseClient,
+  id: number,
+): Promise<Colaborador | null> {
+  const { data, error } = await supabase
+    .from('colaboradores')
+    .select(COLABORADORES_DETAIL_SELECT)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return mapRowFromDb<Colaborador>('colaboradores', data as Record<string, unknown>);
+}
+
 /** Paginação no servidor: devolve uma página de colaboradores e o total. */
 export async function fetchColaboradoresPaginated(
   supabase: SupabaseClient,
@@ -476,7 +492,7 @@ export async function fetchColaboradoresPaginated(
 
   let q = supabase
     .from('colaboradores')
-    .select('*', { count: 'exact' })
+    .select(COLABORADORES_LIST_SELECT, { count: 'exact' })
     .in('empresa_id', empresaIds)
     .order('nome', { ascending: true });
 

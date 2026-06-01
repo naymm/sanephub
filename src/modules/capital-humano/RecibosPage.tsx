@@ -12,7 +12,7 @@ import {
 import type { ReciboSalario } from '@/types';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatKz } from '@/utils/formatters';
-import { gerarPdfRecibo, gerarPdfReciboBlob } from '@/utils/reciboPdf';
+import { formatRetencaoPercentLabel, reciboEhAvencado, totalDeducoesRecibo } from '@/utils/colaboradorRemuneracao';
 import { pdfPreviewUrlFromGeneratedBlob, releasePdfPreviewUrl } from '@/utils/pdfPreviewPublicUrl';
 import { useIsMobileViewport } from '@/hooks/useIsMobileViewport';
 import { IRT_ESCALOES_FALLBACK, salarioBaseParaEscalaoIrtAposFaltas, selecionarEscalaoIrtPorSalarioBase } from '@/lib/irtCalculo';
@@ -155,13 +155,15 @@ export default function RecibosPage() {
       const irtOpts = { irtTaxaPercent: esc?.taxaPercent ?? null };
 
       if (isMobile) {
-        const url = gerarPdfRecibo(r, col, irtOpts);
+        const { gerarPdfRecibo } = await import('@/utils/reciboPdf');
+        const url = await gerarPdfRecibo(r, col, irtOpts);
         window.open(url, '_blank', 'noopener,noreferrer');
         toast.success('PDF do recibo gerado.');
         return;
       }
 
-      const blob = gerarPdfReciboBlob(r, col, irtOpts);
+      const { gerarPdfReciboBlob } = await import('@/utils/reciboPdf');
+      const blob = await gerarPdfReciboBlob(r, col, irtOpts);
       const previewUrl = await pdfPreviewUrlFromGeneratedBlob(blob, 'recibo');
       setPdfPreviewUrl(previewUrl);
       setPdfPreviewOpen(true);
@@ -313,9 +315,7 @@ export default function RecibosPage() {
                 <td className="py-3 px-5 text-muted-foreground">{r.mesAno}</td>
                 <td className="py-3 px-5 text-right font-mono">{formatKz(r.vencimentoBase)}</td>
                 <td className="py-3 px-5 text-right font-mono">{formatKz(r.subsidioAlimentacao + r.subsidioTransporte + r.outrosSubsidios)}</td>
-                <td className="py-3 px-5 text-right font-mono">
-                  {formatKz((r.descontoFaltas ?? 0) + r.inss + r.irt + r.outrasDeducoes)}
-                </td>
+                <td className="py-3 px-5 text-right font-mono">{formatKz(totalDeducoesRecibo(r))}</td>
                 <td className="py-3 px-5 text-right font-mono font-medium">{formatKz(r.liquido)}</td>
                 <td className="py-3 px-5"><StatusBadge status={r.status} /></td>
                 <td className="py-3 px-5 text-right">
@@ -359,7 +359,7 @@ export default function RecibosPage() {
             { label: 'Mês/Ano', value: r.mesAno },
             { label: 'Vencimento base', value: formatKz(r.vencimentoBase) },
             { label: 'Subsídios', value: formatKz(r.subsidioAlimentacao + r.subsidioTransporte + r.outrosSubsidios) },
-            { label: 'Deduções', value: formatKz((r.descontoFaltas ?? 0) + r.inss + r.irt + r.outrasDeducoes) },
+            { label: 'Deduções', value: formatKz(totalDeducoesRecibo(r)) },
             { label: 'Líquido', value: formatKz(r.liquido) },
             { label: 'Status', value: <StatusBadge status={r.status} /> },
           ]}
@@ -547,19 +547,40 @@ export default function RecibosPage() {
           {viewItem && (
             <div className="space-y-4">
               <div className="space-y-3 text-sm">
-                <p><span className="text-muted-foreground">Vencimento base:</span> {formatKz(viewItem.vencimentoBase)}</p>
-                <p><span className="text-muted-foreground">Subs. alimentação:</span> {formatKz(viewItem.subsidioAlimentacao)}</p>
-                <p><span className="text-muted-foreground">Subs. transporte:</span> {formatKz(viewItem.subsidioTransporte)}</p>
-                <p><span className="text-muted-foreground">Outros subsídios:</span> {formatKz(viewItem.outrosSubsidios)}</p>
-                {(viewItem.descontoFaltas ?? 0) > 0 ? (
-                  <p>
-                    <span className="text-muted-foreground">Desconto faltas ({viewItem.diasFaltaDesconto ?? 0} d.):</span>{' '}
-                    {formatKz(viewItem.descontoFaltas ?? 0)}
-                  </p>
-                ) : null}
-                <p><span className="text-muted-foreground">INSS:</span> {formatKz(viewItem.inss)}</p>
-                <p><span className="text-muted-foreground">IRT:</span> {formatKz(viewItem.irt)}</p>
-                <p><span className="text-muted-foreground">Outras deduções:</span> {formatKz(viewItem.outrasDeducoes)}</p>
+                {(() => {
+                  const col = colaboradores.find(c => c.id === viewItem.colaboradorId);
+                  const av = reciboEhAvencado(viewItem, col);
+                  if (av) {
+                    return (
+                      <>
+                        <p><span className="text-muted-foreground">Vencimento:</span> {formatKz(viewItem.vencimentoBase)}</p>
+                        <p>
+                          <span className="text-muted-foreground">
+                            Retenção ({formatRetencaoPercentLabel(col?.retencaoPercent ?? 6.5)}):
+                          </span>{' '}
+                          {formatKz(viewItem.retencao ?? 0)}
+                        </p>
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <p><span className="text-muted-foreground">Vencimento base:</span> {formatKz(viewItem.vencimentoBase)}</p>
+                      <p><span className="text-muted-foreground">Subs. alimentação:</span> {formatKz(viewItem.subsidioAlimentacao)}</p>
+                      <p><span className="text-muted-foreground">Subs. transporte:</span> {formatKz(viewItem.subsidioTransporte)}</p>
+                      <p><span className="text-muted-foreground">Outros subsídios:</span> {formatKz(viewItem.outrosSubsidios)}</p>
+                      {(viewItem.descontoFaltas ?? 0) > 0 ? (
+                        <p>
+                          <span className="text-muted-foreground">Desconto faltas ({viewItem.diasFaltaDesconto ?? 0} d.):</span>{' '}
+                          {formatKz(viewItem.descontoFaltas ?? 0)}
+                        </p>
+                      ) : null}
+                      <p><span className="text-muted-foreground">INSS:</span> {formatKz(viewItem.inss)}</p>
+                      <p><span className="text-muted-foreground">IRT:</span> {formatKz(viewItem.irt)}</p>
+                      <p><span className="text-muted-foreground">Outras deduções:</span> {formatKz(viewItem.outrasDeducoes)}</p>
+                    </>
+                  );
+                })()}
                 <p className="font-semibold pt-2 border-t"><span className="text-muted-foreground">Líquido:</span> {formatKz(viewItem.liquido)}</p>
                 <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewItem.status} /></p>
               </div>

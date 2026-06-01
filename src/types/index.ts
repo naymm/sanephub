@@ -99,6 +99,10 @@ export interface Colaborador {
   tipoContrato: TipoContrato;
   dataFimContrato?: string;
   salarioBase: number;
+  /** Prestação de serviços: `salarioBase` é o líquido acordado; processamento usa retenção em vez de INSS/IRT. */
+  isAvencado?: boolean;
+  /** Taxa de retenção na fonte (2 ou 6,5) quando `isAvencado`. */
+  retencaoPercent?: number;
   /** Subsídios mensais (Kz) para pré-preencher o processamento salarial. */
   subsidioAlimentacao?: number;
   /** Subsídios mensais (Kz) para pré-preencher o processamento salarial. */
@@ -289,6 +293,8 @@ export interface ReciboSalario {
   diasFaltaDesconto: number;
   inss: number;
   irt: number;
+  /** Retenção na fonte (avençado); informativa no recibo — não reduz o líquido pago. */
+  retencao?: number;
   outrasDeducoes: number;
   liquido: number;
   status: 'Emitido' | 'Pago';

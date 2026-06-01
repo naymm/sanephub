@@ -1,7 +1,8 @@
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 
-/** Admin, PCA ou Director — visão e gestão em todas as empresas do grupo. */
+/** Gestão (criar/editar) no CI: requer acesso ao módulo e perfil de direcção. */
 export function useCiCanManage(): boolean {
   const { user } = useAuth();
-  return user?.perfil === 'Admin' || user?.perfil === 'PCA' || user?.perfil === 'Director';
+  if (!user || !hasModuleAccess(user, 'controlo-interno')) return false;
+  return user.perfil === 'Admin' || user.perfil === 'PCA' || user.perfil === 'Director';
 }

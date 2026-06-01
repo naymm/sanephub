@@ -172,25 +172,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userRef = useRef(user);
   userRef.current = user;
 
+  /** Evita fetches duplicados em paralelo (getSession + INITIAL_SESSION). */
+  const profileLoadRef = useRef<{ id: string; promise: Promise<void> } | null>(null);
+
+  /** Se `SIGNED_IN`/perfil ficar preso, não bloquear o layout indefinidamente. */
+  useEffect(() => {
+    if (!restoringSession) return;
+    const timeout = window.setTimeout(() => setRestoringSession(false), 10_000);
+    return () => window.clearTimeout(timeout);
+  }, [restoringSession]);
+
   const fetchProfileAndSetUser = useCallback(async (authUserId: string) => {
     if (!supabase) return;
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(PROFILES_SELECT_PUBLIC)
-      .eq('auth_user_id', authUserId)
-      .maybeSingle();
-    if (error || !data) {
-      // Não limpar `user` aqui: após `signIn`, o listener pode correr em paralelo e falhar
-      // momentaneamente (RLS/rede), apagando o estado que o `login()` acabou de preencher.
-      if (import.meta.env.DEV) {
-        console.warn('[auth] fetchProfileAndSetUser: sem dados ou erro; mantém estado actual.', error);
+    const inFlight = profileLoadRef.current;
+    if (inFlight?.id === authUserId) return inFlight.promise;
+
+    const promise = (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(PROFILES_SELECT_PUBLIC)
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      if (error || !data) {
+        if (import.meta.env.DEV) {
+          console.warn('[auth] fetchProfileAndSetUser: sem dados ou erro; mantém estado actual.', error);
+        }
+        return;
       }
-      return;
+      const row = data as ProfileRow;
+      let u = profileToUsuario(row);
+      u = await mergeFotoPerfilFromColaborador(supabase, u, row.colaborador_id);
+      setUser(u);
+    })();
+
+    profileLoadRef.current = { id: authUserId, promise };
+    try {
+      await promise;
+    } finally {
+      if (profileLoadRef.current?.id === authUserId) profileLoadRef.current = null;
     }
-    const row = data as ProfileRow;
-    let u = profileToUsuario(row);
-    u = await mergeFotoPerfilFromColaborador(supabase, u, row.colaborador_id);
-    setUser(u);
   }, []);
 
   const refreshSessionUser = useCallback(async () => {
@@ -233,7 +253,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         setRestoringSession(false);
         setAuthReady(true);
-        bumpAuthSessionRevision();
+        // Não incrementar revisão aqui: `INITIAL_SESSION` / `SIGNED_IN` no listener
+        // disparam o fetch realtime; bump duplo cancelava pedidos (NS_BINDING_ABORTED).
       }
     })();
 
@@ -256,21 +277,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      bumpAuthSessionRevision();
+      // Sessão inicial já tratada por `getSession()` — evita 2.º fetch/cancel em todas as tabelas.
+      if (event === 'INITIAL_SESSION') {
+        if (session?.user) void fetchProfileAndSetUser(session.user.id);
+        else setUser(null);
+        return;
+      }
+
+      // `SIGNED_IN` no refresh: getSession() já carregou o perfil — bump recriava ~30 canais (SUBSCRIBED→CLOSED→SUBSCRIBED).
+      if (event === 'SIGNED_IN') {
+        if (session?.user) {
+          const shouldBlockUi = userRef.current == null;
+          if (shouldBlockUi) setRestoringSession(true);
+          void (async () => {
+            try {
+              await fetchProfileAndSetUser(session.user.id);
+            } finally {
+              if (shouldBlockUi) setRestoringSession(false);
+            }
+          })();
+        }
+        return;
+      }
 
       if (session?.user) {
-        const shouldBlockUi = event === 'SIGNED_IN' && userRef.current == null;
-        if (shouldBlockUi) setRestoringSession(true);
-        void (async () => {
-          try {
-            await fetchProfileAndSetUser(session.user.id);
-          } finally {
-            if (shouldBlockUi) setRestoringSession(false);
-          }
-        })();
+        void fetchProfileAndSetUser(session.user.id);
       } else {
         setUser(null);
         setRestoringSession(false);
+        bumpAuthSessionRevision();
       }
     });
     return () => subscription.unsubscribe();
@@ -596,7 +631,8 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
   'patrimonio': ['Admin', 'PCA', 'Secretaria', 'Director', 'Financeiro', 'RH', 'Contabilidade', 'Planeamento'],
   'portal-colaborador': ['Colaborador'],
   'configuracoes': ['Admin'],
-  'controlo-interno': ['Admin', 'PCA', 'Director'],
+  /** PCA/Director só com «Controlo Interno» em Acesso a módulos (Utilizadores); não é automático por perfil. */
+  'controlo-interno': ['Admin'],
 };
 
 /**
@@ -611,6 +647,13 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (user.perfil === 'Admin') return true;
   /** Jurídico: apenas Admin (não conceder via `modulos` nem PCA/Director/Juridico). */
   if (module === 'juridico') return false;
+  /**
+   * Controlo Interno: Admin sempre; restantes só com `controlo-interno` em Acesso a módulos
+   * (não herda visibilidade por ser PCA/Director/RH/etc.).
+   */
+  if (module === 'controlo-interno') {
+    return Array.isArray(user.modulos) && user.modulos.includes('controlo-interno');
+  }
   // Facturação: segue as mesmas permissões de Finanças (módulo é um sub-domínio).
   if (module === 'facturacao') return hasModuleAccess(user, 'financas');
   // Dashboard no menu agrupa Chat + Notificações (+ link ao painel): sempre acessível a quem tem sessão.

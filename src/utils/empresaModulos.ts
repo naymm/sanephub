@@ -13,7 +13,6 @@ export const MODULOS_ATIVOS_PADRAO_GRUPO: readonly string[] = [
   'gestao-documentos',
   'patrimonio',
   'juridico',
-  'controlo-interno',
   'conselho-administracao',
   'portal-colaborador',
   'comunicacao-interna',
@@ -53,6 +52,17 @@ export function empresaTemModuloActivado(modulosAtivos: string[] | null, moduleI
 }
 
 /**
+ * Módulos que não aparecem só por «modulos_ativos» em branco / contexto consolidado:
+ * têm de estar activos na empresa (ou Admin ignora isto em `intranetModuloVisivelParaUtilizador`).
+ */
+const MODULOS_EXIGEM_ACTIVACAO_NA_EMPRESA = new Set([
+  'controlo-interno',
+  'juridico',
+  'conselho-administracao',
+  'configuracoes',
+]);
+
+/**
  * Visibilidade de módulo no menu intranet (barra horizontal, «Mais», launcher).
  * Admin ignora a whitelist por empresa (como em `Layout`); outros perfis respeitam `modulos_ativos`.
  */
@@ -62,7 +72,9 @@ export function intranetModuloVisivelParaUtilizador(
   moduleId: string,
 ): boolean {
   if (perfil === 'Admin') return true;
-  if (modulosAtivos == null) return true;
+  if (modulosAtivos == null) {
+    return !MODULOS_EXIGEM_ACTIVACAO_NA_EMPRESA.has(moduleId);
+  }
   return empresaTemModuloActivado(modulosAtivos, moduleId);
 }
 

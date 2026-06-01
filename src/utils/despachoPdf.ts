@@ -1,8 +1,6 @@
-import { jsPDF } from 'jspdf';
 import type { DocumentoOficial, Colaborador } from '@/types';
 import type { AssinaturaDigitalInfo } from './declaracaoServicoPdf';
-
-type JsPDFDoc = InstanceType<typeof jsPDF>;
+import { loadJsPDF, type JsPDFDoc } from '@/lib/jspdfLoader';
 
 const MESES_PT = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -196,6 +194,7 @@ export async function gerarPdfDespacho(
   assinatura?: AssinaturaDigitalInfo | null,
   empresaNome?: string
 ): Promise<string> {
+  const jsPDF = await loadJsPDF();
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();

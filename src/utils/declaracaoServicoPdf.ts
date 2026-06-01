@@ -1,4 +1,5 @@
-import { jsPDF } from 'jspdf';
+import type { jsPDF } from 'jspdf';
+import { loadJsPDF } from '@/lib/jspdfLoader';
 import { format, parseISO } from 'date-fns';
 import { pt } from 'date-fns/locale';
 import type { Declaracao, Colaborador, Usuario } from '@/types';
@@ -65,7 +66,8 @@ function numeroParaExtenso(n: number): string {
 function efeitosDeclaracao(declaracao: Declaracao): string {
   if (declaracao.tipo === 'Para Banco') {
     const banco = declaracao.banco ? ` ${declaracao.banco}` : '';
-    return `Para efeitos de actualização de conta, junto do Banco${banco}, declara-se que `;
+    const descricao = declaracao.descricao ? ` ${declaracao.descricao}` : '';
+    return `Para efeitos de ${descricao}, junto do Banco${banco}, declara-se que `;
   }
   if (declaracao.tipo === 'Embaixada' && declaracao.paisEmbaixada) {
     return `Para efeitos junto da Embaixada (${declaracao.paisEmbaixada}), declara-se que `;
@@ -351,6 +353,7 @@ export async function gerarPdfDeclaracaoServicoBlob(
     }
   }
 
+  const jsPDF = await loadJsPDF();
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = A4_WIDTH_MM;
   const left = 25;
@@ -377,16 +380,18 @@ export async function gerarPdfDeclaracaoServicoBlob(
   doc.setFontSize(fontSize);
 
   const efeitos = efeitosDeclaracao(declaracao);
-  const nascido = dataShort(colaborador.dataNascimento);
+  const nascidoData = dataShort(colaborador.dataNascimento);
   const salarioFmt = fmtSalario(colaborador.salarioBase);
   const salarioExtenso = numeroParaExtenso(colaborador.salarioBase) + ' Kwanzas';
+  const feminino = colaborador.genero === 'F';
+  const tratamentoPessoa = feminino ? 'a Sra.' : 'o Sr.';
 
-  const p1 = efeitos + 'o Sr. ' + colaborador.nome +
-    ', nascido a ' + nascido +
+  const p1 = efeitos + tratamentoPessoa + ' ' + colaborador.nome +
+    ', ' + (feminino ? 'nascida' : 'nascido') + ' a ' + nascidoData +
     ', titular do B.I nº ' + colaborador.bi +
     ', emitido pelos serviços de identificação, residente em ' + colaborador.endereco +
-    ', é trabalhador desta firma, exerce a função de ' + colaborador.cargo +
-    ', e aufere um salário mensal de ' + salarioFmt +
+    ', é ' + (feminino ? 'trabalhadora' : 'trabalhador') + ' desta firma, exercendo a função de ' + colaborador.cargo +
+    ', e aufere um salário líquido mensal de ' + salarioFmt +
     ' (' + salarioExtenso + ').';
 
   const iNome = p1.indexOf(colaborador.nome);

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, useRef, ReactNode } from 'react';
 import type {
   Colaborador,
   Empresa,
@@ -43,7 +43,12 @@ import type {
   PatrimonioVerificacaoItem,
 } from '@/types';
 import { useTenant } from '@/context/TenantContext';
+import { useAuth } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { anyEnabledRealtimeLoading, REALTIME_SYNC_TABLES, type RealtimeSyncTable } from '@/lib/dataTableSyncPolicy';
+import { anyBootstrapRealtimeLoading, buildRealtimeSyncFlagsForRoute } from '@/lib/realtimeRoutePolicy';
+import { useLocation } from 'react-router-dom';
+import { DataRealtimeSyncLayer, createInitialRealtimeLoading } from '@/context/DataRealtimeSyncLayer';
 import {
   loadAllTables,
   db,
@@ -52,7 +57,6 @@ import {
   fetchOrganizacaoSettings,
   upsertOrganizacaoSettings,
 } from '@/lib/supabaseData';
-import { useRealtimeTable } from '@/hooks/useRealtimeTable';
 import { nextReferenciaTesouraria } from '@/utils/tesourariaReferencia';
 
 /** Variação do saldo da conta quando o movimento é aplicado (entrada +valor, saída −valor). */
@@ -326,7 +330,13 @@ const emptyArrays = {
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const { currentEmpresaId } = useTenant();
+  const { pathname } = useLocation();
+  const realtimeSync = useMemo(
+    () => buildRealtimeSyncFlagsForRoute(pathname, user),
+    [pathname, user?.id, user?.perfil, user?.colaboradorId, user?.modulos?.join('|') ?? ''],
+  );
   const [dataLoading, setDataLoading] = useState(true);
   const [initialDataReady, setInitialDataReady] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -384,111 +394,72 @@ export function DataProvider({ children }: { children: ReactNode }) {
     dashboardBannerFeriadosUrl: null,
   });
 
-  // Realtime: mantém os arrays do DataContext sincronizados sem refresh/polling.
-  const empresasRT = useRealtimeTable<Empresa>('empresas', 'id');
-  const departamentosRT = useRealtimeTable<Departamento>('departamentos', 'id');
-  const colaboradoresRT = useRealtimeTable<Colaborador>('colaboradores', 'id');
-  const feriasRT = useRealtimeTable<Ferias>('ferias', 'id');
-  const faltasRT = useRealtimeTable<Falta>('faltas', 'id');
-  const recibosRT = useRealtimeTable<ReciboSalario>('recibos_salario', 'id');
-  const declaracoesRT = useRealtimeTable<Declaracao>('declaracoes', 'id');
-  const noticiasRT = useRealtimeTable<Noticia>('noticias', 'id');
-  const eventosRT = useRealtimeTable<Evento>('eventos', 'id');
-  const comunicadosRT = useRealtimeTable<Comunicado>('comunicados', 'id');
-  const requisicoesRT = useRealtimeTable<Requisicao>('requisicoes', 'id');
-  const centrosCustoRT = useRealtimeTable<CentroCusto>('centros_custo', 'id');
-  const projectosRT = useRealtimeTable<Projecto>('projectos', 'id');
-  const reunioesRT = useRealtimeTable<Reuniao>('reunioes', 'id');
-  const actasRT = useRealtimeTable<Acta>('actas', 'id');
-  const contratosRT = useRealtimeTable<Contrato>('contratos', 'id');
-  const processosRT = useRealtimeTable<ProcessoJudicial>('processos_judiciais', 'id');
-  const prazosRT = useRealtimeTable<PrazoLegal>('prazos_legais', 'id');
-  const correspondenciasRT = useRealtimeTable<Correspondencia>('correspondencias', 'id');
-  const documentosOficiaisRT = useRealtimeTable<DocumentoOficial>('documentos_oficiais', 'id');
-  const riscosRT = useRealtimeTable<RiscoJuridico>('riscos_juridicos', 'id');
-  const pagamentosRT = useRealtimeTable<Pagamento>('pagamentos', 'id');
-  const pendenciasRT = useRealtimeTable<PendenciaDocumental>('pendencias_documentais', 'id');
-  const movimentosTesourariaRT = useRealtimeTable<MovimentoTesouraria>('movimentos_tesouraria', 'id');
-  const bancosRT = useRealtimeTable<Banco>('bancos', 'id');
-  const contasBancariasRT = useRealtimeTable<ContaBancaria>('contas_bancarias', 'id');
-  const relatoriosPlaneamentoRT = useRealtimeTable<RelatorioMensalPlaneamento>('relatorios_planeamento', 'id');
-  const processosDisciplinaresRT = useRealtimeTable<ProcessoDisciplinar>('processos_disciplinares', 'id');
-  const rescissoesContratoRT = useRealtimeTable<RescisaoContrato>('rescisoes_contrato', 'id');
-  const geofencesRT = useRealtimeTable<Geofence>('geofences', 'id');
-  const colaboradorGeofencesRT = useRealtimeTable<ColaboradorGeofenceLink>('colaborador_geofences', 'id');
+  const [realtimeLoadingByTable, setRealtimeLoadingByTable] = useState(createInitialRealtimeLoading);
+  /** Após o 1.º bootstrap, o layout não volta a bloquear em tabelas da rota (evita loop «A carregar…»). */
+  const bootstrapDoneRef = useRef(false);
 
-  const realtimeLoading =
-    empresasRT.isLoading ||
-    departamentosRT.isLoading ||
-    colaboradoresRT.isLoading ||
-    feriasRT.isLoading ||
-    faltasRT.isLoading ||
-    recibosRT.isLoading ||
-    declaracoesRT.isLoading ||
-    noticiasRT.isLoading ||
-    eventosRT.isLoading ||
-    comunicadosRT.isLoading ||
-    requisicoesRT.isLoading ||
-    centrosCustoRT.isLoading ||
-    projectosRT.isLoading ||
-    reunioesRT.isLoading ||
-    actasRT.isLoading ||
-    contratosRT.isLoading ||
-    processosRT.isLoading ||
-    prazosRT.isLoading ||
-    correspondenciasRT.isLoading ||
-    documentosOficiaisRT.isLoading ||
-    riscosRT.isLoading ||
-    pagamentosRT.isLoading ||
-    pendenciasRT.isLoading ||
-    movimentosTesourariaRT.isLoading ||
-    bancosRT.isLoading ||
-    contasBancariasRT.isLoading ||
-    relatoriosPlaneamentoRT.isLoading ||
-    processosDisciplinaresRT.isLoading ||
-    rescissoesContratoRT.isLoading ||
-    geofencesRT.isLoading ||
-    colaboradorGeofencesRT.isLoading;
+  const onRealtimeTableLoading = useCallback((table: RealtimeSyncTable, loading: boolean) => {
+    setRealtimeLoadingByTable(prev => (prev[table] === loading ? prev : { ...prev, [table]: loading }));
+  }, []);
+
+  const realtimeLoading = useMemo(
+    () => anyEnabledRealtimeLoading(realtimeSync, realtimeLoadingByTable),
+    [realtimeSync, realtimeLoadingByTable],
+  );
+
+  const bootstrapRealtimeLoading = useMemo(
+    () => anyBootstrapRealtimeLoading(realtimeSync, realtimeLoadingByTable),
+    [realtimeSync, realtimeLoadingByTable],
+  );
+
+  /** Limpa flags de loading de tabelas que deixaram de estar activas na rota (evita `realtimeLoading` preso). */
+  useEffect(() => {
+    setRealtimeLoadingByTable(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const table of REALTIME_SYNC_TABLES) {
+        if (!realtimeSync[table] && next[table]) {
+          next[table] = false;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [realtimeSync]);
 
   useEffect(() => {
+    if (!user?.id) {
+      bootstrapDoneRef.current = false;
+      setInitialDataReady(false);
+      setDataLoading(true);
+      return;
+    }
     setDataLoading(realtimeLoading);
-    if (!realtimeLoading) {
+    if (!bootstrapRealtimeLoading) {
+      bootstrapDoneRef.current = true;
       setDataError(null);
       setInitialDataReady(true);
+    } else if (bootstrapDoneRef.current) {
+      setInitialDataReady(true);
     }
-  }, [realtimeLoading]);
+  }, [user?.id, realtimeLoading, bootstrapRealtimeLoading]);
 
-  useEffect(() => setEmpresas(empresasRT.rows), [empresasRT.rows]);
-  useEffect(() => setDepartamentos(departamentosRT.rows), [departamentosRT.rows]);
-  useEffect(() => setColaboradores(colaboradoresRT.rows), [colaboradoresRT.rows]);
-  useEffect(() => setFerias(feriasRT.rows), [feriasRT.rows]);
-  useEffect(() => setFaltas(faltasRT.rows), [faltasRT.rows]);
-  useEffect(() => setRecibos(recibosRT.rows), [recibosRT.rows]);
-  useEffect(() => setDeclaracoes(declaracoesRT.rows), [declaracoesRT.rows]);
-  useEffect(() => setNoticias(noticiasRT.rows), [noticiasRT.rows]);
-  useEffect(() => setEventos(eventosRT.rows), [eventosRT.rows]);
-  useEffect(() => setComunicados(comunicadosRT.rows), [comunicadosRT.rows]);
-  useEffect(() => setRequisicoes(requisicoesRT.rows), [requisicoesRT.rows]);
-  useEffect(() => setCentrosCusto(centrosCustoRT.rows), [centrosCustoRT.rows]);
-  useEffect(() => setProjectos(projectosRT.rows), [projectosRT.rows]);
-  useEffect(() => setReunioes(reunioesRT.rows), [reunioesRT.rows]);
-  useEffect(() => setActas(actasRT.rows), [actasRT.rows]);
-  useEffect(() => setContratos(contratosRT.rows), [contratosRT.rows]);
-  useEffect(() => setProcessos(processosRT.rows), [processosRT.rows]);
-  useEffect(() => setPrazos(prazosRT.rows), [prazosRT.rows]);
-  useEffect(() => setCorrespondencias(correspondenciasRT.rows), [correspondenciasRT.rows]);
-  useEffect(() => setDocumentosOficiais(documentosOficiaisRT.rows), [documentosOficiaisRT.rows]);
-  useEffect(() => setRiscos(riscosRT.rows), [riscosRT.rows]);
-  useEffect(() => setPagamentos(pagamentosRT.rows), [pagamentosRT.rows]);
-  useEffect(() => setPendencias(pendenciasRT.rows), [pendenciasRT.rows]);
-  useEffect(() => setMovimentosTesouraria(movimentosTesourariaRT.rows), [movimentosTesourariaRT.rows]);
-  useEffect(() => setBancos(bancosRT.rows), [bancosRT.rows]);
-  useEffect(() => setContasBancarias(contasBancariasRT.rows), [contasBancariasRT.rows]);
-  useEffect(() => setRelatoriosPlaneamento(relatoriosPlaneamentoRT.rows), [relatoriosPlaneamentoRT.rows]);
-  useEffect(() => setProcessosDisciplinares(processosDisciplinaresRT.rows), [processosDisciplinaresRT.rows]);
-  useEffect(() => setRescissoesContrato(rescissoesContratoRT.rows), [rescissoesContratoRT.rows]);
-  useEffect(() => setGeofences(geofencesRT.rows), [geofencesRT.rows]);
-  useEffect(() => setColaboradorGeofenceLinks(colaboradorGeofencesRT.rows), [colaboradorGeofencesRT.rows]);
+  /** Evita ecrã «A carregar…» infinito se empresas/departamentos não responderem. */
+  useEffect(() => {
+    if (!user?.id || !isSupabaseConfigured()) {
+      if (!isSupabaseConfigured()) {
+        setInitialDataReady(true);
+        setDataLoading(false);
+      }
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      bootstrapDoneRef.current = true;
+      setInitialDataReady(true);
+      setDataLoading(false);
+    }, 8_000);
+    return () => window.clearTimeout(timeout);
+  }, [user?.id]);
 
   const reloadOrganizacaoSettings = useCallback(async () => {
     if (!supabase || !isSupabaseConfigured()) {
@@ -654,13 +625,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     patrimonioVerificacaoItens,
   ]);
 
-  function runMutation<T>(fn: () => Promise<T>, then?: (result: T) => void): Promise<T> {
+  const runMutation = useCallback(<T,>(fn: () => Promise<T>, then?: (result: T) => void): Promise<T> => {
     if (!supabase || !isSupabaseConfigured()) return Promise.reject(new Error('Supabase não configurado'));
     return fn().then(result => {
       then?.(result);
       return result;
     });
-  }
+  }, []);
 
   const addContrato = useCallback(
     (p: Partial<Contrato>) =>
@@ -1667,7 +1638,48 @@ export function DataProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+  return (
+    <DataContext.Provider value={value}>
+      {user?.id ? (
+        <DataRealtimeSyncLayer
+          sync={realtimeSync}
+          onLoadingChange={onRealtimeTableLoading}
+          setEmpresas={setEmpresas}
+          setDepartamentos={setDepartamentos}
+          setColaboradores={setColaboradores}
+          setFerias={setFerias}
+          setFaltas={setFaltas}
+          setRecibos={setRecibos}
+          setDeclaracoes={setDeclaracoes}
+          setNoticias={setNoticias}
+          setEventos={setEventos}
+          setComunicados={setComunicados}
+          setRequisicoes={setRequisicoes}
+          setCentrosCusto={setCentrosCusto}
+          setProjectos={setProjectos}
+          setReunioes={setReunioes}
+          setActas={setActas}
+          setContratos={setContratos}
+          setProcessos={setProcessos}
+          setPrazos={setPrazos}
+          setCorrespondencias={setCorrespondencias}
+          setDocumentosOficiais={setDocumentosOficiais}
+          setRiscos={setRiscos}
+          setPagamentos={setPagamentos}
+          setPendencias={setPendencias}
+          setMovimentosTesouraria={setMovimentosTesouraria}
+          setBancos={setBancos}
+          setContasBancarias={setContasBancarias}
+          setRelatoriosPlaneamento={setRelatoriosPlaneamento}
+          setProcessosDisciplinares={setProcessosDisciplinares}
+          setRescissoesContrato={setRescissoesContrato}
+          setGeofences={setGeofences}
+          setColaboradorGeofenceLinks={setColaboradorGeofenceLinks}
+        />
+      ) : null}
+      {children}
+    </DataContext.Provider>
+  );
 }
 
 export function useData() {

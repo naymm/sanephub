@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useColaboradorId } from '@/hooks/useColaboradorId';
 import type { Colaborador } from '@/types';
 import { formatDate } from '@/utils/formatters';
+import { labelGenero } from '@/utils/colaboradorGenero';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   rpcAlterarMeuPontoPin,
@@ -199,7 +200,7 @@ export default function PortalDadosPage() {
               <span className="text-muted-foreground">Data de nascimento</span>
               <span>{formatDate(colaborador.dataNascimento)}</span>
               <span className="text-muted-foreground">Género</span>
-              <span>{colaborador.genero === 'M' ? 'Masculino' : colaborador.genero === 'F' ? 'Feminino' : colaborador.genero}</span>
+              <span>{labelGenero(colaborador.genero)}</span>
               <span className="text-muted-foreground">Estado civil</span>
               <span>{colaborador.estadoCivil}</span>
               <span className="text-muted-foreground">BI</span>

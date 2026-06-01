@@ -1,4 +1,4 @@
-import { jsPDF } from "jspdf"
+import { loadJsPDF } from '@/lib/jspdfLoader';
 
 const MESES = [
 "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
@@ -41,12 +41,13 @@ morada:"Rua Direita da Samba, Edificio LGT, 1º Andar"
 const DIAS_MES = 22
 const CAMBIO = 500
 
-export function gerarPdfReciboBlob(
+export async function gerarPdfReciboBlob(
   recibo: any,
   colaborador: any,
   opts?: { irtTaxaPercent?: number | null },
-): Blob {
+): Promise<Blob> {
 
+const jsPDF = await loadJsPDF();
 const doc = new jsPDF({unit:"mm",format:"a4"})
 const pageW = doc.internal.pageSize.getWidth()
 
@@ -188,13 +189,22 @@ const descontoFaltas = Number(recibo.descontoFaltas) || 0;
 const diasFaltaDesconto = Number(recibo.diasFaltaDesconto) || 0;
 const outrasDeduzidas = Number(recibo.outrasDeducoes) || 0;
 
-const linhas: { cod: string; desc: string; rem: number; des: number }[] = [
-  { cod: "R01", desc: "Vencimento", rem: recibo.vencimentoBase, des: 0 },
-  { cod: "R11", desc: "Subsídio de alimentação", rem: recibo.subsidioAlimentacao, des: 0 },
-  { cod: "R13", desc: "Subsídio de transporte", rem: recibo.subsidioTransporte, des: 0 },
-  { cod: "R14", desc: "Outros subsídios", rem: recibo.outrosSubsidios, des: 0 },
-];
-if (descontoFaltas > 0) {
+const isAvencado =
+  colaborador?.isAvencado === true ||
+  ((recibo.retencao ?? 0) > 0 && recibo.inss === 0 && recibo.irt === 0);
+const retencaoVal = Number(recibo.retencao) || 0;
+const retPct = colaborador?.retencaoPercent === 2 ? 2 : 6.5;
+const retencaoLabel = `Retenção (${String(retPct).replace(".", ",")}%)`;
+
+const linhas: { cod: string; desc: string; rem: number; des: number }[] = isAvencado
+  ? [{ cod: "R01", desc: "Vencimento", rem: recibo.vencimentoBase, des: 0 }]
+  : [
+      { cod: "R01", desc: "Vencimento", rem: recibo.vencimentoBase, des: 0 },
+      { cod: "R11", desc: "Subsídio de alimentação", rem: recibo.subsidioAlimentacao, des: 0 },
+      { cod: "R13", desc: "Subsídio de transporte", rem: recibo.subsidioTransporte, des: 0 },
+      { cod: "R14", desc: "Outros subsídios", rem: recibo.outrosSubsidios, des: 0 },
+    ];
+if (!isAvencado && descontoFaltas > 0) {
   linhas.push({
     cod: "D00",
     desc: `Desconto por faltas`,
@@ -202,12 +212,16 @@ if (descontoFaltas > 0) {
     des: descontoFaltas,
   });
 }
-linhas.push(
-  { cod: "D01", desc: "Segurança Social (3%)", rem: 0, des: recibo.inss },
-  { cod: "D02", desc: irtLabel, rem: 0, des: recibo.irt },
-);
-if (outrasDeduzidas > 0) {
-  linhas.push({ cod: "D03", desc: "Outras deduções", rem: 0, des: outrasDeduzidas });
+if (isAvencado) {
+  linhas.push({ cod: "D01", desc: retencaoLabel, rem: 0, des: retencaoVal });
+} else {
+  linhas.push(
+    { cod: "D01", desc: "Segurança Social (3%)", rem: 0, des: recibo.inss },
+    { cod: "D02", desc: irtLabel, rem: 0, des: recibo.irt },
+  );
+  if (outrasDeduzidas > 0) {
+    linhas.push({ cod: "D03", desc: "Outras deduções", rem: 0, des: outrasDeduzidas });
+  }
 }
 
 linhas.forEach(l => {
@@ -244,11 +258,9 @@ recibo.subsidioAlimentacao+
 recibo.subsidioTransporte+
 recibo.outrosSubsidios
 
-const totalDesc =
-descontoFaltas +
-recibo.inss+
-recibo.irt +
-outrasDeduzidas
+const totalDesc = isAvencado
+  ? retencaoVal
+  : descontoFaltas + recibo.inss + recibo.irt + outrasDeduzidas
 
 
 doc.setFont("helvetica","bold")
@@ -280,6 +292,11 @@ doc.text("© PRIMAVERA BSS / Licença de: SANEP-SGPS, SA",left,285)
   return blob as Blob;
 }
 
-export function gerarPdfRecibo(recibo: any, colaborador: any, opts?: { irtTaxaPercent?: number | null }): string {
-  return URL.createObjectURL(gerarPdfReciboBlob(recibo, colaborador, opts));
+export async function gerarPdfRecibo(
+  recibo: any,
+  colaborador: any,
+  opts?: { irtTaxaPercent?: number | null }
+): Promise<string> {
+  const blob = await gerarPdfReciboBlob(recibo, colaborador, opts);
+  return URL.createObjectURL(blob);
 }

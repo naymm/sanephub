@@ -1,5 +1,5 @@
-import jsPDF from 'jspdf';
-import { autoTable } from 'jspdf-autotable';
+import type { jsPDF } from 'jspdf';
+import { loadJsPDFWithAutoTable, type AutoTableFn } from '@/lib/jspdfLoader';
 import type { RelatorioMensalPlaneamento, LinhaPlaneamento, SaldoBancario, PendenteValor } from '@/types';
 import {
   totalVendas,
@@ -76,6 +76,7 @@ function textBlock(doc: jsPDF, label: string, text: string, y: number): number {
 }
 
 function tableWithAutoTable(
+  autoTable: AutoTableFn,
   doc: JsPDFWithAutoTable,
   headers: string[],
   rows: (string | number)[][],
@@ -215,7 +216,8 @@ function mapLinhas(linhas: LinhaPlaneamento[]): (string | number)[][] {
   ]);
 }
 
-export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresaNome: string) {
+export async function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresaNome: string) {
+  const { jsPDF, autoTable } = await loadJsPDFWithAutoTable();
   const doc = new jsPDF({ unit: 'mm', format: 'a4' }) as JsPDFWithAutoTable;
   const mes = rel.mesAno.slice(5);
   const ano = rel.mesAno.slice(0, 4);
@@ -265,6 +267,7 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
   // ——— 2. Necessidades de investimento ———
   y = sectionTitle(doc, '2. Necessidades de investimento', y);
   y = tableWithAutoTable(
+    autoTable,
     doc,
     ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'],
     mapLinhas(rel.necessidadesInvestimento),
@@ -290,6 +293,7 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
     (r.qtdStockFinal * r.precoUnitFinal).toLocaleString('pt-PT'),
   ]);
   y = tableWithAutoTable(
+    autoTable,
     doc,
     ['Matéria-prima', 'Ini. qtd', 'Ini. p.u.', 'Ini. total', 'Fin. qtd', 'Fin. p.u.', 'Fin. total'],
     rowsMaterias,
@@ -298,6 +302,7 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
     'Stock inicial e stock final de matéria-prima (por linha)',
   );
   y = tableWithAutoTable(
+    autoTable,
     doc,
     ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'],
     mapLinhas(rel.comprasPeriodo),
@@ -314,16 +319,21 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
 
   // ——— 4. Demonstração de Resultados (tabelas) ———
   y = sectionTitle(doc, '4. Demonstração de Resultados', y);
-  y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.vendasProdutos), y, [90, 18, 35, 32]);
-  y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.vendasServicos), y, [90, 18, 35, 32]);
-  y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.custoMercadoriasVendidas), y, [90, 18, 35, 32]);
-  y = tableWithAutoTable(doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.fornecimentoServicosExternos), y, [90, 18, 35, 32]);
+  y = tableWithAutoTable(
+    autoTable,doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.vendasProdutos), y, [90, 18, 35, 32]);
+  y = tableWithAutoTable(
+    autoTable,doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.vendasServicos), y, [90, 18, 35, 32]);
+  y = tableWithAutoTable(
+    autoTable,doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.custoMercadoriasVendidas), y, [90, 18, 35, 32]);
+  y = tableWithAutoTable(
+    autoTable,doc, ['Descrição', 'Qtd.', 'Preço unit. (Kz)', 'Total (Kz)'], mapLinhas(rel.fornecimentoServicosExternos), y, [90, 18, 35, 32]);
   y += 4;
 
   const jFin = rel.jurosFinanceiros ?? 0;
   const depAm = rel.depreciacaoAmortizacoes ?? 0;
   const impLuc = rel.impostosLucro ?? 0;
   y = tableWithAutoTable(
+    autoTable,
     doc,
     ['Rubrica', 'Valor (Kz)'],
     [
@@ -383,11 +393,14 @@ export function gerarPdfRelatorioMensal(rel: RelatorioMensalPlaneamento, empresa
   // ——— 5. Liquidez Financeira ———
   y = sectionTitle(doc, '5. Liquidez Financeira', y);
   const saldosRows = rel.saldosBancarios.map(s => [s.banco, s.numeroConta, s.saldoActual.toLocaleString('pt-PT')]);
-  y = tableWithAutoTable(doc, ['Banco', 'Nº conta', 'Saldo (Kz)'], saldosRows, y, [60, 50, 52]);
+  y = tableWithAutoTable(
+    autoTable,doc, ['Banco', 'Nº conta', 'Saldo (Kz)'], saldosRows, y, [60, 50, 52]);
   const pendPagRows = rel.pendentesPagamento.map(p => [p.nome, p.valor.toLocaleString('pt-PT')]);
-  y = tableWithAutoTable(doc, ['Fornecedor / Descrição', 'Valor (Kz)'], pendPagRows, y, [100, 82]);
+  y = tableWithAutoTable(
+    autoTable,doc, ['Fornecedor / Descrição', 'Valor (Kz)'], pendPagRows, y, [100, 82]);
   const pendRecRows = rel.pendentesRecebimento.map(p => [p.nome, p.valor.toLocaleString('pt-PT')]);
-  y = tableWithAutoTable(doc, ['Cliente / Descrição', 'Valor (Kz)'], pendRecRows, y, [100, 82]);
+  y = tableWithAutoTable(
+    autoTable,doc, ['Cliente / Descrição', 'Valor (Kz)'], pendRecRows, y, [100, 82]);
 
   // Rodapé em todas as páginas
   const totalPages = (doc as any).internal?.getNumberOfPages?.() ?? 1;

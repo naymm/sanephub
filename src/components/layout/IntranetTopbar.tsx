@@ -65,22 +65,21 @@ export function IntranetTopbar() {
   const { getForProfile, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
 
-  if (!user) return null;
-
-  const headerAvatarSrc = userAvatarImageSrc(user);
-  const headerAvatarFallback = userAvatarFallbackLabel(user);
-
-  const notifAudience: NotificationAudienceOptions | undefined =
-    user.perfil === 'Colaborador' ? { colaboradorId: user.colaboradorId } : undefined;
-  const notifs = getForProfile(user.perfil, notifAudience);
-  const unread = unreadCount(user.perfil, notifAudience);
-
-  const hasPortalColaborador = user.perfil === 'Colaborador' && Array.isArray(user.modulos) && user.modulos.includes('portal-colaborador');
-  const hasAnyNonPortalModule =
-    hasPortalColaborador && Array.isArray(user.modulos) && user.modulos.some(m => m !== 'portal-colaborador');
-
   const [appsOpen, setAppsOpen] = useState(false);
   const [selectedPrincipalModuleId, setSelectedPrincipalModuleId] = useState<string | null>(null);
+
+  const headerAvatarSrc = user ? userAvatarImageSrc(user) : null;
+  const headerAvatarFallback = user ? userAvatarFallbackLabel(user) : '';
+
+  const notifAudience: NotificationAudienceOptions | undefined =
+    user?.perfil === 'Colaborador' ? { colaboradorId: user.colaboradorId } : undefined;
+  const notifs = user ? getForProfile(user.perfil, notifAudience) : [];
+  const unread = user ? unreadCount(user.perfil, notifAudience) : 0;
+
+  const hasPortalColaborador =
+    user?.perfil === 'Colaborador' && Array.isArray(user.modulos) && user.modulos.includes('portal-colaborador');
+  const hasAnyNonPortalModule =
+    hasPortalColaborador && Array.isArray(user?.modulos) && user.modulos.some(m => m !== 'portal-colaborador');
 
   const modulosAtivos = useMemo(() => {
     return getModulosAtivosForContext(currentEmpresaId, empresas);
@@ -91,6 +90,7 @@ export function IntranetTopbar() {
   );
 
   const canShowModule = (moduleId?: string) => {
+    if (!user) return false;
     if (!moduleId) return true;
     if (moduleId === 'facturacao' && !facturacaoActiva) return false;
     if (!orgModuloEstaActivado(organizacaoSettings, moduleId)) return false;
@@ -210,6 +210,8 @@ export function IntranetTopbar() {
     if (!selectedPrincipalModuleId) return '';
     return principalModules.find(m => m.moduleId === selectedPrincipalModuleId)?.label ?? '';
   }, [principalModules, selectedPrincipalModuleId]);
+
+  if (!user) return null;
 
   return (
     <>

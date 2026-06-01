@@ -175,7 +175,7 @@ export default function FacturacaoPage() {
             ? 'Transmissão de bens e serviço não sujeita'
             : null;
 
-        const blob = generateFacturaPdfBlob({
+        const blob = await generateFacturaPdfBlob({
           emitente: {
             nome: empresaActiva?.nome?.trim() || 'Empresa',
             nif: empresaActiva?.nif ?? null,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Database } from '@/types/supabase';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { mapRowFromDb, NUMERIC_KEYS } from '@/lib/supabaseMappers';
+import { getRealtimeTableSelect } from '@/lib/realtimeTableSelects';
 import { useAuth } from '@/context/AuthContext';
 
 type PostgresChangesPayload = {
@@ -33,31 +34,43 @@ export function useRealtimeTable<T>(
   opts?: {
     /** Quando o DB devolve campos "snake_case", mapeia o payload para o shape final. */
     mapRow?: (row: Record<string, unknown>) => T;
+    /** Se false, não faz fetch nem subscreve realtime (ex.: módulo sem acesso). */
+    enabled?: boolean;
+    /** Colunas PostgREST (por defeito: projeção optimizada por tabela). */
+    select?: string;
   }
 ) {
   const [rows, setRows] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { isAuthReady, authSessionRevision } = useAuth();
+  const { isAuthReady, user } = useAuth();
 
   // Ref evita re-subscrições/fetch quando o consumidor passa mapRow inline (nova ref a cada render).
   const mapRowRef = useRef(opts?.mapRow);
   mapRowRef.current = opts?.mapRow;
+  const enabled = opts?.enabled !== false;
+  const selectRef = useRef(opts?.select);
+  selectRef.current = opts?.select ?? getRealtimeTableSelect(table);
 
   useEffect(() => {
+    if (!enabled) {
+      setRows([]);
+      setIsLoading(false);
+      return;
+    }
+
     if (!isSupabaseConfigured() || !supabase) {
       setRows([]);
       setIsLoading(false);
       return;
     }
 
-    if (!isAuthReady) {
+    if (!isAuthReady || !user) {
       setRows([]);
-      setIsLoading(true);
+      setIsLoading(false);
       return;
     }
 
-    let cancelled = false;
-    /** Preenchido após `getSession()` — cleanup pode correr antes ou depois do async. */
+    let generation = 0;
     let runTeardown: (() => void) | null = null;
 
     const mapRowFn = (r: Record<string, unknown>) => {
@@ -65,21 +78,18 @@ export function useRealtimeTable<T>(
       return custom ? custom(r) : mapRowFromDb<T>(table, r);
     };
 
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      if (cancelled) return;
-      if (!session?.user) {
-        setRows([]);
-        setIsLoading(false);
-        return;
-      }
+    const setupGen = generation;
+    const cleanups: Array<() => void> = [];
 
-      const cleanups: Array<() => void> = [];
-
-      const fetchInitial = async () => {
-        setIsLoading(true);
+    const fetchInitial = async () => {
+      const fetchGen = generation;
+      setIsLoading(true);
+      try {
         const { data, error } = await supabase
           .from(table as keyof Database['public']['Tables'])
-          .select('*');
+          .select(selectRef.current);
+
+        if (fetchGen !== generation) return;
 
         if (error) {
           const blob = `${error.message ?? ''} ${error.code ?? ''}`.toLowerCase();
@@ -94,19 +104,22 @@ export function useRealtimeTable<T>(
           } else {
             console.error(`[useRealtimeTable] Initial fetch failed for ${String(table)}`, error);
           }
-          if (!cancelled) setRows([]);
-          if (!cancelled) setIsLoading(false);
+          setRows([]);
           return;
         }
 
         const mapped = (data ?? []).map(r => mapRowFn(r as Record<string, unknown>));
-        if (!cancelled) {
-          setRows(mapped);
-          setIsLoading(false);
-        }
-      };
+        setRows(mapped);
+      } catch (e) {
+        if (fetchGen !== generation) return;
+        console.error(`[useRealtimeTable] Initial fetch exception for ${String(table)}`, e);
+        setRows([]);
+      } finally {
+        if (fetchGen === generation) setIsLoading(false);
+      }
+    };
 
-      void fetchInitial();
+    void fetchInitial();
 
       const pkCamel = toCamelKey(primaryKeyColumn);
 
@@ -123,7 +136,7 @@ export function useRealtimeTable<T>(
           const es = new EventSource(url.toString());
 
           es.onmessage = (event) => {
-            if (cancelled) return;
+            if (setupGen !== generation) return;
             try {
               const payload = JSON.parse(event.data) as PostgresChangesPayload;
               if (payload.eventType === 'INSERT') {
@@ -178,7 +191,7 @@ export function useRealtimeTable<T>(
         if (!row) return;
         const mapped = mapRowFn(row);
         const id = (mapped as any)?.[pkCamel];
-        console.log(`[useRealtimeTable] INSERT ${String(table)} id=${id}`);
+        if (import.meta.env.DEV) console.log(`[useRealtimeTable] INSERT ${String(table)} id=${id}`);
         if (id == null) return;
 
         setRows(prev => {
@@ -193,7 +206,7 @@ export function useRealtimeTable<T>(
         if (!row) return;
         const mapped = mapRowFn(row);
         const id = (mapped as any)?.[pkCamel];
-        console.log(`[useRealtimeTable] UPDATE ${String(table)} id=${id}`);
+        if (import.meta.env.DEV) console.log(`[useRealtimeTable] UPDATE ${String(table)} id=${id}`);
         if (id == null) return;
 
         setRows(prev => {
@@ -207,7 +220,7 @@ export function useRealtimeTable<T>(
         const row = payload?.old;
         if (!row) return;
         const id = (row as any)?.[primaryKeyColumn] ?? (row as any)?.[pkCamel];
-        console.log(`[useRealtimeTable] DELETE ${String(table)} id=${id}`);
+        if (import.meta.env.DEV) console.log(`[useRealtimeTable] DELETE ${String(table)} id=${id}`);
         if (id == null) return;
 
         setRows(prev => prev.filter(x => !samePk((x as any)?.[pkCamel], id)));
@@ -219,7 +232,9 @@ export function useRealtimeTable<T>(
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: String(table) }, handleDelete);
 
       channel.subscribe(status => {
-        console.log(`[useRealtimeTable] channel ${channelName} status=${String(status)}`);
+        if (import.meta.env.DEV) {
+          console.log(`[useRealtimeTable] channel ${channelName} status=${String(status)}`);
+        }
       });
 
       cleanups.push(() => {
@@ -230,28 +245,24 @@ export function useRealtimeTable<T>(
         }
       });
 
-      runTeardown = () => {
-        for (const fn of cleanups) {
-          try {
-            fn();
-          } catch {
-            // ignore
-          }
+    runTeardown = () => {
+      for (const fn of cleanups) {
+        try {
+          fn();
+        } catch {
+          // ignore
         }
-      };
-    }).catch(() => {
-      if (cancelled) return;
-      setRows([]);
-      setIsLoading(false);
-    });
+      }
+    };
 
     return () => {
-      cancelled = true;
+      generation += 1;
+      setIsLoading(false);
       runTeardown?.();
       runTeardown = null;
     };
-  }, [primaryKeyColumn, table, isAuthReady, authSessionRevision]);
+  }, [primaryKeyColumn, table, isAuthReady, enabled, user?.id]);
 
-  return { rows, isLoading };
+  return { rows, isLoading: enabled ? isLoading : false };
 }
 

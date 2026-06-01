@@ -1,9 +1,15 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Navigate, Outlet } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth, hasModuleAccess } from '@/context/AuthContext';
 import { CI_MODULE_KICKER, CI_MODULE_TITLE, CI_NAV } from '@/modules/controlo-interno/constants';
 
 export function ControloInternoLayout() {
+  const { user } = useAuth();
+  if (!user || !hasModuleAccess(user, 'controlo-interno')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-1">

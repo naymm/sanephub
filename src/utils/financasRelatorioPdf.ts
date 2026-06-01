@@ -1,5 +1,5 @@
-import jsPDF from 'jspdf';
-import { autoTable } from 'jspdf-autotable';
+import type { jsPDF } from 'jspdf';
+import { loadJsPDFWithAutoTable } from '@/lib/jspdfLoader';
 import type { Requisicao } from '@/types';
 import { formatKz, formatDate } from '@/utils/formatters';
 
@@ -120,7 +120,8 @@ function addFootersAllPages(doc: jsPDF) {
 /**
  * Exporta o relatório de requisições (finanças) em PDF com layout profissional.
  */
-export function exportRelatorioFinanceiroPdf(input: FinancasRelatorioPdfInput): void {
+export async function exportRelatorioFinanceiroPdf(input: FinancasRelatorioPdfInput): Promise<void> {
+  const { jsPDF, autoTable } = await loadJsPDFWithAutoTable();
   const {
     ano,
     mesInicio,

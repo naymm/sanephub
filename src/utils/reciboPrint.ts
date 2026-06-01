@@ -233,23 +233,35 @@ function escapeHtml(s: string): string {
 export function getReciboPrintHtml(recibo: ReciboSalario, colaborador: Colaborador): string {
   const descontoFaltas = recibo.descontoFaltas ?? 0;
   const diasFalta = recibo.diasFaltaDesconto ?? 0;
-  const totalRemun = recibo.vencimentoBase + recibo.subsidioAlimentacao + recibo.subsidioTransporte + recibo.outrosSubsidios;
-  const totalDeducoes = descontoFaltas + recibo.inss + recibo.irt + recibo.outrasDeducoes;
+  const isAvencado =
+    colaborador.isAvencado === true ||
+    ((recibo.retencao ?? 0) > 0 && recibo.inss === 0 && recibo.irt === 0);
+  const retencaoVal = recibo.retencao ?? 0;
+  const retPct = colaborador.retencaoPercent === 2 ? 2 : 6.5;
+  const totalRemun = isAvencado
+    ? recibo.vencimentoBase
+    : recibo.vencimentoBase + recibo.subsidioAlimentacao + recibo.subsidioTransporte + recibo.outrosSubsidios;
+  const totalDeducoes = isAvencado
+    ? retencaoVal
+    : descontoFaltas + recibo.inss + recibo.irt + recibo.outrasDeducoes;
   const vencHora = DIAS_MES > 0 ? recibo.vencimentoBase / (DIAS_MES * 8) : 0;
   const dataCod = dataCodigo(recibo.mesAno);
   const numMecan = 100 + colaborador.id;
   const numBenef = colaborador.niss?.slice(0, 9).padStart(9, '0') ?? String(colaborador.id).padStart(9, '0');
   const numContrib = colaborador.niss ?? '';
 
-  const linhas: { cod: string; desc: string; remun: number; descVal: number }[] = [
-    { cod: 'R01', desc: 'Vencimento', remun: recibo.vencimentoBase, descVal: 0 },
-    { cod: 'R11', desc: 'Subsídio de alimentação', remun: recibo.subsidioAlimentacao, descVal: 0 },
-    { cod: 'R13', desc: 'Subsídio de transporte', remun: recibo.subsidioTransporte, descVal: 0 },
-  ];
-  if (recibo.outrosSubsidios > 0) {
+  const retencaoLabel = `Retenção (${String(retPct).replace('.', ',')}%)`;
+  const linhas: { cod: string; desc: string; remun: number; descVal: number }[] = isAvencado
+    ? [{ cod: 'R01', desc: 'Vencimento', remun: recibo.vencimentoBase, descVal: 0 }]
+    : [
+        { cod: 'R01', desc: 'Vencimento', remun: recibo.vencimentoBase, descVal: 0 },
+        { cod: 'R11', desc: 'Subsídio de alimentação', remun: recibo.subsidioAlimentacao, descVal: 0 },
+        { cod: 'R13', desc: 'Subsídio de transporte', remun: recibo.subsidioTransporte, descVal: 0 },
+      ];
+  if (!isAvencado && recibo.outrosSubsidios > 0) {
     linhas.push({ cod: 'R14', desc: 'Subsídio de disponibilidade', remun: recibo.outrosSubsidios, descVal: 0 });
   }
-  if (descontoFaltas > 0) {
+  if (!isAvencado && descontoFaltas > 0) {
     linhas.push({
       cod: 'D00',
       desc: `Desconto por faltas`,
@@ -257,12 +269,16 @@ export function getReciboPrintHtml(recibo: ReciboSalario, colaborador: Colaborad
       descVal: descontoFaltas,
     });
   }
-  linhas.push(
-    { cod: 'D01', desc: 'Segurança Social (3%)', remun: 0, descVal: recibo.inss },
-    { cod: 'D02', desc: 'IRT (19%)', remun: 0, descVal: recibo.irt },
-  );
-  if (recibo.outrasDeducoes > 0) {
-    linhas.push({ cod: 'D03', desc: 'Outras deduções', remun: 0, descVal: recibo.outrasDeducoes });
+  if (isAvencado) {
+    linhas.push({ cod: 'D01', desc: retencaoLabel, remun: 0, descVal: retencaoVal });
+  } else {
+    linhas.push(
+      { cod: 'D01', desc: 'Segurança Social (3%)', remun: 0, descVal: recibo.inss },
+      { cod: 'D02', desc: 'IRT (19%)', remun: 0, descVal: recibo.irt },
+    );
+    if (recibo.outrasDeducoes > 0) {
+      linhas.push({ cod: 'D03', desc: 'Outras deduções', remun: 0, descVal: recibo.outrasDeducoes });
+    }
   }
 
   const tableRows = linhas
