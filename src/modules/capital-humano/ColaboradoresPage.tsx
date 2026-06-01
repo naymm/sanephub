@@ -169,6 +169,61 @@ function horarioParaInput(valor: string | undefined, fallback: string): string {
   return `${h}:${min}`;
 }
 
+/** Normaliza registo (lista paginada ou detalhe) para o estado do formulário — evita crash em Selects com `undefined`. */
+function colaboradorToFormState(row: Colaborador): ColaboradorFormState {
+  const tipo =
+    row.tipoContrato && (TIPO_CONTRATO_OPTIONS as readonly string[]).includes(row.tipoContrato)
+      ? row.tipoContrato
+      : emptyForm.tipoContrato;
+  const status =
+    row.status && (STATUS_OPTIONS as readonly string[]).includes(row.status) ? row.status : emptyForm.status;
+  return {
+    ...emptyForm,
+    empresaId: Number(row.empresaId) > 0 ? Number(row.empresaId) : emptyForm.empresaId,
+    numeroMec: row.numeroMec?.trim() ?? '',
+    nome: row.nome?.trim() ?? '',
+    dataNascimento: row.dataNascimento ?? '',
+    genero: row.genero ?? '',
+    estadoCivil: row.estadoCivil?.trim() || emptyForm.estadoCivil,
+    bi: row.bi?.trim() ?? '',
+    nif: row.nif?.trim() ?? '',
+    niss: row.niss?.trim() ?? '',
+    nacionalidade: nacionalidadeParaSelect(String(row.nacionalidade ?? '')),
+    nivelAcademico: row.nivelAcademico?.trim() || emptyForm.nivelAcademico,
+    fotoPerfilUrl: row.fotoPerfilUrl ?? undefined,
+    endereco: row.endereco?.trim() ?? '',
+    cargo: row.cargo?.trim() || emptyForm.cargo,
+    departamento: row.departamento?.trim() ?? '',
+    dataAdmissao: row.dataAdmissao ?? '',
+    tipoContrato: tipo,
+    dataFimContrato: row.dataFimContrato,
+    salarioBase: Number(row.salarioBase) || 0,
+    isAvencado: row.isAvencado === true,
+    retencaoPercent: row.retencaoPercent === 2 ? 2 : 6.5,
+    subsidioAlimentacao: row.subsidioAlimentacao ?? emptyForm.subsidioAlimentacao,
+    subsidioTransporte: row.subsidioTransporte ?? emptyForm.subsidioTransporte,
+    outrosSubsidios: row.outrosSubsidios ?? 0,
+    subsidioNatal: row.subsidioNatal ?? 0,
+    abonoFamilia: row.abonoFamilia ?? 0,
+    subsidioTurno: row.subsidioTurno ?? 0,
+    subsidioDisponibilidade: row.subsidioDisponibilidade ?? 0,
+    subsidioRisco: row.subsidioRisco ?? 0,
+    subsidioAtavio: row.subsidioAtavio ?? 0,
+    subsidioRepresentacao: row.subsidioRepresentacao ?? 0,
+    iban: row.iban?.trim() ?? '',
+    emailCorporativo: row.emailCorporativo?.trim() ?? '',
+    emailPessoal: row.emailPessoal?.trim() ?? '',
+    telefonePrincipal: row.telefonePrincipal?.trim() ?? '',
+    telefoneAlternativo: row.telefoneAlternativo?.trim() ?? '',
+    contactoEmergenciaNome: row.contactoEmergenciaNome?.trim() ?? '',
+    contactoEmergenciaTelefone: row.contactoEmergenciaTelefone?.trim() ?? '',
+    status,
+    horarioEntrada: horarioParaInput(row.horarioEntrada, '08:00'),
+    horarioSaida: horarioParaInput(row.horarioSaida, '17:00'),
+    isencaoHorario: row.isencaoHorario === true,
+  };
+}
+
 type SubsidioKey =
   | 'subsidioAlimentacao'
   | 'subsidioTransporte'
@@ -193,6 +248,11 @@ const SUBSIDIOS_CONFIG: Array<{ key: SubsidioKey; label: string }> = [
 ];
 
 const SUBSIDIOS_ALL_KEYS: SubsidioKey[] = SUBSIDIOS_CONFIG.map(x => x.key);
+
+function subsidiosActivosFromColaborador(row: Colaborador): SubsidioKey[] {
+  return SUBSIDIOS_ALL_KEYS.filter(k => Number((row as Record<string, unknown>)[k] ?? 0) > 0);
+}
+
 /** Subsídios detalhados usados no campo legado `outrosSubsidios` (exclui Alimentação e Transporte). */
 const SUBSIDIOS_DYNAMIC_KEYS: SubsidioKey[] = SUBSIDIOS_CONFIG.map(x => x.key).filter(
   k => k !== 'subsidioAlimentacao' && k !== 'subsidioTransporte',
@@ -586,8 +646,9 @@ export default function ColaboradoresPage() {
   const departamentoSelectOptions = useMemo(() => {
     const nomes = departamentosCatalogo.map(d => d.nome.trim()).filter(Boolean);
     const unique = [...new Set(nomes)].sort((a, b) => a.localeCompare(b, 'pt'));
-    if (form.departamento.trim() && !unique.includes(form.departamento)) {
-      return [...unique, form.departamento].sort((a, b) => a.localeCompare(b, 'pt'));
+    const dept = (form.departamento ?? '').trim();
+    if (dept && !unique.includes(dept)) {
+      return [...unique, dept].sort((a, b) => a.localeCompare(b, 'pt'));
     }
     return unique;
   }, [departamentosCatalogo, form.departamento]);
@@ -684,79 +745,48 @@ export default function ColaboradoresPage() {
     setDialogOpen(true);
   };
 
+  const applyFormFromColaborador = useCallback(
+    (row: Colaborador) => {
+      const nextForm = colaboradorToFormState(row);
+      setForm(nextForm);
+      setSalarioBaseText(formatKzInput(nextForm.salarioBase ?? 0));
+      setSubsidioTextByKey({});
+      setSubsidiosAtivos(subsidiosActivosFromColaborador(row));
+      setSubsidioParaAdicionar('__none__');
+      setEditandoSubsidio(null);
+      setFormGeofenceIds(geofenceIdsByColaborador.get(row.id) ?? []);
+      setMobileWizardStep(1);
+    },
+    [geofenceIdsByColaborador],
+  );
+
   const openEdit = (c: Colaborador) => {
-    setNovoColaboradorAnexos([]);
-    docDragDepth.current = 0;
-    setDocDragActive(false);
-    limparPreviewFoto();
-    setFotoPerfilRemovida(false);
-    setEditing(c);
-    const usuarioLinked = usuarios.find(u => u.colaboradorId === c.id);
-    setAssociarUtilizadorId(usuarioLinked?.id ?? null);
-    const applyFormFromColaborador = (row: Colaborador) => {
-    setForm({
-      empresaId: row.empresaId,
-      numeroMec: row.numeroMec?.trim() ?? '',
-      nome: row.nome,
-      dataNascimento: row.dataNascimento,
-      genero: row.genero,
-      estadoCivil: row.estadoCivil?.trim() || 'Solteiro(a)',
-      bi: row.bi,
-      nif: row.nif,
-      niss: row.niss,
-      nacionalidade: nacionalidadeParaSelect(row.nacionalidade ?? ''),
-      nivelAcademico: row.nivelAcademico?.trim() || 'Ensino Secundário',
-      fotoPerfilUrl: row.fotoPerfilUrl ?? undefined,
-      endereco: row.endereco,
-      cargo: row.cargo?.trim() || 'Técnico',
-      departamento: row.departamento,
-      dataAdmissao: row.dataAdmissao,
-      tipoContrato: row.tipoContrato,
-      dataFimContrato: row.dataFimContrato,
-      salarioBase: row.salarioBase,
-      isAvencado: row.isAvencado === true,
-      retencaoPercent: row.retencaoPercent === 2 ? 2 : 6.5,
-      subsidioAlimentacao: row.subsidioAlimentacao ?? 25000,
-      subsidioTransporte: row.subsidioTransporte ?? 20000,
-      outrosSubsidios: row.outrosSubsidios ?? 0,
-      subsidioNatal: row.subsidioNatal ?? 0,
-      abonoFamilia: row.abonoFamilia ?? 0,
-      subsidioTurno: row.subsidioTurno ?? 0,
-      subsidioDisponibilidade: row.subsidioDisponibilidade ?? 0,
-      subsidioRisco: row.subsidioRisco ?? 0,
-      subsidioAtavio: row.subsidioAtavio ?? 0,
-      subsidioRepresentacao: row.subsidioRepresentacao ?? 0,
-      iban: row.iban,
-      emailCorporativo: row.emailCorporativo,
-      emailPessoal: row.emailPessoal,
-      telefonePrincipal: row.telefonePrincipal,
-      telefoneAlternativo: row.telefoneAlternativo,
-      contactoEmergenciaNome: row.contactoEmergenciaNome,
-      contactoEmergenciaTelefone: row.contactoEmergenciaTelefone,
-      status: row.status,
-      horarioEntrada: horarioParaInput(row.horarioEntrada, '08:00'),
-      horarioSaida: horarioParaInput(row.horarioSaida, '17:00'),
-      isencaoHorario: row.isencaoHorario === true,
-    });
-    setSalarioBaseText(formatKzInput(row.salarioBase ?? 0));
-    setSubsidioTextByKey({});
-    const activos = SUBSIDIOS_ALL_KEYS.filter(k => Number((row as any)[k] ?? 0) > 0);
-    setSubsidiosAtivos(activos);
-    setSubsidioParaAdicionar('__none__');
-    setEditandoSubsidio(null);
-    setFormGeofenceIds(geofenceIdsByColaborador.get(row.id) ?? []);
-    setMobileWizardStep(1);
-    setDialogOpen(true);
-    };
-    applyFormFromColaborador(c);
-    if (isSupabaseConfigured() && supabase) {
-      void fetchColaboradorById(supabase, c.id)
-        .then(full => {
-          if (full) applyFormFromColaborador(full);
-        })
-        .catch(() => {
-          /* mantém dados da listagem */
-        });
+    try {
+      setNovoColaboradorAnexos([]);
+      docDragDepth.current = 0;
+      setDocDragActive(false);
+      limparPreviewFoto();
+      setFotoPerfilRemovida(false);
+      setEditing(c);
+      const usuarioLinked = usuarios.find(u => u.colaboradorId === c.id);
+      setAssociarUtilizadorId(usuarioLinked?.id ?? null);
+      applyFormFromColaborador(c);
+      setDialogOpen(true);
+      if (isSupabaseConfigured() && supabase) {
+        void fetchColaboradorById(supabase, c.id)
+          .then(full => {
+            if (full) applyFormFromColaborador(full);
+          })
+          .catch(err => {
+            if (import.meta.env.DEV) {
+              console.warn('[colaboradores] detalhe para edição', err);
+            }
+          });
+      }
+    } catch (e) {
+      console.error('[colaboradores] openEdit', e);
+      toast.error('Não foi possível abrir o formulário de edição.');
+      setDialogOpen(false);
     }
   };
 
@@ -1295,7 +1325,7 @@ export default function ColaboradoresPage() {
             </p>
           ) : null}
           <Select
-            value={form.departamento.trim() ? form.departamento : DEPARTAMENTO_SELECT_VAZIO}
+            value={(form.departamento ?? '').trim() || DEPARTAMENTO_SELECT_VAZIO}
             onValueChange={v =>
               setForm(f => ({ ...f, departamento: v === DEPARTAMENTO_SELECT_VAZIO ? '' : v }))
             }
@@ -1401,7 +1431,10 @@ export default function ColaboradoresPage() {
         </div>
         <div className="min-w-0 space-y-2">
           <Label>Tipo contrato</Label>
-          <Select value={form.tipoContrato} onValueChange={v => setForm(f => ({ ...f, tipoContrato: v as TipoContrato }))}>
+          <Select
+            value={form.tipoContrato || emptyForm.tipoContrato}
+            onValueChange={v => setForm(f => ({ ...f, tipoContrato: v as TipoContrato }))}
+          >
             <SelectTrigger className="min-w-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               {TIPO_CONTRATO_OPTIONS.map(t => (
