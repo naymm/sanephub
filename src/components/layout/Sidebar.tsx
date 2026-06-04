@@ -55,7 +55,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Facturação',
     icon: Receipt,
     module: 'facturacao',
-    children: [{ label: 'Facturas', path: '/facturacao' }],
+    children: [{ label: 'Dashboard', path: '/facturacao' }],
   },
   {
     label: 'Contabilidade', icon: BarChart3, module: 'contabilidade',

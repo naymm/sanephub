@@ -98,10 +98,7 @@ export const MODULE_GROUPS: MenuGroup[] = [
     label: 'Facturação',
     module: 'facturacao',
     icon: Receipt,
-    children: [
-      { label: 'Facturas', path: '/facturacao', module: 'facturacao' },
-      { label: 'Receita', path: '/facturacao/receita', module: 'facturacao' },
-    ],
+    children: [{ label: 'Dashboard', path: '/facturacao', module: 'facturacao' }],
   },
   {
     label: 'Contabilidade',

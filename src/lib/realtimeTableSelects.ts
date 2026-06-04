@@ -15,9 +15,11 @@ const SELECT_BY_TABLE: Partial<Record<RealtimeSyncTable, string>> = {
   eventos: 'id, empresa_id, titulo, descricao, data_inicio, data_fim, local, imagem_url, alertar_antes_horas',
   comunicados: 'id, empresa_id, titulo, conteudo, data_publicacao, autor_perfil_id',
   requisicoes:
-    'id, empresa_id, requisitante_colaborador_id, descricao, quantidade, valor_unitario, valor, status, centro_custo_id, projecto_id, data_pedido',
-  centros_custo: 'id, empresa_id, nome, codigo, orcamento_mensal, orcamento_anual, gasto_actual',
-  projectos: 'id, empresa_id, nome, codigo, orcamento_total, gasto, centro_custo_id, data_inicio, data_fim, status',
+    'id, empresa_id, num, fornecedor, nif_fornecedor, descricao, quantidade, valor_unitario, valor, departamento, centro_custo, projecto, data, status, proforma, proforma_anexos, factura, factura_final_anexos, comprovante, comprovativo_anexos, comprovativo_anexado_em, enviado_contabilidade, motivo_rejeicao, aprovado_por, data_pagamento, observacoes, requisitante_colaborador_id',
+  centros_custo:
+    'id, empresa_id, codigo, nome, descricao, responsavel, orcamento_mensal, orcamento_anual, gasto_actual, status',
+  projectos:
+    'id, empresa_id, codigo, nome, descricao, responsavel, orcamento_total, gasto, data_inicio, data_fim, status',
   reunioes: 'id, empresa_id, titulo, data, local, tipo, presidida_por, participantes_ids, participantes_nomes',
   actas: 'id, reuniao_id, titulo, data, conteudo, presidida_por, participantes_ids, participantes_nomes',
   contratos:
@@ -27,12 +29,13 @@ const SELECT_BY_TABLE: Partial<Record<RealtimeSyncTable, string>> = {
   correspondencias: 'id, empresa_id, remetente, destinatario, assunto, data, tipo, status',
   documentos_oficiais: 'id, empresa_id, colaborador_id, titulo, tipo, data_ref, ficheiro_url, storage_path',
   riscos_juridicos: 'id, empresa_id, titulo, descricao, probabilidade, impacto, mitigacao, status',
-  pagamentos: 'id, requisicao_id, valor, data, metodo, referencia',
+  pagamentos:
+    'id, requisicao_id, referencia, beneficiario, valor, data_pagamento, metodo_pagamento, conta_bancaria, comprovante, status, registado_por, registado_em, observacoes',
   pendencias_documentais: 'id, entidade_tipo, entidade_id, descricao, data_limite, status',
   movimentos_tesouraria:
-    'id, empresa_id, tipo, valor, data, descricao, centro_custo_id, projecto_id, requisicao_id, conta_bancaria_id',
-  bancos: 'id, nome, codigo, swift',
-  contas_bancarias: 'id, empresa_id, banco_id, numero, iban, saldo_actual, activo',
+    'id, empresa_id, tipo, referencia, valor, data, metodo_pagamento, descricao, origem, beneficiario, categoria_saida, centro_custo_id, projecto_id, requisicao_id, conta_bancaria_id, comprovativo_anexos, proforma_anexos, factura_final_anexos, registado_por, registado_em, observacoes',
+  bancos: 'id, nome, codigo, activo',
+  contas_bancarias: 'id, empresa_id, banco_id, numero_conta, saldo_actual, descricao',
   relatorios_planeamento:
     'id, empresa_id, mes_ano, ebitda, margem_bruta, margem_ebitda, juros_financeiros, depreciacao_amortizacoes, impostos_lucro, resultado_liquido',
   processos_disciplinares: 'id, empresa_id, colaborador_id, titulo, status, data_abertura, data_fecho',

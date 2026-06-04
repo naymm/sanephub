@@ -109,9 +109,9 @@ export default function ProjectosPage() {
 
   const filtered = projectos.filter(p => {
     const matchSearch =
-      p.codigo.toLowerCase().includes(search.toLowerCase()) ||
-      p.nome.toLowerCase().includes(search.toLowerCase()) ||
-      p.responsavel.toLowerCase().includes(search.toLowerCase());
+      (p.codigo ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.nome ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.responsavel ?? '').toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'todos' || p.status === statusFilter;
     return matchSearch && matchStatus;
   });

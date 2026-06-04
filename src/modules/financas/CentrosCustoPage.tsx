@@ -101,10 +101,11 @@ export default function CentrosCustoPage() {
   });
 
   const filtered = centrosCusto.filter(cc => {
+    const q = search.toLowerCase();
     const matchSearch =
-      cc.codigo.toLowerCase().includes(search.toLowerCase()) ||
-      cc.nome.toLowerCase().includes(search.toLowerCase()) ||
-      cc.responsavel.toLowerCase().includes(search.toLowerCase());
+      (cc.codigo ?? '').toLowerCase().includes(q) ||
+      (cc.nome ?? '').toLowerCase().includes(q) ||
+      (cc.responsavel ?? '').toLowerCase().includes(q);
     const matchStatus = statusFilter === 'todos' || cc.status === statusFilter;
     return matchSearch && matchStatus;
   });

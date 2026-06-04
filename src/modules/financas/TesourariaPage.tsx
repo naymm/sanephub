@@ -144,8 +144,8 @@ export default function TesourariaPage() {
       : '';
     const matchSearch =
       !searchLower ||
-      m.referencia.toLowerCase().includes(searchLower) ||
-      m.descricao.toLowerCase().includes(searchLower) ||
+      (m.referencia ?? '').toLowerCase().includes(searchLower) ||
+      (m.descricao ?? '').toLowerCase().includes(searchLower) ||
       (m.origem ?? '').toLowerCase().includes(searchLower) ||
       (m.beneficiario ?? '').toLowerCase().includes(searchLower) ||
       contaTxt.includes(searchLower);

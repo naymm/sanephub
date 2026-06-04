@@ -646,7 +646,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  onClick={() => navigate('/facturacao/receita')}
+                  onClick={() => navigate('/facturacao')}
                 >
                   <KpiCard
                     title="Receita"
