@@ -54,6 +54,7 @@ import {
   Paperclip,
   TrendingDown,
   TrendingUp,
+  X,
 } from 'lucide-react';
 import {
   DndContext,
@@ -84,46 +85,84 @@ function isAllowedDeliverableFile(f: File): boolean {
 
 const ENTREGAVEL_INPUT_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,image/*';
 
-function DeliverableFileDropZone({
-  disabled,
-  uploading,
-  uploadingHint,
-  selectedFile,
-  onFileSelected,
-  dropZoneClassName,
-  ariaLabel = 'Área para largar ou escolher ficheiro do entregável',
-  idleTitle,
-  idleSub,
-}: {
+function deliverableFilesEqual(a: File, b: File): boolean {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
+function mergeDeliverableFiles(existing: File[], incoming: File[]): File[] {
+  const out = [...existing];
+  for (const f of incoming) {
+    if (!out.some(x => deliverableFilesEqual(x, f))) out.push(f);
+  }
+  return out;
+}
+
+function deliverableUploadErrorMessage(err: unknown, fileName?: string): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  const label = fileName ? `«${fileName}»` : 'o ficheiro';
+  if (/row-level security|42501|unauthorized|403/i.test(raw)) {
+    return `Sem permissão para carregar ${label}. Confirme o acesso à actividade (migrações Supabase de Produtividade aplicadas).`;
+  }
+  return raw || `Falha ao carregar ${label}`;
+}
+
+type DeliverableFileDropZoneProps = {
   disabled?: boolean;
-  /** Enviar ficheiro ao armazenamento (mostra estado na zona). */
   uploading?: boolean;
-  /** Texto curto durante o envio (ex.: destino do estado). */
   uploadingHint?: string;
-  selectedFile: File | null;
-  onFileSelected: (file: File | null) => void;
   dropZoneClassName?: string;
   ariaLabel?: string;
   idleTitle?: string;
   idleSub?: string;
-}) {
+} & (
+  | {
+      multiple?: false;
+      selectedFile: File | null;
+      onFileSelected: (file: File | null) => void;
+    }
+  | {
+      multiple: true;
+      selectedFiles: File[];
+      onFilesSelected: (files: File[]) => void;
+    }
+);
+
+function DeliverableFileDropZone(props: DeliverableFileDropZoneProps) {
+  const {
+    disabled,
+    uploading,
+    uploadingHint,
+    dropZoneClassName,
+    ariaLabel = 'Área para largar ou escolher ficheiro do entregável',
+    idleTitle,
+    idleSub,
+  } = props;
+  const multiple = props.multiple === true;
+  const selectedFile = multiple ? null : props.selectedFile;
+  const selectedFiles = multiple ? props.selectedFiles : [];
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragDepthRef = useRef(0);
 
-  const applyChosenFile = useCallback(
-    (file: File | null) => {
-      if (!file) {
-        onFileSelected(null);
+  const applyChosenFiles = useCallback(
+    (raw: FileList | File[] | null | undefined) => {
+      if (!raw || raw.length === 0) {
+        if (!multiple) props.onFileSelected(null);
         return;
       }
-      if (!isAllowedDeliverableFile(file)) {
-        toast.error('Tipo de ficheiro não aceite. Use PDF, Word, PowerPoint, Excel ou imagem (PNG, JPG, JPEG, WebP).');
-        return;
+      const arr = Array.from(raw);
+      const valid = arr.filter(isAllowedDeliverableFile);
+      if (valid.length < arr.length) {
+        toast.error('Alguns ficheiros foram ignorados. Use PDF, Word, PowerPoint, Excel ou imagem (PNG, JPG, JPEG, WebP).');
       }
-      onFileSelected(file);
+      if (valid.length === 0) return;
+      if (multiple) {
+        props.onFilesSelected(mergeDeliverableFiles(props.selectedFiles, valid));
+      } else {
+        props.onFileSelected(valid[0]);
+      }
     },
-    [onFileSelected],
+    [multiple, props],
   );
 
   function handleDragEnter(e: DragEvent<HTMLDivElement>) {
@@ -163,9 +202,10 @@ function DeliverableFileDropZone({
     dragDepthRef.current = 0;
     setIsDragging(false);
     if (disabled || uploading) return;
-    const f = e.dataTransfer.files?.[0];
-    applyChosenFile(f ?? null);
+    applyChosenFiles(e.dataTransfer.files);
   }
+
+  const filesPreview = multiple ? selectedFiles : selectedFile ? [selectedFile] : [];
 
   return (
     <div className="space-y-2">
@@ -174,9 +214,10 @@ function DeliverableFileDropZone({
         type="file"
         className="sr-only"
         accept={ENTREGAVEL_INPUT_ACCEPT}
+        multiple={multiple}
         disabled={disabled || uploading}
         onChange={(ev: ChangeEvent<HTMLInputElement>) => {
-          applyChosenFile(ev.target.files?.[0] ?? null);
+          applyChosenFiles(ev.target.files);
           ev.target.value = '';
         }}
       />
@@ -211,34 +252,57 @@ function DeliverableFileDropZone({
         {uploading ? (
           <>
             <Loader2 className="h-9 w-9 animate-spin text-primary" aria-hidden />
-            <div className="text-sm font-medium text-center">A enviar o ficheiro…</div>
+            <div className="text-sm font-medium text-center">
+              {multiple ? 'A enviar ficheiros…' : 'A enviar o ficheiro…'}
+            </div>
             <div className="text-xs text-muted-foreground text-center max-w-[280px]">
               {uploadingHint ?? 'A actualizar o estado da actividade…'}
             </div>
-            {selectedFile ? (
-              <div className="mt-1 text-xs font-medium text-foreground truncate max-w-full px-1 text-center">
-                {selectedFile.name}
-              </div>
-            ) : null}
           </>
         ) : (
           <>
             <UploadCloud className={cn('h-9 w-9', isDragging ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
             <div className="text-sm font-medium text-center">
-              {isDragging ? 'Largue o ficheiro aqui' : (idleTitle ?? 'Arraste o ficheiro para aqui')}
+              {isDragging
+                ? multiple
+                  ? 'Largue os ficheiros aqui'
+                  : 'Largue o ficheiro aqui'
+                : (idleTitle ?? (multiple ? 'Arraste os ficheiros para aqui' : 'Arraste o ficheiro para aqui'))}
             </div>
             <div className="text-xs text-muted-foreground text-center max-w-[280px]">
               {idleSub ??
-                'ou clique para escolher — o envio e a mudança de estado são automáticos (PDF, DOCX, XLSX, imagens)'}
+                (multiple
+                  ? 'ou clique para escolher vários ficheiros (PDF, DOCX, XLSX, imagens)'
+                  : 'ou clique para escolher — o envio e a mudança de estado são automáticos (PDF, DOCX, XLSX, imagens)')}
             </div>
-            {selectedFile ? (
-              <div className="mt-1 text-xs font-medium text-foreground truncate max-w-full px-1 text-center">
-                {selectedFile.name}
-              </div>
-            ) : null}
           </>
         )}
       </div>
+      {filesPreview.length > 0 && !uploading ? (
+        <ul className="space-y-1.5 rounded-lg border bg-muted/20 p-2 max-h-36 overflow-y-auto">
+          {filesPreview.map((f, i) => (
+            <li key={`${f.name}-${f.size}-${f.lastModified}-${i}`} className="flex items-center gap-2 text-xs">
+              <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
+              <span className="shrink-0 text-muted-foreground tabular-nums">{formatEntregavelSize(f.size)}</span>
+              {multiple && !disabled ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  aria-label={`Remover ${f.name}`}
+                  onClick={() => {
+                    props.onFilesSelected(props.selectedFiles.filter((_, idx) => idx !== i));
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -647,7 +711,7 @@ export default function MinhasActividadesPage({
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completeTargetId, setCompleteTargetId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [detailsReplyUploading, setDetailsReplyUploading] = useState(false);
   const [detailsReplyPick, setDetailsReplyPick] = useState<File | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -1883,7 +1947,7 @@ export default function MinhasActividadesPage({
     const entCount = entregaveisByActividade.get(a.id)?.length ?? 0;
     if (missingObrigatorioEntregavel(a, entCount)) {
       setCompleteTargetId(a.id);
-      setUploadFile(null);
+      setUploadFiles([]);
       setCompleteDialogOpen(true);
       return;
     }
@@ -1896,50 +1960,67 @@ export default function MinhasActividadesPage({
     setDetailsTab('actividade');
   }
 
-  async function uploadDeliverableAndComplete(fileFromPicker?: File | null) {
+  async function uploadDeliverablesAndComplete(filesOverride?: File[]) {
     if (!completeTarget) return;
-    const file = fileFromPicker ?? uploadFile;
-    if (!file) return;
+    const files = (filesOverride ?? uploadFiles).filter(isAllowedDeliverableFile);
+    if (files.length === 0) {
+      toast.error('Seleccione pelo menos um ficheiro do entregável.');
+      return;
+    }
     if (!isSupabaseConfigured() || !supabase) return;
-    if (!user?.colaboradorId) return;
-    if (currentEmpresaId === 'consolidado') return;
+    if (!user?.colaboradorId) {
+      toast.error('É necessário um colaborador associado ao perfil para enviar entregáveis.');
+      return;
+    }
+    if (currentEmpresaId === 'consolidado') {
+      toast.error('Seleccione uma empresa específica (não «consolidado») para enviar entregáveis.');
+      return;
+    }
 
-    if (!isAllowedDeliverableFile(file)) return;
     setUploading(true);
+    const nextStatus = pendingApprovalCompletionStatus(completeTarget);
     try {
-      const ext = file.name.split('.').pop() || 'bin';
-      const safeName = file.name.replace(/[^\w.\-() ]+/g, '_').slice(0, 90);
-      const path = `empresa-${currentEmpresaId}/colab-${user.colaboradorId}/act-${completeTarget.id}/${Date.now()}-${safeName}`;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = file.name.split('.').pop() || 'bin';
+        const safeName = file.name.replace(/[^\w.\-() ]+/g, '_').slice(0, 90);
+        const path = `empresa-${currentEmpresaId}/colab-${user.colaboradorId}/act-${completeTarget.id}/${Date.now()}-${i}-${safeName}`;
 
-      const { data, error } = await supabase.storage
-        .from('produtividade-entregaveis')
-        .upload(path, file, { upsert: true, contentType: file.type || undefined });
-      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar entregável');
+        const { data, error } = await supabase.storage
+          .from('produtividade-entregaveis')
+          .upload(path, file, { upsert: true, contentType: file.type || undefined });
+        if (error || !data?.path) throw new Error(deliverableUploadErrorMessage(error, file.name));
 
-      await (supabase.from('produtividade_entregaveis') as any).insert({
-        actividade_id: completeTarget.id,
-        storage_path: data.path,
-        nome_ficheiro: file.name,
-        mime_type: file.type || `application/${ext}`,
-        tamanho_bytes: file.size,
-        estado: 'Pendente',
-        uploaded_by_colaborador_id: user.colaboradorId,
-      });
+        const { error: dbErr } = await (supabase.from('produtividade_entregaveis') as any).insert({
+          actividade_id: completeTarget.id,
+          storage_path: data.path,
+          nome_ficheiro: file.name,
+          mime_type: file.type || `application/${ext}`,
+          tamanho_bytes: file.size,
+          estado: 'Pendente',
+          uploaded_by_colaborador_id: user.colaboradorId,
+        });
+        if (dbErr) throw new Error(dbErr.message || `Erro ao registar «${file.name}»`);
+      }
 
-      const nextStatus = pendingApprovalCompletionStatus(completeTarget);
       const statusOk = await setStatus(completeTarget.id, nextStatus, { assumeEntregavelJustUploaded: true });
       if (statusOk) {
         setCompleteDialogOpen(false);
         setCompleteTargetId(null);
-        setUploadFile(null);
+        setUploadFiles([]);
+        const n = files.length;
         toast.success(
           nextStatus === 'Em aprovação'
-            ? 'Entregável enviado. Actividade em aprovação.'
-            : 'Entregável enviado. Actividade concluída.',
+            ? n === 1
+              ? 'Entregável enviado. Actividade em aprovação.'
+              : `${n} entregáveis enviados. Actividade em aprovação.`
+            : n === 1
+              ? 'Entregável enviado. Actividade concluída.'
+              : `${n} entregáveis enviados. Actividade concluída.`,
         );
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao enviar o entregável.');
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar o(s) entregável(eis).');
     } finally {
       setUploading(false);
     }
@@ -1965,7 +2046,7 @@ export default function MinhasActividadesPage({
       const { data, error } = await supabase.storage
         .from('produtividade-entregaveis')
         .upload(path, file, { upsert: true, contentType: file.type || undefined });
-      if (error || !data?.path) throw new Error(error?.message || 'Falha ao carregar ficheiro');
+      if (error || !data?.path) throw new Error(deliverableUploadErrorMessage(error, file.name));
 
       const { error: dbErr } = await (supabase.from('produtividade_entregaveis') as any).insert({
         actividade_id: act.id,
@@ -1976,7 +2057,7 @@ export default function MinhasActividadesPage({
         estado: 'Pendente',
         uploaded_by_colaborador_id: user.colaboradorId,
       });
-      if (dbErr) throw new Error(dbErr.message || 'Erro ao registar entregável');
+      if (dbErr) throw new Error(deliverableUploadErrorMessage(dbErr, file.name));
 
       toast.success('Anexo adicionado.');
       setDetailsReplyPick(null);
@@ -2906,7 +2987,16 @@ export default function MinhasActividadesPage({
         </TabsContent>
       </Tabs>
 
-      <Dialog open={completeDialogOpen} onOpenChange={(v) => setCompleteDialogOpen(v)}>
+      <Dialog
+        open={completeDialogOpen}
+        onOpenChange={(v) => {
+          setCompleteDialogOpen(v);
+          if (!v) {
+            setCompleteTargetId(null);
+            setUploadFiles([]);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
@@ -2928,11 +3018,12 @@ export default function MinhasActividadesPage({
                   <div className="text-sm font-medium">Entregável obrigatório</div>
                   <div className="text-xs text-muted-foreground">
                     {pendingApprovalCompletionStatus(completeTarget) === 'Em aprovação'
-                      ? 'Largue ou escolha um ficheiro — após o envio, a actividade passa automaticamente para «Em aprovação» (PDF, DOCX, XLSX ou imagem).'
-                      : 'Largue ou escolha um ficheiro — após o envio, a actividade fica automaticamente «Concluída».'}
+                      ? 'Largue ou escolha um ou mais ficheiros. Depois confirme para submeter a actividade para «Em aprovação» (PDF, DOCX, XLSX ou imagem).'
+                      : 'Largue ou escolha um ou mais ficheiros. Depois confirme para concluir a actividade.'}
                   </div>
 
                   <DeliverableFileDropZone
+                    multiple
                     disabled={uploading}
                     uploading={uploading}
                     uploadingHint={
@@ -2940,12 +3031,38 @@ export default function MinhasActividadesPage({
                         ? 'A passar para «Em aprovação»…'
                         : 'A passar para «Concluída»…'
                     }
-                    selectedFile={uploadFile}
-                    onFileSelected={(f) => {
-                      setUploadFile(f);
-                      if (f) void uploadDeliverableAndComplete(f);
-                    }}
+                    selectedFiles={uploadFiles}
+                    onFilesSelected={setUploadFiles}
+                    idleSub="Pode adicionar vários ficheiros antes de confirmar o envio"
                   />
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      variant="secondary"
+                      disabled={uploading}
+                      onClick={() => {
+                        setCompleteDialogOpen(false);
+                        setCompleteTargetId(null);
+                        setUploadFiles([]);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      disabled={uploading || uploadFiles.length === 0}
+                      onClick={() => void uploadDeliverablesAndComplete()}
+                    >
+                      {uploading
+                        ? 'A enviar…'
+                        : pendingApprovalCompletionStatus(completeTarget) === 'Em aprovação'
+                          ? uploadFiles.length > 1
+                            ? `Submeter (${uploadFiles.length} ficheiros)`
+                            : 'Submeter para aprovação'
+                          : uploadFiles.length > 1
+                            ? `Concluir (${uploadFiles.length} ficheiros)`
+                            : 'Concluir'}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-end gap-2">

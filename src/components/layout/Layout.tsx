@@ -161,9 +161,7 @@ export function Layout() {
       <div className={cn(isChatFullscreenMobile && 'max-md:hidden')}>
         <MobileBottomNav />
       </div>
-      <div className={cn(isChatFullscreenMobile && 'max-md:hidden')}>
-        <FloatingCornerActions />
-      </div>
+      {pathname !== '/chat' ? <FloatingCornerActions /> : null}
       <ObrigatorioTrocaSenhaDialog />
       <ColaboradorPrimeiroAcessoWizard />
       <ComunicadoLeituraPopup />

@@ -5,8 +5,6 @@ import { cn } from '@/lib/utils';
 import { ConversationList } from './ConversationList';
 import { ConversationView } from './ConversationView';
 import { NewConversationModal } from './NewConversationModal';
-import { Plus } from 'lucide-react';
-
 function ChatContent() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,16 +61,6 @@ function ChatContent() {
           onSelect={handleSelect}
           onNewConversation={() => setNewConvoOpen(true)}
         />
-        {!selectedId ? (
-          <button
-            type="button"
-            onClick={() => setNewConvoOpen(true)}
-            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] right-4 z-[35] flex h-14 w-14 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-primary-foreground shadow-lg shadow-black/20 md:hidden"
-            aria-label="Nova conversa"
-          >
-            <Plus className="h-7 w-7" strokeWidth={2.25} />
-          </button>
-        ) : null}
       </div>
       <div
         className={cn(
