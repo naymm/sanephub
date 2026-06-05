@@ -6,6 +6,7 @@ import { logIntranetAuditClientEvent } from '@/lib/intranetAudit';
 import { PROFILES_SELECT_PUBLIC } from '@/lib/profileColumns';
 import type { Database } from '@/types/supabase';
 import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
+import { canAccessJuridicoModule } from '@/utils/juridicoAccess';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
@@ -610,8 +611,7 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
   'financas': ['Admin', 'Financeiro'],
   'contabilidade': ['Admin', 'Contabilidade', 'Financeiro'],
   'secretaria': ['Admin', 'Secretaria'],
-  /** Exclusivo Admin: perfil Jurídico e outros não acedem ao módulo (ver `hasModuleAccess`). */
-  'juridico': ['Admin'],
+  'juridico': ['Admin', 'Juridico'],
   'planeamento': ['Admin', 'PCA', 'Planeamento', 'Director'],
   'conselho-administracao': ['Admin', 'PCA'],
   'comunicacao-interna': ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'],
@@ -645,8 +645,8 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
 export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (!user) return false;
   if (user.perfil === 'Admin') return true;
-  /** Jurídico: apenas Admin (não conceder via `modulos` nem PCA/Director/Juridico). */
-  if (module === 'juridico') return false;
+  /** Jurídico: só Admin e perfil Jurídico (ignora checkbox «Jurídico» noutros perfis). */
+  if (module === 'juridico') return canAccessJuridicoModule(user);
   /**
    * Controlo Interno: Admin sempre; restantes só com `controlo-interno` em Acesso a módulos
    * (não herda visibilidade por ser PCA/Director/RH/etc.).

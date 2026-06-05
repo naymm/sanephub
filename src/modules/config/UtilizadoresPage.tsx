@@ -337,11 +337,15 @@ export default function UtilizadoresPage() {
     if (!editing && !form.senha.trim()) return;
     const avatar = form.avatar.trim() || avatarFromNome(form.nome);
     const senha = editing && !form.senha.trim() ? editing.senha : form.senha;
-    /** Colaborador deve ter sempre portal-colaborador nos módulos para manter acesso ao portal */
-    const modulos =
-      form.perfil === 'Colaborador' && Array.isArray(form.modulos) && form.modulos.length > 0
-        ? [...new Set(['portal-colaborador', ...form.modulos])]
-        : form.modulos;
+    /** Colaborador: portal obrigatório; Jurídico: garantir módulo juridico na lista explícita */
+    let modulos = form.modulos;
+    if (form.perfil === 'Colaborador' && Array.isArray(form.modulos) && form.modulos.length > 0) {
+      modulos = [...new Set(['portal-colaborador', ...form.modulos])];
+    } else if (form.perfil === 'Juridico') {
+      modulos = [...new Set([...(form.modulos ?? []), 'juridico'])];
+    } else if (Array.isArray(modulos)) {
+      modulos = modulos.filter(m => m !== 'juridico');
+    }
     const colabLinked = form.colaboradorId
       ? colaboradoresTodos.find(c => c.id === form.colaboradorId)
       : undefined;
@@ -866,7 +870,9 @@ export default function UtilizadoresPage() {
                 )}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                {MODULOS_DISPONIVEIS.map(m => (
+                {MODULOS_DISPONIVEIS.filter(
+                  m => m.id !== 'juridico' || form.perfil === 'Juridico',
+                ).map(m => (
                   <label key={m.id} className="flex items-center gap-2 cursor-pointer">
                     <Checkbox
                       checked={form.modulos?.includes(m.id) ?? false}

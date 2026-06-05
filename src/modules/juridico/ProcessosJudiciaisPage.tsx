@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { canManageJuridicoRecords } from '@/utils/juridicoAccess';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import {
@@ -67,7 +68,7 @@ export default function ProcessosJudiciaisPage() {
   });
 
   const empresaIdForNew = currentEmpresaId === 'consolidado' ? empresas.find(e => e.activo)?.id ?? 1 : currentEmpresaId;
-  const canEdit = user?.perfil === 'Admin';
+  const canEdit = canManageJuridicoRecords(user);
 
   const filtered = processos.filter(p => {
     const matchSearch =

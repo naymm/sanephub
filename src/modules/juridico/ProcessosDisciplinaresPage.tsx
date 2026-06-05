@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/context/AuthContext';
+import { canManageJuridicoRecords } from '@/utils/juridicoAccess';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import {
@@ -71,7 +72,7 @@ export default function ProcessosDisciplinaresPage() {
 
   const getEmpresaNome = (empresaId: number) =>
     empresas.find(e => e.id === empresaId)?.nome ?? `Empresa ${empresaId}`;
-  const canEdit = user?.perfil === 'Admin';
+  const canEdit = canManageJuridicoRecords(user);
 
   const colaboradoresFiltrados = currentEmpresaId === 'consolidado'
     ? colaboradores

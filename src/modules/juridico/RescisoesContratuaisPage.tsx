@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useData } from '@/context/DataContext';
 import { useAuth } from '@/context/AuthContext';
+import { canManageJuridicoRecords } from '@/utils/juridicoAccess';
 import { useClientSidePagination } from '@/hooks/useClientSidePagination';
 import { useMobileCreateRoute } from '@/hooks/useMobileCreateRoute';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
@@ -45,7 +46,7 @@ export default function RescisoesContratuaisPage() {
     documentoPdf: '',
   });
 
-  const canEdit = user?.perfil === 'Admin';
+  const canEdit = canManageJuridicoRecords(user);
   const pagination = useClientSidePagination({ items: rescissoesContrato, pageSize: 25 });
 
   const prepareCreate = useCallback(() => {
