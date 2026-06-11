@@ -682,8 +682,8 @@ export default function MinhasActividadesPage({
   const verTodasActividades = podeVerTodasActividadesProdutividadeEmpresa(user);
   const isDireccaoCargo = usuarioTemCargoDireccaoProdutividade(user, colaboradoresTodos);
   const podeAcederDireccao = podeAcederDireccaoProdutividade(user, colaboradoresTodos);
-  const vistaAreaResponsavel =
-    scope === 'area' || (scope === 'mine' && isDireccaoCargo && !verTodasActividades);
+  /** Vista alargada (área/empresa) só em `/produtividade/direccao`; «Minhas Actividades» é sempre pessoal. */
+  const vistaAreaResponsavel = scope === 'area';
   const myEmpresaId = useMemo(() => {
     if (typeof currentEmpresaId === 'number') return currentEmpresaId;
     if (typeof user?.empresaId === 'number') return user.empresaId;
@@ -861,11 +861,8 @@ export default function MinhasActividadesPage({
       currentEmpresaId === 'consolidado'
         ? mergedAllRows
         : mergedAllRows.filter(r => Number(r.empresaId) === Number(currentEmpresaId));
-    if (scope === 'mine' && verTodasActividades) {
-      return base;
-    }
-    if (scope === 'mine' && !vistaAreaResponsavel) {
-      // Em perfis sem colaboradorId (ex.: PCA grupo) mostramos vazio por defeito.
+
+    if (scope === 'mine') {
       if (!user?.colaboradorId) return [];
       return base.filter(r => {
         if (r.colaboradorId === user.colaboradorId) return true;
@@ -2282,11 +2279,7 @@ export default function MinhasActividadesPage({
         <div className="min-w-0">
           <h1 className="text-xl font-semibold leading-tight">Produtividade</h1>
           <p className="text-sm text-muted-foreground">
-            {scope === 'area'
-              ? 'Direcção'
-              : vistaAreaResponsavel
-                ? 'Minhas Actividades · todas da sua área'
-                : 'Minhas Actividades'}
+            {scope === 'area' ? 'Direcção' : 'Minhas Actividades'}
           </p>
         </div>
 
