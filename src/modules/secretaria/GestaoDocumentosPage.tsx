@@ -273,6 +273,63 @@ function findNodeById(nodes: TreeNode[], id: number): TreeNode | null {
   return null;
 }
 
+/** União das restrições de módulo/sector definidas na pasta e em todas as ancestrais. */
+function permissoesEfectivasPasta(
+  pastaId: number | null,
+  pastas: GestaoDocumentoPasta[],
+): { modulos: string[]; sectores: string[] } {
+  const byId = new Map(pastas.map(p => [p.id, p]));
+  const modulos = new Set<string>();
+  const sectores = new Set<string>();
+  let id: number | null = pastaId;
+  const guard = new Set<number>();
+  while (id != null && !guard.has(id)) {
+    guard.add(id);
+    const p = byId.get(id);
+    if (!p) break;
+    for (const m of p.modulosAcesso ?? []) {
+      if (m) modulos.add(m);
+    }
+    for (const s of p.sectoresAcesso ?? []) {
+      if (s) sectores.add(s);
+    }
+    id = p.parentId ?? null;
+  }
+  return { modulos: [...modulos], sectores: [...sectores] };
+}
+
+function mergePermissoesGestaoDocumentos(
+  efectivas: { modulos: string[]; sectores: string[] },
+  adicionais: { modulos: string[]; sectores: string[] },
+): { modulos: string[]; sectores: string[] } {
+  return {
+    modulos: [...new Set([...efectivas.modulos, ...adicionais.modulos])],
+    sectores: [...new Set([...efectivas.sectores, ...adicionais.sectores])],
+  };
+}
+
+function aplicarPermissoesPastaPai(
+  parentId: number | null,
+  pastas: GestaoDocumentoPasta[],
+): { modulos: string[]; sectores: string[] } {
+  if (parentId == null) return { modulos: [], sectores: [] };
+  const p = pastas.find(x => x.id === parentId);
+  return { modulos: [...(p?.modulosAcesso ?? [])], sectores: [...(p?.sectoresAcesso ?? [])] };
+}
+
+function resumoPermissoesHeranca(efectivas: { modulos: string[]; sectores: string[] }): string | null {
+  if (!efectivas.modulos.length && !efectivas.sectores.length) return null;
+  const parts: string[] = [];
+  if (efectivas.modulos.length) {
+    const labels = efectivas.modulos.map(m => MODULO_OPTIONS.find(o => o.value === m)?.label ?? m);
+    parts.push(`módulos: ${labels.join(', ')}`);
+  }
+  if (efectivas.sectores.length) {
+    parts.push(`sectores: ${efectivas.sectores.join(', ')}`);
+  }
+  return `Restrições herdadas da pasta e subpastas superiores (${parts.join('; ')}).`;
+}
+
 /** Pasta de destino por defeito ao abrir o diálogo «Mover». */
 function defaultMoverDestinoPastaId(
   arquivos: GestaoDocumentoArquivo[],
@@ -666,6 +723,16 @@ export default function GestaoDocumentosPage({
   const pastasOrdenadasPeloCaminho = useMemo(
     () => ordenarPastasPeloCaminho(pastas, pastaPathById),
     [pastas, pastaPathById],
+  );
+
+  const uploadPermissoesEfectivas = useMemo(
+    () => permissoesEfectivasPasta(formPastaId, pastas),
+    [formPastaId, pastas],
+  );
+
+  const novaPastaPermissoesEfectivas = useMemo(
+    () => permissoesEfectivasPasta(novaPastaParentId, pastas),
+    [novaPastaParentId, pastas],
   );
 
   const LIMITE_RECENTES_TODAS_PASTAS = 10;
@@ -1084,6 +1151,10 @@ export default function GestaoDocumentosPage({
           });
           if (upErr) throw upErr;
 
+          const permissoesFicheiro = mergePermissoesGestaoDocumentos(
+            permissoesEfectivasPasta(formPastaId, pastas),
+            { modulos: formModulos, sectores: formSectores },
+          );
           const { data: ins, error: insErr } = await supabase
             .from('gestao_documentos_arquivos')
             .insert({
@@ -1096,8 +1167,8 @@ export default function GestaoDocumentosPage({
               mime_type: f.type || 'application/octet-stream',
               tamanho_bytes: f.size,
               tipo_ficheiro: ext,
-              modulos_acesso: formModulos,
-              sectores_acesso: formSectores,
+              modulos_acesso: permissoesFicheiro.modulos,
+              sectores_acesso: permissoesFicheiro.sectores,
               origem_modulo: formOrigem === ORIGEM_NONE ? null : formOrigem,
               uploaded_by: user.id,
             })
@@ -1147,13 +1218,17 @@ export default function GestaoDocumentosPage({
   const criarPasta = async () => {
     if (!supabase || empresaIdNum == null || !novaPastaNome.trim()) return;
     try {
+      const permissoesPasta = mergePermissoesGestaoDocumentos(
+        permissoesEfectivasPasta(novaPastaParentId, pastas),
+        { modulos: novaPastaModulos, sectores: novaPastaSectores },
+      );
       const { error } = await supabase.from('gestao_documentos_pastas').insert({
         empresa_id: empresaIdNum,
         parent_id: novaPastaParentId,
         nome: novaPastaNome.trim(),
         ordem: 99,
-        modulos_acesso: novaPastaModulos,
-        sectores_acesso: novaPastaSectores,
+        modulos_acesso: permissoesPasta.modulos,
+        sectores_acesso: permissoesPasta.sectores,
       });
       if (error) throw error;
       toast.success('Pasta criada.');
@@ -1538,8 +1613,9 @@ export default function GestaoDocumentosPage({
                 className="h-8 text-xs font-normal"
                 onClick={() => {
                   setNovaPastaParentId(selectedPastaId);
-                  setNovaPastaModulos([]);
-                  setNovaPastaSectores([]);
+                  const pre = aplicarPermissoesPastaPai(selectedPastaId, pastas);
+                  setNovaPastaModulos(pre.modulos);
+                  setNovaPastaSectores(pre.sectores);
                   setNovaPastaOpen(true);
                 }}
               >
@@ -2064,7 +2140,11 @@ export default function GestaoDocumentosPage({
               <Label>Pasta</Label>
               <Select
                 value={formPastaId != null ? String(formPastaId) : ''}
-                onValueChange={v => setFormPastaId(Number(v))}
+                onValueChange={v => {
+                  setFormPastaId(Number(v));
+                  setFormModulos([]);
+                  setFormSectores([]);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar pasta" />
@@ -2078,9 +2158,16 @@ export default function GestaoDocumentosPage({
                 </SelectContent>
               </Select>
             </div>
+            {resumoPermissoesHeranca(uploadPermissoesEfectivas) ? (
+              <p className="rounded-md border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                {resumoPermissoesHeranca(uploadPermissoesEfectivas)}
+              </p>
+            ) : null}
             <div className="space-y-2">
               <Label>Módulos com acesso</Label>
-              <p className="text-xs text-muted-foreground">Vazio = sem restrição extra por módulo (todos os que já vêem o tenant).</p>
+              <p className="text-xs text-muted-foreground">
+                Vazio = herda as restrições da pasta seleccionada (e ancestrais).
+              </p>
               <div className="grid grid-cols-1 gap-2 rounded-md border p-3 max-h-36 overflow-y-auto">
                 {MODULO_OPTIONS.map(m => (
                   <label key={m.value} className="flex items-center gap-2 text-sm">
@@ -2092,7 +2179,7 @@ export default function GestaoDocumentosPage({
             </div>
             <div className="space-y-2">
               <Label>Sectores com acesso (departamento)</Label>
-              <p className="text-xs text-muted-foreground">Vazio = qualquer departamento.</p>
+              <p className="text-xs text-muted-foreground">Vazio = herda sectores da pasta seleccionada.</p>
               <div className="grid grid-cols-1 gap-2 rounded-md border p-3 max-h-32 overflow-y-auto">
                 {nomesDepartamentos.length === 0 ? (
                   <span className="text-xs text-muted-foreground">Cadastre departamentos em Configurações.</span>
@@ -2163,8 +2250,8 @@ export default function GestaoDocumentosPage({
           <DialogHeader>
             <DialogTitle>Nova pasta</DialogTitle>
             <DialogDescription>
-              Subpasta ou pasta na raiz. Permissões vazias = sem filtro extra nesta pasta. Editar ou eliminar pastas
-              existentes continua reservado a perfis de gestão.
+              Subpasta ou pasta na raiz. As permissões da pasta pai aplicam-se a esta pasta, aos ficheiros e às
+              subpastas. Restrições adicionais aqui restringem ainda mais o acesso.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -2172,7 +2259,13 @@ export default function GestaoDocumentosPage({
               <Label>Pasta pai (opcional)</Label>
               <Select
                 value={novaPastaParentId != null ? String(novaPastaParentId) : '__root__'}
-                onValueChange={v => setNovaPastaParentId(v === '__root__' ? null : Number(v))}
+                onValueChange={v => {
+                  const parentId = v === '__root__' ? null : Number(v);
+                  setNovaPastaParentId(parentId);
+                  const pre = aplicarPermissoesPastaPai(parentId, pastas);
+                  setNovaPastaModulos(pre.modulos);
+                  setNovaPastaSectores(pre.sectores);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -2191,9 +2284,16 @@ export default function GestaoDocumentosPage({
               <Label>Nome da pasta</Label>
               <Input value={novaPastaNome} onChange={e => setNovaPastaNome(e.target.value)} placeholder="Ex.: Orçamentos" />
             </div>
+            {resumoPermissoesHeranca(novaPastaPermissoesEfectivas) ? (
+              <p className="rounded-md border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                {resumoPermissoesHeranca(novaPastaPermissoesEfectivas)}
+              </p>
+            ) : null}
             <div className="space-y-2">
               <Label>Módulos com acesso à pasta</Label>
-              <p className="text-xs text-muted-foreground">Vazio = sem filtro extra por módulo nesta pasta.</p>
+              <p className="text-xs text-muted-foreground">
+                Vazio = herda apenas as restrições das pastas superiores (se existirem).
+              </p>
               <div className="max-h-32 space-y-2 overflow-y-auto rounded-md border p-2">
                 {MODULO_OPTIONS.map(m => (
                   <label key={m.value} className="flex items-center gap-2 text-sm">
@@ -2205,7 +2305,7 @@ export default function GestaoDocumentosPage({
             </div>
             <div className="space-y-2">
               <Label>Sectores (departamento)</Label>
-              <p className="text-xs text-muted-foreground">Vazio = todos os sectores.</p>
+              <p className="text-xs text-muted-foreground">Vazio = herda sectores das pastas superiores.</p>
               <div className="max-h-28 space-y-2 overflow-y-auto rounded-md border p-2">
                 {nomesDepartamentos.length === 0 ? (
                   <span className="text-xs text-muted-foreground">Sem departamentos configurados.</span>
@@ -2234,8 +2334,8 @@ export default function GestaoDocumentosPage({
           <DialogHeader>
             <DialogTitle>Editar pasta</DialogTitle>
             <DialogDescription>
-              Nome e permissões aplicam-se a esta pasta e restringem a visibilidade dos ficheiros nela (além das permissões
-              de cada documento).
+              Nome e permissões aplicam-se a esta pasta, a todas as subpastas e aos ficheiros dentro dela (em conjunto com
+              as permissões de cada documento).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
