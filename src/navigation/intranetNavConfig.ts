@@ -85,6 +85,7 @@ export const MODULE_GROUPS: MenuGroup[] = [
     icon: DollarSign,
     children: [
       { label: 'Requisições', path: '/financas/requisicoes', module: 'financas' },
+      { label: 'Reembolsos', path: '/financas/reembolsos', module: 'financas' },
       { label: 'Despesas', path: '/financas/despesas', module: 'financas' },
       { label: 'Bancos', path: '/financas/bancos', module: 'financas', adminOnly: true },
       { label: 'Contas bancárias', path: '/financas/contas-bancarias', module: 'financas' },

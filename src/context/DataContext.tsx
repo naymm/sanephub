@@ -11,6 +11,8 @@ import type {
   ReciboSalario,
   Declaracao,
   Requisicao,
+  Reembolso,
+  ReembolsoLinha,
   CentroCusto,
   Projecto,
   Reuniao,
@@ -52,6 +54,9 @@ import { DataRealtimeSyncLayer, createInitialRealtimeLoading } from '@/context/D
 import {
   loadAllTables,
   db,
+  insertReembolsoComLinhas,
+  replaceReembolsoLinhas as replaceReembolsoLinhasApi,
+  type ReembolsoLinhaInput,
   fetchColaboradorGeofenceLinks,
   syncColaboradorGeofenceLinks as syncColaboradorGeofenceLinksApi,
   fetchOrganizacaoSettings,
@@ -101,6 +106,10 @@ interface DataContextType {
   setDeclaracoes: React.Dispatch<React.SetStateAction<Declaracao[]>>;
   requisicoes: Requisicao[];
   setRequisicoes: React.Dispatch<React.SetStateAction<Requisicao[]>>;
+  reembolsos: Reembolso[];
+  setReembolsos: React.Dispatch<React.SetStateAction<Reembolso[]>>;
+  reembolsoLinhas: ReembolsoLinha[];
+  setReembolsoLinhas: React.Dispatch<React.SetStateAction<ReembolsoLinha[]>>;
   centrosCusto: CentroCusto[];
   setCentrosCusto: React.Dispatch<React.SetStateAction<CentroCusto[]>>;
   projectos: Projecto[];
@@ -208,6 +217,12 @@ interface DataContextType {
   addRequisicao: (p: Partial<Requisicao>) => Promise<Requisicao>;
   updateRequisicao: (id: number, p: Partial<Requisicao>) => Promise<Requisicao>;
   deleteRequisicao: (id: number) => Promise<void>;
+  addReembolsoComLinhas: (
+    header: Partial<Reembolso>,
+    linhas: ReembolsoLinhaInput[],
+  ) => Promise<{ reembolso: Reembolso; linhas: ReembolsoLinha[] }>;
+  updateReembolso: (id: number, p: Partial<Reembolso>) => Promise<Reembolso>;
+  replaceReembolsoLinhas: (reembolsoId: number, linhas: ReembolsoLinhaInput[]) => Promise<ReembolsoLinha[]>;
   addCentroCusto: (p: Partial<CentroCusto>) => Promise<CentroCusto>;
   updateCentroCusto: (id: number, p: Partial<CentroCusto>) => Promise<CentroCusto>;
   deleteCentroCusto: (id: number) => Promise<void>;
@@ -297,6 +312,8 @@ const emptyArrays = {
   recibos: [] as ReciboSalario[],
   declaracoes: [] as Declaracao[],
   requisicoes: [] as Requisicao[],
+  reembolsos: [] as Reembolso[],
+  reembolsoLinhas: [] as ReembolsoLinha[],
   centrosCusto: [] as CentroCusto[],
   projectos: [] as Projecto[],
   reunioes: [] as Reuniao[],
@@ -350,6 +367,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [recibos, setRecibos] = useState<ReciboSalario[]>(emptyArrays.recibos);
   const [declaracoes, setDeclaracoes] = useState<Declaracao[]>(emptyArrays.declaracoes);
   const [requisicoes, setRequisicoes] = useState<Requisicao[]>(emptyArrays.requisicoes);
+  const [reembolsos, setReembolsos] = useState<Reembolso[]>(emptyArrays.reembolsos);
+  const [reembolsoLinhas, setReembolsoLinhas] = useState<ReembolsoLinha[]>(emptyArrays.reembolsoLinhas);
   const [centrosCusto, setCentrosCusto] = useState<CentroCusto[]>(emptyArrays.centrosCusto);
   const [projectos, setProjectos] = useState<Projecto[]>(emptyArrays.projectos);
   const [reunioes, setReunioes] = useState<Reuniao[]>(emptyArrays.reunioes);
@@ -512,6 +531,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setRecibos(data.recibos);
       setDeclaracoes(data.declaracoes);
       setRequisicoes(data.requisicoes);
+      setReembolsos(data.reembolsos);
+      setReembolsoLinhas(data.reembolsoLinhas);
       setCentrosCusto(data.centrosCusto);
       setProjectos(data.projectos);
       setReunioes(data.reunioes);
@@ -559,9 +580,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const colabIds = new Set(colabs.map(c => c.id));
     const reqs = isConsolidado ? requisicoes : requisicoes.filter(r => r.empresaId === currentEmpresaId);
     const reqIds = new Set(reqs.map(r => r.id));
+    const rebs = isConsolidado ? reembolsos : reembolsos.filter(r => r.empresaId === currentEmpresaId);
+    const rebIds = new Set(rebs.map(r => r.id));
     return {
       colaboradores: colabs,
       requisicoes: reqs,
+      reembolsos: rebs,
+      reembolsoLinhas: isConsolidado
+        ? reembolsoLinhas
+        : reembolsoLinhas.filter(l => rebIds.has(l.reembolsoId)),
       centrosCusto: isConsolidado ? centrosCusto : centrosCusto.filter(cc => cc.empresaId === currentEmpresaId),
       projectos: isConsolidado ? projectos : projectos.filter(p => p.empresaId === currentEmpresaId),
       ferias: isConsolidado ? ferias : ferias.filter(f => colabIds.has(f.colaboradorId)),
@@ -606,6 +633,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     currentEmpresaId,
     colaboradores,
     requisicoes,
+    reembolsos,
+    reembolsoLinhas,
     centrosCusto,
     projectos,
     ferias,
@@ -919,6 +948,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
     (id: number) =>
       runMutation(() => (db.requisicoes.delete(supabase!, id) as Promise<void>), () => setRequisicoes(prev => prev.filter(r => r.id !== id))),
     [runMutation]
+  );
+
+  const addReembolsoComLinhas = useCallback(
+    (header: Partial<Reembolso>, linhas: ReembolsoLinhaInput[]) =>
+      runMutation(async () => {
+        const result = await insertReembolsoComLinhas(supabase!, header, linhas);
+        setReembolsos(prev => [...prev, result.reembolso]);
+        setReembolsoLinhas(prev => [...prev, ...result.linhas]);
+        return result;
+      }),
+    [runMutation],
+  );
+  const updateReembolso = useCallback(
+    (id: number, p: Partial<Reembolso>) =>
+      runMutation(() => db.reembolsos.update(supabase!, id, p), row => setReembolsos(prev => prev.map(r => (r.id === id ? row : r)))),
+    [runMutation],
+  );
+  const replaceReembolsoLinhas = useCallback(
+    (reembolsoId: number, linhas: ReembolsoLinhaInput[]) =>
+      runMutation(async () => {
+        const saved = await replaceReembolsoLinhasApi(supabase!, reembolsoId, linhas);
+        setReembolsoLinhas(prev => [...prev.filter(l => l.reembolsoId !== reembolsoId), ...saved]);
+        return saved;
+      }),
+    [runMutation],
   );
 
   const addCentroCusto = useCallback(
@@ -1340,6 +1394,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setDeclaracoes,
       requisicoes: filtered.requisicoes,
       setRequisicoes,
+      reembolsos: filtered.reembolsos,
+      setReembolsos,
+      reembolsoLinhas: filtered.reembolsoLinhas,
+      setReembolsoLinhas,
       centrosCusto: filtered.centrosCusto,
       setCentrosCusto,
       projectos: filtered.projectos,
@@ -1436,6 +1494,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addRequisicao,
       updateRequisicao,
       deleteRequisicao,
+      addReembolsoComLinhas,
+      updateReembolso,
+      replaceReembolsoLinhas,
       addCentroCusto,
       updateCentroCusto,
       deleteCentroCusto,
@@ -1578,6 +1639,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addRequisicao,
       updateRequisicao,
       deleteRequisicao,
+      addReembolsoComLinhas,
+      updateReembolso,
+      replaceReembolsoLinhas,
       addCentroCusto,
       updateCentroCusto,
       deleteCentroCusto,
@@ -1663,6 +1727,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setEventos={setEventos}
           setComunicados={setComunicados}
           setRequisicoes={setRequisicoes}
+          setReembolsos={setReembolsos}
+          setReembolsoLinhas={setReembolsoLinhas}
           setCentrosCusto={setCentrosCusto}
           setProjectos={setProjectos}
           setReunioes={setReunioes}

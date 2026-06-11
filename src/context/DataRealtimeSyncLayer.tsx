@@ -28,6 +28,8 @@ import type {
   ReciboSalario,
   RelatorioMensalPlaneamento,
   Requisicao,
+  Reembolso,
+  ReembolsoLinha,
   RescisaoContrato,
   Reuniao,
   RiscoJuridico,
@@ -52,6 +54,8 @@ type Props = {
   setEventos: (rows: Evento[]) => void;
   setComunicados: (rows: Comunicado[]) => void;
   setRequisicoes: (rows: Requisicao[]) => void;
+  setReembolsos: (rows: Reembolso[]) => void;
+  setReembolsoLinhas: (rows: ReembolsoLinha[]) => void;
   setCentrosCusto: (rows: CentroCusto[]) => void;
   setProjectos: (rows: Projecto[]) => void;
   setReunioes: (rows: Reuniao[]) => void;
@@ -98,6 +102,8 @@ export function DataRealtimeSyncLayer(props: Props) {
   const loadingEventos = mk('eventos');
   const loadingComunicados = mk('comunicados');
   const loadingRequisicoes = mk('requisicoes');
+  const loadingReembolsos = mk('reembolsos');
+  const loadingReembolsoLinhas = mk('reembolso_linhas');
   const loadingCentrosCusto = mk('centros_custo');
   const loadingProjectos = mk('projectos');
   const loadingReunioes = mk('reunioes');
@@ -218,6 +224,24 @@ export function DataRealtimeSyncLayer(props: Props) {
           primaryKeyColumn="id"
           onRows={props.setRequisicoes}
           onLoading={loadingRequisicoes}
+        />
+      ) : null}
+      {sync.reembolsos ? (
+        <RealtimeTableBridge<Reembolso>
+          enabled
+          table="reembolsos"
+          primaryKeyColumn="id"
+          onRows={props.setReembolsos}
+          onLoading={loadingReembolsos}
+        />
+      ) : null}
+      {sync.reembolso_linhas ? (
+        <RealtimeTableBridge<ReembolsoLinha>
+          enabled
+          table="reembolso_linhas"
+          primaryKeyColumn="id"
+          onRows={props.setReembolsoLinhas}
+          onLoading={loadingReembolsoLinhas}
         />
       ) : null}
       {sync.centros_custo ? (

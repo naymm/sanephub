@@ -16,6 +16,8 @@ export type RealtimeSyncTable = Extract<
   | 'eventos'
   | 'comunicados'
   | 'requisicoes'
+  | 'reembolsos'
+  | 'reembolso_linhas'
   | 'centros_custo'
   | 'projectos'
   | 'reunioes'
@@ -50,6 +52,8 @@ export const REALTIME_SYNC_TABLES: readonly RealtimeSyncTable[] = [
   'eventos',
   'comunicados',
   'requisicoes',
+  'reembolsos',
+  'reembolso_linhas',
   'centros_custo',
   'projectos',
   'reunioes',
@@ -123,6 +127,8 @@ export function isRealtimeTableEnabled(user: Usuario | null, table: RealtimeSync
     case 'comunicados':
       return com();
     case 'requisicoes':
+    case 'reembolsos':
+    case 'reembolso_linhas':
     case 'centros_custo':
     case 'projectos':
     case 'movimentos_tesouraria':

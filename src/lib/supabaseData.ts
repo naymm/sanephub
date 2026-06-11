@@ -20,6 +20,8 @@ import type {
   ProcessoDisciplinar,
   RescisaoContrato,
   Requisicao,
+  Reembolso,
+  ReembolsoLinha,
   Pagamento,
   MovimentoTesouraria,
   Ferias,
@@ -57,6 +59,8 @@ const TABLE_NAMES = {
   actas: 'actas',
   contratos: 'contratos',
   requisicoes: 'requisicoes',
+  reembolsos: 'reembolsos',
+  reembolso_linhas: 'reembolso_linhas',
   pagamentos: 'pagamentos',
   movimentos_tesouraria: 'movimentos_tesouraria',
   ferias: 'ferias',
@@ -278,6 +282,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     { data: actas },
     { data: contratos },
     { data: requisicoes },
+    { data: reembolsos },
+    { data: reembolsoLinhas },
     { data: pagamentos },
     { data: movimentosTesouraria },
     { data: ferias },
@@ -310,6 +316,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     supabase.from('actas').select('*'),
     supabase.from('contratos').select('*'),
     supabase.from('requisicoes').select('*'),
+    supabase.from('reembolsos').select('*'),
+    supabase.from('reembolso_linhas').select('*'),
     supabase.from('pagamentos').select('*'),
     supabase.from('movimentos_tesouraria').select('*'),
     supabase.from('ferias').select('*'),
@@ -369,6 +377,8 @@ export async function loadAllTables(supabase: SupabaseClient) {
     actas: mapRowsFromDb<Acta>('actas', actas ?? []),
     contratos: mapRowsFromDb<Contrato>('contratos', contratos ?? []),
     requisicoes: mapRowsFromDb<Requisicao>('requisicoes', requisicoes ?? []),
+    reembolsos: mapRowsFromDb<Reembolso>('reembolsos', reembolsos ?? []),
+    reembolsoLinhas: mapRowsFromDb<ReembolsoLinha>('reembolso_linhas', reembolsoLinhas ?? []),
     pagamentos: mapRowsFromDb<Pagamento>('pagamentos', pagamentos ?? []),
     movimentosTesouraria: mapRowsFromDb<MovimentoTesouraria>('movimentos_tesouraria', movimentosTesouraria ?? []),
     ferias: mapRowsFromDb<Ferias>('ferias', ferias ?? []),
@@ -626,6 +636,54 @@ async function deleteOne(supabase: SupabaseClient, table: keyof typeof TABLE_NAM
   if (error) throw error;
 }
 
+export type ReembolsoLinhaInput = Omit<ReembolsoLinha, 'id' | 'reembolsoId'>;
+
+export async function insertReembolsoComLinhas(
+  supabase: SupabaseClient,
+  header: Partial<Reembolso>,
+  linhas: ReembolsoLinhaInput[],
+): Promise<{ reembolso: Reembolso; linhas: ReembolsoLinha[] }> {
+  const reembolso = await insertOne<Reembolso>(
+    supabase,
+    'reembolsos',
+    header as Record<string, unknown>,
+    'reembolsos',
+  );
+  const saved: ReembolsoLinha[] = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    const row = await insertOne<ReembolsoLinha>(
+      supabase,
+      'reembolso_linhas',
+      { ...l, reembolsoId: reembolso.id, ordem: l.ordem ?? i } as Record<string, unknown>,
+      'reembolso_linhas',
+    );
+    saved.push(row);
+  }
+  return { reembolso, linhas: saved };
+}
+
+export async function replaceReembolsoLinhas(
+  supabase: SupabaseClient,
+  reembolsoId: number,
+  linhas: ReembolsoLinhaInput[],
+): Promise<ReembolsoLinha[]> {
+  const { error: delErr } = await supabase.from('reembolso_linhas').delete().eq('reembolso_id', reembolsoId);
+  if (delErr) throw delErr;
+  const saved: ReembolsoLinha[] = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    const row = await insertOne<ReembolsoLinha>(
+      supabase,
+      'reembolso_linhas',
+      { ...l, reembolsoId, ordem: l.ordem ?? i } as Record<string, unknown>,
+      'reembolso_linhas',
+    );
+    saved.push(row);
+  }
+  return saved;
+}
+
 const RELATORIO_PLANEAMENTO_LIST_KEYS = [
   'actividadesComerciais',
   'principaisConstrangimentos',
@@ -721,6 +779,18 @@ export const db = {
     insert: (s: SupabaseClient, p: Partial<Requisicao>) => insertOne<Requisicao>(s, 'requisicoes', p as Record<string, unknown>, 'requisicoes'),
     update: (s: SupabaseClient, id: number, p: Partial<Requisicao>) => updateOne<Requisicao>(s, 'requisicoes', id, p as Record<string, unknown>, 'requisicoes'),
     delete: (s: SupabaseClient, id: number) => deleteOne(s, 'requisicoes', id),
+  },
+  reembolsos: {
+    insert: (s: SupabaseClient, p: Partial<Reembolso>) => insertOne<Reembolso>(s, 'reembolsos', p as Record<string, unknown>, 'reembolsos'),
+    update: (s: SupabaseClient, id: number, p: Partial<Reembolso>) => updateOne<Reembolso>(s, 'reembolsos', id, p as Record<string, unknown>, 'reembolsos'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'reembolsos', id),
+  },
+  reembolso_linhas: {
+    insert: (s: SupabaseClient, p: Partial<ReembolsoLinha>) =>
+      insertOne<ReembolsoLinha>(s, 'reembolso_linhas', p as Record<string, unknown>, 'reembolso_linhas'),
+    update: (s: SupabaseClient, id: number, p: Partial<ReembolsoLinha>) =>
+      updateOne<ReembolsoLinha>(s, 'reembolso_linhas', id, p as Record<string, unknown>, 'reembolso_linhas'),
+    delete: (s: SupabaseClient, id: number) => deleteOne(s, 'reembolso_linhas', id),
   },
   pagamentos: {
     insert: (s: SupabaseClient, p: Partial<Pagamento>) => insertOne<Pagamento>(s, 'pagamentos', p as Record<string, unknown>, 'pagamentos'),

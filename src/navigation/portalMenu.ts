@@ -12,6 +12,7 @@ export const PORTAL_MENU_ITEMS: readonly PortalMenuItem[] = [
   { label: 'Os Meus Recibos', path: '/portal/recibos', module: 'portal-colaborador' },
   { label: 'As Minhas Declarações', path: '/portal/declaracoes', module: 'portal-colaborador' },
   { label: 'Requisição à Área Financeira', path: '/portal/requisicoes', module: 'portal-colaborador' },
+  { label: 'Pedido de Reembolso', path: '/portal/reembolsos', module: 'portal-colaborador' },
 ];
 
 export function labelPortalMenuItem(

@@ -30,6 +30,7 @@ const TimePunchesPage = lazy(() => import("@/modules/capital-humano/TimePunchesP
 const GeofencesPage = lazy(() => import("@/modules/capital-humano/GeofencesPage"));
 const ColaboradoresPage = lazy(() => import("@/modules/capital-humano/ColaboradoresPage"));
 const RequisicoesPage = lazy(() => import("@/modules/financas/RequisicoesPage"));
+const ReembolsosPage = lazy(() => import("@/modules/financas/ReembolsosPage"));
 const TesourariaPage = lazy(() => import("@/modules/financas/TesourariaPage"));
 const BancosPage = lazy(() => import("@/modules/financas/BancosPage"));
 const ContasBancariasPage = lazy(() => import("@/modules/financas/ContasBancariasPage"));
@@ -62,6 +63,7 @@ const PortalDeclaracoesPage = lazy(() => import("@/modules/portal/PortalDeclarac
 const PortalFeriasPage = lazy(() => import("@/modules/portal/PortalFeriasPage"));
 const PortalFaltasPage = lazy(() => import("@/modules/portal/PortalFaltasPage"));
 const PortalRequisicoesPage = lazy(() => import("@/modules/portal/PortalRequisicoesPage"));
+const PortalReembolsosPage = lazy(() => import("@/modules/portal/PortalReembolsosPage"));
 const PortalAssiduidadePage = lazy(() => import("@/modules/portal/PortalAssiduidadePage"));
 const PortalDadosPage = lazy(() => import("@/modules/portal/PortalDadosPage"));
 const ChatPage = lazy(() => import("@/modules/chat/ChatPage"));
@@ -164,6 +166,7 @@ const App = () => (
                   {/* Finanças */}
                   <Route path="/financas/requisicoes" element={<RequisicoesPage />} />
                   <Route path="/financas/requisicoes/novo" element={<RequisicoesPage />} />
+                  <Route path="/financas/reembolsos" element={<ReembolsosPage />} />
                   <Route path="/financas/despesas" element={<DespesasPage />} />
                   <Route path="/financas/bancos" element={<BancosPage />} />
                   <Route path="/financas/bancos/novo" element={<BancosPage />} />
@@ -246,6 +249,8 @@ const App = () => (
                   <Route path="/portal/declaracoes" element={<PortalDeclaracoesPage />} />
                   <Route path="/portal/requisicoes" element={<PortalRequisicoesPage />} />
                   <Route path="/portal/requisicoes/novo" element={<PortalRequisicoesPage />} />
+                  <Route path="/portal/reembolsos" element={<PortalReembolsosPage />} />
+                  <Route path="/portal/reembolsos/novo" element={<PortalReembolsosPage />} />
                   {/* Comunicação Interna */}
                   <Route path="/comunicacao-interna/noticias" element={<NoticiasPage />} />
                   <Route path="/comunicacao-interna/noticias/novo" element={<NoticiasPage />} />

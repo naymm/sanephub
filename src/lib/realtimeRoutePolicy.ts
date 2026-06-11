@@ -73,6 +73,8 @@ const ROUTE_RULES: RouteRule[] = [
     tables: [
       'colaboradores',
       'requisicoes',
+      'reembolsos',
+      'reembolso_linhas',
       'centros_custo',
       'projectos',
       'movimentos_tesouraria',
@@ -132,7 +134,7 @@ const ROUTE_RULES: RouteRule[] = [
   },
   {
     test: p => p.startsWith('/portal'),
-    tables: ['colaboradores', 'ferias', 'faltas', 'recibos_salario', 'declaracoes', 'requisicoes'],
+    tables: ['colaboradores', 'ferias', 'faltas', 'recibos_salario', 'declaracoes', 'requisicoes', 'reembolsos', 'reembolso_linhas'],
   },
   {
     test: p => p.startsWith('/configuracoes'),

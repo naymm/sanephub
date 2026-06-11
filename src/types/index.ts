@@ -381,6 +381,47 @@ export interface Requisicao {
   requisitanteColaboradorId?: number;
 }
 
+export type TipoReembolso = 'individual' | 'lote';
+
+export type StatusReembolso =
+  | 'Pendente'
+  | 'Em Análise'
+  | 'Aguarda Correcção'
+  | 'Aprovado'
+  | 'Rejeitado'
+  | 'Pago';
+
+export interface Reembolso {
+  id: number;
+  empresaId: number;
+  num: string;
+  tipo: TipoReembolso;
+  status: StatusReembolso;
+  solicitanteColaboradorId: number;
+  data: string;
+  montanteTotal: number;
+  /** Titular da conta para transferência. */
+  nomeReembolso?: string;
+  /** IBAN para transferência do reembolso. */
+  ibanReembolso?: string;
+  observacoes?: string;
+  motivoRejeicao?: string;
+  motivoCorrecao?: string;
+  aprovadoPor?: string;
+  dataPagamento?: string;
+  comprovativoPagamentoAnexos?: string[];
+}
+
+export interface ReembolsoLinha {
+  id: number;
+  reembolsoId: number;
+  ordem: number;
+  nomeEntidade: string;
+  descricao: string;
+  montante: number;
+  reciboAnexos: string[];
+}
+
 export interface CentroCusto {
   id: number;
   empresaId: number;
@@ -1031,6 +1072,7 @@ export interface MovimentoTesouraria {
   /** Saída: URLs de factura final (PDF). */
   facturaFinalAnexos?: string[];
   requisicaoId?: number;
+  reembolsoId?: number;
   registadoPor?: string;
   registadoEm: string;
   observacoes?: string;

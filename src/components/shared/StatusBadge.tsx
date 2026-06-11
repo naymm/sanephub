@@ -12,7 +12,7 @@ interface StatusBadgeProps {
 const autoVariant = (status: string): StatusVariant => {
   const s = status.toLowerCase();
   if (['activo', 'aprovado', 'pago', 'concluído', 'publicado', 'ganho', 'mitigado', 'confirmado', 'respondida', 'conciliado', 'regularizado', 'entregue', 'emitida'].includes(s)) return 'success';
-  if (['pendente', 'em análise', 'em tratamento', 'em revisão', 'rascunho', 'em negociação', 'a renovar', 'em monitorização', 'agendada', 'recebido', 'em conciliação'].includes(s)) return 'warning';
+  if (['pendente', 'em análise', 'em tratamento', 'em revisão', 'rascunho', 'em negociação', 'a renovar', 'em monitorização', 'agendada', 'recebido', 'em conciliação', 'aguarda correcção'].includes(s)) return 'warning';
   if (['rejeitado', 'vencido', 'perdido', 'materializado', 'cancelado', 'rescindido', 'expirado', 'injustificada', 'crítico', 'devolvido'].includes(s)) return 'danger';
   if (['enviado à contabilidade', 'em curso', 'suspenso', 'identificado'].includes(s)) return 'info';
   return 'neutral';

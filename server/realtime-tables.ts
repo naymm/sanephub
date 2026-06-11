@@ -12,6 +12,8 @@ export const REALTIME_TABLES = [
   'actas',
   'contratos',
   'requisicoes',
+  'reembolsos',
+  'reembolso_linhas',
   'pagamentos',
   'movimentos_tesouraria',
   'bancos',

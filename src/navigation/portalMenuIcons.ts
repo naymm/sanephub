@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { CalendarX, Clock, DollarSign, FileText, Palmtree } from 'lucide-react';
+import { CalendarX, Clock, DollarSign, FileText, Palmtree, Receipt } from 'lucide-react';
 
 /** Ícones do menu Portal (avatar, etc.) alinhados ao `HorizontalMenu`. */
 export const PORTAL_PATH_ICONS: Record<string, LucideIcon> = {
@@ -9,4 +9,5 @@ export const PORTAL_PATH_ICONS: Record<string, LucideIcon> = {
   '/portal/recibos': FileText,
   '/portal/declaracoes': FileText,
   '/portal/requisicoes': DollarSign,
+  '/portal/reembolsos': Receipt,
 };
