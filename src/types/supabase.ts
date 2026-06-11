@@ -366,6 +366,10 @@ export interface Database {
         Args: { pin_plain: string };
         Returns: boolean;
       };
+      extend_produtividade_deadline: {
+        Args: { p_actividade_id: number; p_novo_prazo: string; p_motivo: string };
+        Returns: undefined;
+      };
     };
     Enums: Record<string, never>;
   };

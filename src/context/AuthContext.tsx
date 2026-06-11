@@ -7,6 +7,7 @@ import { PROFILES_SELECT_PUBLIC } from '@/lib/profileColumns';
 import type { Database } from '@/types/supabase';
 import { getSupabaseFunctionsInvokeErrorMessage } from '@/utils/supabaseFunctionsInvokeError';
 import { canAccessJuridicoModule } from '@/utils/juridicoAccess';
+import { canAccessControloInternoModule } from '@/utils/controloInternoAccess';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
@@ -236,15 +237,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // até o perfil ficar disponível (com retries curtos).
         if (session?.user) {
           setRestoringSession(true);
-          let ok = false;
           for (let i = 0; i < 3; i++) {
             await fetchProfileAndSetUser(session.user.id);
-            // Se o perfil foi carregado, `user` deixa de ser null no próximo render.
-            // Aqui só precisamos de evitar o redirect imediato.
-            ok = true;
-            break;
+            if (userRef.current != null) break;
+            if (i < 2) await new Promise(r => window.setTimeout(r, 350 * (i + 1)));
           }
-          if (!ok) setUser(null);
+          if (!userRef.current) {
+            await supabase.auth.signOut();
+            setUser(null);
+          }
         } else {
           setUser(null);
         }
@@ -631,8 +632,7 @@ const MODULE_ACCESS_BY_PERFIL: Record<string, Perfil[]> = {
   'patrimonio': ['Admin', 'PCA', 'Secretaria', 'Director', 'Financeiro', 'RH', 'Contabilidade', 'Planeamento'],
   'portal-colaborador': ['Colaborador'],
   'configuracoes': ['Admin'],
-  /** PCA/Director só com «Controlo Interno» em Acesso a módulos (Utilizadores); não é automático por perfil. */
-  'controlo-interno': ['Admin'],
+  'controlo-interno': ['Admin', 'ControloInterno'],
 };
 
 /**
@@ -647,13 +647,8 @@ export function hasModuleAccess(user: Usuario | null, module: string): boolean {
   if (user.perfil === 'Admin') return true;
   /** Jurídico: só Admin e perfil Jurídico (ignora checkbox «Jurídico» noutros perfis). */
   if (module === 'juridico') return canAccessJuridicoModule(user);
-  /**
-   * Controlo Interno: Admin sempre; restantes só com `controlo-interno` em Acesso a módulos
-   * (não herda visibilidade por ser PCA/Director/RH/etc.).
-   */
-  if (module === 'controlo-interno') {
-    return Array.isArray(user.modulos) && user.modulos.includes('controlo-interno');
-  }
+  /** Controlo Interno: Admin, perfil ControloInterno, ou módulo explícito na lista. */
+  if (module === 'controlo-interno') return canAccessControloInternoModule(user);
   // Facturação: segue as mesmas permissões de Finanças (módulo é um sub-domínio).
   if (module === 'facturacao') return hasModuleAccess(user, 'financas');
   // Dashboard no menu agrupa Chat + Notificações (+ link ao painel): sempre acessível a quem tem sessão.

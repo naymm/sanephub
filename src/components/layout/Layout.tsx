@@ -45,9 +45,8 @@ export function Layout() {
   const location = useLocation();
   const pathname = location.pathname;
 
-  // Só bloquear a app no primeiro carregamento (evita "recarregar" ao regressar de outra aba).
-  const shouldShowLoading = !isAuthReady || isRestoringSession || !initialDataReady;
-  if (shouldShowLoading) {
+  const authStillLoading = !isAuthReady || isRestoringSession;
+  if (authStillLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-muted-foreground text-sm">A carregar...</div>
@@ -55,6 +54,15 @@ export function Layout() {
     );
   }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  // Só bloquear dados no primeiro bootstrap (utilizador autenticado).
+  if (!initialDataReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm">A carregar...</div>
+      </div>
+    );
+  }
 
   /**
    * IMPORTANTE: em refresh, o Router entra na rota correcta, mas o `DataProvider`

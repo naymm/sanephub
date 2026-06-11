@@ -40,7 +40,23 @@ import { Check, ChevronsUpDown } from 'lucide-react';
 import { MobileExpandableList } from '@/components/shared/MobileExpandableList';
 import { useMobileListSort, useSortedMobileSlice } from '@/hooks/useMobileListSort';
 
-const PERFIS: Perfil[] = ['Admin', 'PCA', 'Planeamento', 'Director', 'RH', 'Financeiro', 'Contabilidade', 'Secretaria', 'Juridico', 'Colaborador'];
+const PERFIS: Perfil[] = [
+  'Admin',
+  'PCA',
+  'Planeamento',
+  'Director',
+  'RH',
+  'Financeiro',
+  'Contabilidade',
+  'Secretaria',
+  'Juridico',
+  'ControloInterno',
+  'Colaborador',
+];
+
+function perfilDisplayLabel(perfil: Perfil): string {
+  return perfil === 'ControloInterno' ? 'Controlo Interno' : perfil;
+}
 
 export const MODULOS_DISPONIVEIS: { id: string; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard e Notificações' },
@@ -221,7 +237,8 @@ export default function UtilizadoresPage() {
       u.nome.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()) ||
       (u.username ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      u.perfil.toLowerCase().includes(search.toLowerCase())
+      u.perfil.toLowerCase().includes(search.toLowerCase()) ||
+      perfilDisplayLabel(u.perfil).toLowerCase().includes(search.toLowerCase())
   );
   const pagination = useClientSidePagination({ items: filtered, pageSize: 25 });
 
@@ -343,6 +360,8 @@ export default function UtilizadoresPage() {
       modulos = [...new Set(['portal-colaborador', ...form.modulos])];
     } else if (form.perfil === 'Juridico') {
       modulos = [...new Set([...(form.modulos ?? []), 'juridico'])];
+    } else if (form.perfil === 'ControloInterno') {
+      modulos = [...new Set([...(form.modulos ?? []), 'controlo-interno'])];
     } else if (Array.isArray(modulos)) {
       modulos = modulos.filter(m => m !== 'juridico');
     }
@@ -533,7 +552,7 @@ export default function UtilizadoresPage() {
                   {u.username ?? u.email.split('@')[0] ?? '—'}
                 </td>
                 <td className="py-3 px-5 text-muted-foreground">{u.email}</td>
-                <td className="py-3 px-5">{u.perfil}</td>
+                <td className="py-3 px-5">{perfilDisplayLabel(u.perfil)}</td>
                 <td className="py-3 px-5 text-muted-foreground max-w-40 truncate">{u.cargo} — {u.departamento}</td>
                 <td className="py-3 px-5 text-muted-foreground">
                   {u.perfil === 'Admin'
@@ -608,12 +627,12 @@ export default function UtilizadoresPage() {
               </span>
             ),
             title: u.nome,
-            trailing: <span className="text-xs text-muted-foreground">{u.perfil}</span>,
+            trailing: <span className="text-xs text-muted-foreground">{perfilDisplayLabel(u.perfil)}</span>,
           })}
           renderDetails={u => [
             { label: 'Login', value: <span className="font-mono text-xs">{u.username ?? u.email.split('@')[0] ?? '—'}</span> },
             { label: 'Email', value: u.email },
-            { label: 'Perfil', value: u.perfil },
+            { label: 'Perfil', value: perfilDisplayLabel(u.perfil) },
             ...(lockMeta[u.id]?.locked
               ? [
                   {
@@ -774,7 +793,9 @@ export default function UtilizadoresPage() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PERFIS.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                      <SelectItem key={p} value={p}>
+                        {perfilDisplayLabel(p)}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -870,9 +891,7 @@ export default function UtilizadoresPage() {
                 )}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                {MODULOS_DISPONIVEIS.filter(
-                  m => m.id !== 'juridico' || form.perfil === 'Juridico',
-                ).map(m => (
+                {MODULOS_DISPONIVEIS.filter(m => m.id !== 'juridico' || form.perfil === 'Juridico').map(m => (
                   <label key={m.id} className="flex items-center gap-2 cursor-pointer">
                     <Checkbox
                       checked={form.modulos?.includes(m.id) ?? false}

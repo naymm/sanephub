@@ -23,6 +23,15 @@ import {
   produtividadeStatusSelectDisabledForActivity,
   produtividadeTransitionBlockedMessage,
 } from '@/modules/produtividade/statusTransitions';
+import {
+  podeAcederDireccaoProdutividade,
+  podeVerTodasActividadesProdutividadeEmpresa,
+  usuarioTemCargoDireccaoProdutividade,
+} from '@/modules/produtividade/produtividadeAccess';
+import {
+  canExtendProdutividadeDeadline,
+  minProximoPrazoExtensao,
+} from '@/modules/produtividade/produtividadeDeadline';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -42,6 +51,7 @@ import {
   Clock,
   Tag,
   CalendarDays,
+  CalendarClock,
   Flag,
   User,
   Users,
@@ -669,9 +679,11 @@ export default function MinhasActividadesPage({
   const { user } = useAuth();
   const { colaboradoresTodos } = useData();
   const canAssign = user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
-  const verTodasActividades = user?.perfil === 'Admin' || user?.perfil === 'PCA';
-  const cargoLower = (user?.cargo ?? '').toLowerCase();
-  const isDireccaoCargo = cargoLower.includes('director') || cargoLower.includes('diretor') || cargoLower.includes('coordenador');
+  const verTodasActividades = podeVerTodasActividadesProdutividadeEmpresa(user);
+  const isDireccaoCargo = usuarioTemCargoDireccaoProdutividade(user, colaboradoresTodos);
+  const podeAcederDireccao = podeAcederDireccaoProdutividade(user, colaboradoresTodos);
+  const vistaAreaResponsavel =
+    scope === 'area' || (scope === 'mine' && isDireccaoCargo && !verTodasActividades);
   const myEmpresaId = useMemo(() => {
     if (typeof currentEmpresaId === 'number') return currentEmpresaId;
     if (typeof user?.empresaId === 'number') return user.empresaId;
@@ -712,6 +724,11 @@ export default function MinhasActividadesPage({
   const [completeTargetId, setCompleteTargetId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [extendTarget, setExtendTarget] = useState<ProdutividadeActividade | null>(null);
+  const [extendMotivo, setExtendMotivo] = useState('');
+  const [extendNovoPrazo, setExtendNovoPrazo] = useState('');
+  const [extendBusy, setExtendBusy] = useState(false);
   const [detailsReplyUploading, setDetailsReplyUploading] = useState(false);
   const [detailsReplyPick, setDetailsReplyPick] = useState<File | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -747,11 +764,11 @@ export default function MinhasActividadesPage({
   }, [currentEmpresaId, user?.empresaId]);
 
   const canExportAreaReport = useMemo(() => {
-    if (scope !== 'area') return false;
+    if (!vistaAreaResponsavel) return false;
     if (verTodasActividades) return true;
     if (!user?.colaboradorId) return false;
     return isDireccaoCargo || user?.perfil === 'Admin' || user?.perfil === 'Director' || user?.perfil === 'PCA';
-  }, [scope, verTodasActividades, user?.colaboradorId, user?.perfil, isDireccaoCargo]);
+  }, [vistaAreaResponsavel, verTodasActividades, user?.colaboradorId, user?.perfil, isDireccaoCargo]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -847,7 +864,7 @@ export default function MinhasActividadesPage({
     if (scope === 'mine' && verTodasActividades) {
       return base;
     }
-    if (scope === 'mine') {
+    if (scope === 'mine' && !vistaAreaResponsavel) {
       // Em perfis sem colaboradorId (ex.: PCA grupo) mostramos vazio por defeito.
       if (!user?.colaboradorId) return [];
       return base.filter(r => {
@@ -859,7 +876,9 @@ export default function MinhasActividadesPage({
       });
     }
 
-    // scope === 'area'
+    if (!vistaAreaResponsavel) return [];
+
+    // Direcção ou responsável de área (vista alargada)
     if (verTodasActividades) {
       const normalize = (v: string) =>
         v
@@ -933,6 +952,7 @@ export default function MinhasActividadesPage({
     currentEmpresaId,
     scope,
     verTodasActividades,
+    vistaAreaResponsavel,
     user?.colaboradorId,
     user?.empresaId,
     user?.perfil,
@@ -1005,16 +1025,16 @@ export default function MinhasActividadesPage({
   }, [scope, verTodasActividades, currentEmpresaId, direccaoEmpresaId, colaboradoresTodos, areaFilter]);
 
   useEffect(() => {
-    if (scope !== 'area') return;
+    if (!vistaAreaResponsavel) return;
     if (verTodasActividades) return;
     if (myEmpresaId !== 1) return;
     if (!user?.colaboradorId) return;
     const me = (colaboradoresTodos ?? []).find(c => c.id === user.colaboradorId);
     const dept = String(me?.departamento ?? '').trim();
     if (!dept) return;
-    // Em empresa 1, Director/Coordenador só vê a sua área: forçamos o filtro.
+    // Em empresa 1, responsável de área só vê o seu departamento: forçamos o filtro.
     setAreaFilter(dept);
-  }, [scope, myEmpresaId, user?.colaboradorId, colaboradoresTodos, verTodasActividades]);
+  }, [vistaAreaResponsavel, myEmpresaId, user?.colaboradorId, colaboradoresTodos, verTodasActividades]);
 
   /** Admin/PCA: ao mudar a área, repõe o filtro de colaborador (lista passa a ser da área). */
   useEffect(() => {
@@ -1022,7 +1042,7 @@ export default function MinhasActividadesPage({
     setColaboradorFilter('all');
   }, [scope, verTodasActividades, areaFilter]);
 
-  if (scope === 'area' && user && !isDireccaoCargo && !verTodasActividades) {
+  if (scope === 'area' && user && !podeAcederDireccao) {
     return (
       <div className="space-y-4">
         <div>
@@ -1030,7 +1050,7 @@ export default function MinhasActividadesPage({
           <p className="text-sm text-muted-foreground">Direcção</p>
         </div>
         <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
-          Esta página é apenas para cargos Director/Coordenador, ou para perfis Admin / PCA.
+          Esta página é para responsáveis de área (Director, Coordenador, Chefe ou Responsável) ou para perfis Admin, PCA e Director.
         </div>
       </div>
     );
@@ -1484,7 +1504,10 @@ export default function MinhasActividadesPage({
     if (e.tipo === 'created') return 'Criou a actividade';
     if (e.tipo === 'status_changed') return `Mudou o status: ${p.from ?? '—'} → ${p.to ?? '—'}`;
     if (e.tipo === 'priority_changed') return `Mudou a prioridade: ${p.from ?? '—'} → ${p.to ?? '—'}`;
-    if (e.tipo === 'deadline_changed') return `Mudou o prazo: ${p.from ?? '—'} → ${p.to ?? '—'}`;
+    if (e.tipo === 'deadline_changed') {
+      const motivo = typeof p.motivo === 'string' && p.motivo.trim() ? ` — Motivo: ${p.motivo.trim()}` : '';
+      return `Prolongou o prazo: ${p.from ?? '—'} → ${p.to ?? '—'}${motivo}`;
+    }
     if (e.tipo === 'deliverable_uploaded') return 'anexou um ficheiro';
     if (e.tipo === 'deliverable_downloaded') return `descarregou o ficheiro ${p.nome ? `«${p.nome}»` : ''}`.trim();
     if (e.tipo === 'deliverable_viewed') return `visualizou o ficheiro ${p.nome ? `«${p.nome}»` : ''}`.trim();
@@ -1960,6 +1983,51 @@ export default function MinhasActividadesPage({
     setDetailsTab('actividade');
   }
 
+  function openExtendDeadline(a: ProdutividadeActividade) {
+    if (!canExtendProdutividadeDeadline(a.status)) return;
+    setExtendTarget(a);
+    setExtendMotivo('');
+    setExtendNovoPrazo(minProximoPrazoExtensao(a));
+    setExtendDialogOpen(true);
+  }
+
+  async function submitExtendDeadline() {
+    if (!extendTarget) return;
+    if (!isSupabaseConfigured() || !supabase) return;
+    const motivo = extendMotivo.trim();
+    if (!motivo) {
+      toast.error('Indique o motivo da extensão do prazo.');
+      return;
+    }
+    if (!extendNovoPrazo) {
+      toast.error('Indique o próximo prazo.');
+      return;
+    }
+    const minPrazo = minProximoPrazoExtensao(extendTarget);
+    if (extendNovoPrazo < minPrazo) {
+      toast.error(`O próximo prazo deve ser ${minPrazo} ou posterior.`);
+      return;
+    }
+    setExtendBusy(true);
+    try {
+      const { error } = await supabase.rpc('extend_produtividade_deadline', {
+        p_actividade_id: extendTarget.id,
+        p_novo_prazo: extendNovoPrazo,
+        p_motivo: motivo,
+      });
+      if (error) throw new Error(error.message);
+      toast.success('Prazo actualizado com sucesso.');
+      setExtendDialogOpen(false);
+      setExtendTarget(null);
+      setExtendMotivo('');
+      setExtendNovoPrazo('');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao extender o prazo.');
+    } finally {
+      setExtendBusy(false);
+    }
+  }
+
   async function uploadDeliverablesAndComplete(filesOverride?: File[]) {
     if (!completeTarget) return;
     const files = (filesOverride ?? uploadFiles).filter(isAllowedDeliverableFile);
@@ -2213,7 +2281,13 @@ export default function MinhasActividadesPage({
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold leading-tight">Produtividade</h1>
-          <p className="text-sm text-muted-foreground">{scope === 'area' ? 'Direcção' : 'Minhas Actividades'}</p>
+          <p className="text-sm text-muted-foreground">
+            {scope === 'area'
+              ? 'Direcção'
+              : vistaAreaResponsavel
+                ? 'Minhas Actividades · todas da sua área'
+                : 'Minhas Actividades'}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2584,6 +2658,12 @@ export default function MinhasActividadesPage({
                               Recusar
                             </Button>
                           </div>
+                        ) : null}
+                        {canExtendProdutividadeDeadline(a.status) ? (
+                          <Button size="sm" variant="outline" onClick={() => openExtendDeadline(a)}>
+                            <CalendarClock className="h-3.5 w-3.5 mr-1" />
+                            Extender prazo
+                          </Button>
                         ) : null}
                         {s === 'Atrasada' && a.status !== 'Em aprovação' ? (
                           <div className="flex flex-wrap justify-end gap-1.5">
@@ -3093,6 +3173,80 @@ export default function MinhasActividadesPage({
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={extendDialogOpen}
+        onOpenChange={(open) => {
+          setExtendDialogOpen(open);
+          if (!open) {
+            setExtendTarget(null);
+            setExtendMotivo('');
+            setExtendNovoPrazo('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Extender prazo</DialogTitle>
+          </DialogHeader>
+          {extendTarget ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border p-3 text-sm">
+                <div className="font-medium">{extendTarget.titulo}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Prazo actual: <span className="font-medium text-foreground">{extendTarget.prazo}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="extend-motivo">Motivo</Label>
+                <Textarea
+                  id="extend-motivo"
+                  value={extendMotivo}
+                  onChange={(e) => setExtendMotivo(e.target.value)}
+                  placeholder="Explique por que o prazo precisa de ser prolongado…"
+                  rows={3}
+                  disabled={extendBusy}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="extend-novo-prazo">Próximo prazo</Label>
+                <Input
+                  id="extend-novo-prazo"
+                  type="date"
+                  value={extendNovoPrazo}
+                  min={minProximoPrazoExtensao(extendTarget)}
+                  onChange={(e) => setExtendNovoPrazo(e.target.value)}
+                  disabled={extendBusy}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Deve ser posterior a {extendTarget.prazo} e não anterior a{' '}
+                  {minProximoPrazoExtensao(extendTarget)}.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <Button
+                  variant="secondary"
+                  disabled={extendBusy}
+                  onClick={() => {
+                    setExtendDialogOpen(false);
+                    setExtendTarget(null);
+                    setExtendMotivo('');
+                    setExtendNovoPrazo('');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={extendBusy || !extendMotivo.trim() || !extendNovoPrazo}
+                  onClick={() => void submitExtendDeadline()}
+                >
+                  {extendBusy ? 'A guardar…' : 'Confirmar extensão'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       {/* Painel lateral de detalhes (tipo Jira) */}
       <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
         <SheetContent side="right" className="w-full sm:max-w-[520px] p-0">
@@ -3314,13 +3468,35 @@ export default function MinhasActividadesPage({
                       </Select>
                     </div>
 
-                    <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-sm">
-                      <div className="text-muted-foreground flex items-center gap-2">
+                    <div className="grid grid-cols-[140px_1fr] items-start gap-3 text-sm">
+                      <div className="text-muted-foreground flex items-center gap-2 pt-1">
                         <CalendarDays className="h-4 w-4" />
                         Datas
                       </div>
-                      <div className="text-foreground">
-                        {detailsActivity.dataActividade} → <span className="font-medium">{detailsActivity.prazo}</span>
+                      <div className="space-y-2">
+                        <div className="text-foreground">
+                          {detailsActivity.dataActividade} →{' '}
+                          <span
+                            className={cn(
+                              'font-medium',
+                              isProdutividadeAtrasadaAberta(detailsActivity) && 'text-destructive',
+                            )}
+                          >
+                            {detailsActivity.prazo}
+                          </span>
+                        </div>
+                        {canExtendProdutividadeDeadline(detailsActivity.status) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1.5"
+                            onClick={() => openExtendDeadline(detailsActivity)}
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            Extender prazo
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
 

@@ -397,6 +397,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [realtimeLoadingByTable, setRealtimeLoadingByTable] = useState(createInitialRealtimeLoading);
   /** Após o 1.º bootstrap, o layout não volta a bloquear em tabelas da rota (evita loop «A carregar…»). */
   const bootstrapDoneRef = useRef(false);
+  const lastBootstrappedUserIdRef = useRef<number | null>(null);
 
   const onRealtimeTableLoading = useCallback((table: RealtimeSyncTable, loading: boolean) => {
     setRealtimeLoadingByTable(prev => (prev[table] === loading ? prev : { ...prev, [table]: loading }));
@@ -430,9 +431,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user?.id) {
       bootstrapDoneRef.current = false;
-      setInitialDataReady(false);
-      setDataLoading(true);
+      lastBootstrappedUserIdRef.current = null;
+      // Sem utilizador: não bloquear Layout (redirect para /login); evita «A carregar…» infinito.
+      setInitialDataReady(true);
+      setDataLoading(false);
       return;
+    }
+    if (lastBootstrappedUserIdRef.current !== user.id) {
+      lastBootstrappedUserIdRef.current = user.id;
+      bootstrapDoneRef.current = false;
+      setInitialDataReady(false);
     }
     setDataLoading(realtimeLoading);
     if (!bootstrapRealtimeLoading) {
